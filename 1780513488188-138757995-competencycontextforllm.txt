@@ -1,0 +1,192 @@
+Here is a complete, self-contained **System Requirements Specification (SRS) & Architecture Context Block** designed to be pasted directly into any AI model in the future. It captures the entire scope, design logic, workflow mechanics, and clinical guardrails we have established.
+
+---
+
+# System Requirements Specification (SRS): Clinical Training & IR(ME)R Competency Matrix App
+
+## 1. System Overview & Context
+
+The target system is a secure, web-based Clinical Learning Management System (LMS) and Competency Matrix designed for a Radiotherapy Physics department to track, manage, and audit staff competencies under **IR(ME)R 2017** regulations.
+
+The application replaces a legacy, multi-sheet Excel workbook (`.xlsm`) featuring a cross-tab grid of staff names against structured clinical tasks. It transitions the registry into a dynamic, automated, and strictly auditable web application built with **HTML5/JavaScript**, styled using **Tailwind CSS**, and backed by a **Node.js** server. It integrates programmatically with a local **QATrack+** instance via a REST API to fetch live, verifiable evidence of clinical work.
+
+---
+
+## 2. Core Operational Matrix & Token Logic
+
+The main landing page displays a cross-tab matrix grid where columns represent staff members (tagged by clinical designation, e.g., *MPE*, *Clinical Scientist*, *Trainee*) and rows represent structured clinical tasks nested under macro-categories (e.g., *3D Printer*, *Electron Treatments*, *Misc*).
+
+Individual grid cells display the employee's exact progression status using a custom token framework:
+
+* **`t` (Training):** The staff member is actively working through the pre-requisite milestones for this task.
+* **`a` (Assessment Due):** All underlying training milestones have been completed and verified. The cell flags assessors that the user is ready for a formal clinical sign-off.
+* **`x` (Competent):** The staff member is fully authorized to act as an independent Operator for this function.
+* **`x+` (Competent to Train):** The staff member is authorized as an **Assessor** for this specific function, granting them the administrative right to evaluate and sign off other trainees.
+* **Blank / Gray:** Not applicable or training not started.
+
+---
+
+## 3. Milestone-Driven Training Workflow
+
+Progression from **`t`** to **`a`** is not manual. Clicking a competency cell opens a **Milestone Sub-Matrix** tracking a multi-step checklist that must be satisfied sequentially:
+
+1. **Document Read (Self-Administered):** The user securely logs in with a username and password and confirms via a single-click interface that they have read and understood the specific local protocol or work instruction document.
+2. **Multiple-Choice Quiz (App-Managed):** The user must complete an integrated, customizable multiple-choice survey tied to the competency, achieving or exceeding a predefined passing score threshold managed by the app.
+3. **Practical Log Count (Automated API Check):** The app checks for practical clinical evidence. It queries the QATrack+ REST API (`/api/qa/testlistinstances/`) using the user’s unique identifier to verify that a target number of specific QA tests (e.g., *10 logged Output Factor checks*) have been executed and approved.
+4. **Polymorphic Evidence Attachments:** For competencies independent of QATrack+, the system allows alternative evidence uploads (e.g., linking external URLs, typing logbook notes, or uploading external PDF training certificates).
+
+**Automated State Engine:** The moment the backend registers that all configured milestones for a specific task are complete, the user’s matrix status token is **automatically promoted from `t` to `a**`.
+
+---
+
+## 4. Administrative & Management Controls
+
+A centralized, web-based administrative command center allows authorized users (with system administrator or global `x+` permissions) to manage the matrix dynamically without editing any underlying application code:
+
+* **Competency Manager:** Create, update, or deprecate categories and specific scope-of-practice tasks. Assign which professional designations require tracking for each task.
+* **Prerequisite Builder:** Configure the exact rules for a task's milestones (e.g., upload or link the local protocol file, specify the exact QATrack+ string filter to pull from, and set the target number of required practical executions).
+* **Quiz Designer:** Create custom multiple-choice question banks per competency, input multiple distractors, identify correct answers, and establish the required passing percentage.
+
+---
+
+## 5. Regulatory Guardrails & Compliance Auditing
+
+To survive external clinical and regulatory audits, the application implements strict architectural restrictions:
+
+* **The Sign-off Chain of Trust:** When an assessor attempts to transition a user from status **`a` (Assessment Due)** to **`x` (Competent)** or **`x+` (Competent to Train)**, the backend executes a validation transaction. The sign-off is rejected unless the logged-in assessor holds an active `x+` token for that *exact* task.
+* **Immutable Audit Log:** Every action—including self-confirmations, quiz scores, automated state shifts, and final assessor authorizations—is permanently captured in a read-only `competency_audit_log` table. Each entry strictly logs a precise server-side timestamp, the target trainee, the action type, previous/new status values, the authorizing assessor ID, and descriptive metadata. Once written, these records are append-only and cryptographically locked against deletion or updates.
+
+---
+
+## 6. Proposed Technical Blueprint
+
+### Normalized Database Schema (PostgreSQL / SQLite)
+
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL, -- Aligned with Active Directory / QATrack+
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    designation VARCHAR(20) NOT NULL      -- 'MPE', 'Sci', 'Trainee'
+);
+
+CREATE TABLE competencies (
+    id SERIAL PRIMARY KEY,
+    category VARCHAR(50) NOT NULL,        -- e.g., 'Electron Treatments'
+    task_name VARCHAR(100) NOT NULL,      -- e.g., 'Advice at Markup'
+    required_qatrack_count INT DEFAULT 0,  -- Target number of tests needed
+    qatrack_test_identifier VARCHAR(100)   -- Text filter or list ID for API matching
+);
+
+CREATE TABLE staff_competency_progress (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    competency_id INT REFERENCES competencies(id) ON DELETE CASCADE,
+    current_status VARCHAR(5) DEFAULT 't',  -- 't', 'a', 'x', 'x+'
+    instructions_read BOOLEAN DEFAULT FALSE,
+    quiz_passed BOOLEAN DEFAULT FALSE,
+    date_started DATE DEFAULT CURRENT_DATE,
+    date_signed_off DATE,
+    assessor_id INT REFERENCES users(id),
+    UNIQUE(user_id, competency_id)
+);
+
+CREATE TABLE quizzes (
+    id SERIAL PRIMARY KEY,
+    competency_id INT REFERENCES competencies(id) ON DELETE CASCADE,
+    passing_score_percent INT DEFAULT 80
+);
+
+CREATE TABLE quiz_questions (
+    id SERIAL PRIMARY KEY,
+    quiz_id INT REFERENCES quizzes(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    option_a TEXT NOT NULL,
+    option_b TEXT NOT NULL,
+    option_c TEXT NOT NULL,
+    option_d TEXT NOT NULL,
+    correct_option CHAR(1) NOT NULL      -- 'A', 'B', 'C', or 'D'
+);
+
+CREATE TABLE competency_evidence (
+    id SERIAL PRIMARY KEY,
+    progress_id INT REFERENCES staff_competency_progress(id) ON DELETE CASCADE,
+    evidence_type VARCHAR(30) NOT NULL,    -- 'qatrack_instance', 'pdf_upload', 'external_url'
+    evidence_value TEXT NOT NULL,           -- URL, instance ID, or file path
+    description VARCHAR(255),
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE competency_audit_log (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    target_user_id INT NOT NULL,
+    competency_id INT NOT NULL,
+    action_type VARCHAR(50) NOT NULL,    -- 'MILESTONE_SELF_CONFIRM', 'QUIZ_PASSED', 'PROMOTED_TO_A', 'FINAL_SIGN_OFF'
+    actioned_by_id INT NOT NULL,         -- User ID of who clicked the button
+    previous_status VARCHAR(5),
+    new_status VARCHAR(5),
+    notes TEXT
+);
+
+```
+
+### Key Backend Route Implementation Concept (Node.js/Express)
+
+```javascript
+// Example: Assessor Sign-Off Endpoint with Regulatory Guardrails
+router.post('/api/competency/signoff', async (req, res) => {
+    const { trainee_id, competency_id, action_type } = req.body; // action_type: 'x' or 'x+'
+    const assessor_id = req.user.id; // From session/auth middleware
+
+    try {
+        // 1. Guardrail Check: Is the assessor qualified to train/assess this exact task?
+        const assessorCheck = await db.query(
+            `SELECT current_status FROM staff_competency_progress 
+             WHERE user_id = $1 AND competency_id = $2`, 
+            [assessor_id, competency_id]
+        );
+
+        if (!assessorCheck.rows[0] || assessorCheck.rows[0].current_status !== 'x+') {
+            return res.status(403).json({ error: "Access Denied: Assessor lacks 'x+' authorization for this task." });
+        }
+
+        // 2. Enforce Workflow: Ensure trainee has actually achieved 'a' (Assessment Due) status
+        const traineeCheck = await db.query(
+            `SELECT current_status FROM staff_competency_progress 
+             WHERE user_id = $1 AND competency_id = $2`,
+            [trainee_id, competency_id]
+        );
+
+        if (!traineeCheck.rows[0] || traineeCheck.rows[0].current_status !== 'a') {
+            return res.status(400).json({ error: "Cannot sign off: Trainee has not fulfilled all prerequisites." });
+        }
+
+        // 3. Perform Sign-Off Update
+        await db.query(
+            `UPDATE staff_competency_progress 
+             SET current_status = $1, date_signed_off = CURRENT_DATE, assessor_id = $2 
+             WHERE user_id = $3 AND competency_id = $4`,
+            [action_type, assessor_id, trainee_id, competency_id]
+        );
+
+        // 4. Write to Immutable Audit Log
+        await db.query(
+            `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes)
+             VALUES ($1, $2, 'FINAL_SIGN_OFF', $3, 'a', $4, $5)`,
+            [trainee_id, competency_id, assessor_id, action_type, `Signed off by assessor ID ${assessor_id}`]
+        );
+
+        res.json({ success: true, message: "Competency signed off and audited successfully." });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Internal Server Error during sign-off execution." });
+    }
+});
+
+```
+
+---
+
+Save this output in a text file. Feeding this directly into an LLM down the line will instantly give it an identical mental model of your project layout, rules, database configuration, and clinical constraints.

@@ -1,0 +1,17 @@
+{
+  "name": "competency-matrix-app",
+  "version": "1.0.0",
+  "description": "Clinical Training & IR(ME)R Competency Matrix App",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "init-db": "node init.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "sqlite3": "^5.1.6"
+  }
+}

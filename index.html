@@ -1,0 +1,2744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Competency Matrix App</title>
+  <!-- Load Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Load Vue.js -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- Load Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans p-8">
+  <div id="app" class="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-6">
+    <div class="mb-6 border-b pb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div class="flex items-center gap-4">
+        <img src="MVCC-charity-logo-300x150.png" alt="MVCC Logo" class="h-12 w-auto object-contain">
+        <h1 class="text-3xl font-bold text-blue-900">IR(ME)R Competency Matrix</h1>
+      </div>
+      <div class="flex bg-gray-200 rounded-lg p-1 shadow-inner text-sm font-medium">
+        <button v-for="dbOption in activeSections" :key="dbOption.name"
+                @click="selectedDb = dbOption.name; handleDbChange()"
+                :class="['px-4 py-1.5 rounded-md transition-all duration-200', selectedDb === dbOption.name ? 'bg-white shadow text-blue-700' : 'text-gray-600 hover:text-gray-800']">
+          {{ dbOption.name }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Login View -->
+    <div v-if="!token" class="space-y-8">
+      <div class="w-full bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold mb-1">Log In</h2>
+            <p class="text-sm text-gray-600">Login to view detailed competency listings and to complete any necessary prerequisites.</p>
+            <p v-if="loginError" class="text-red-500 mt-1 text-sm">{{ loginError }}</p>
+          </div>
+          <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+            <input v-model="username" @keyup.enter="login" type="text" placeholder="Username" 
+                   class="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48" />
+            <input v-model="password" @keyup.enter="login" type="password" placeholder="Password" 
+                   class="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48" />
+            <button @click="login" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition w-full sm:w-auto whitespace-nowrap">
+              Login
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="w-full space-y-4">
+        <h3 class="text-lg font-bold text-gray-800 px-1">{{ selectedDb }} Section Competency Matrix</h3>
+        <div v-if="publicSummaryData.users.length === 0" class="text-sm text-gray-500 italic px-1">No users active in this section.</div>
+        <div v-else class="space-y-4">
+            <!-- Top Scrollbar -->
+            <div ref="publicTopScroll" @scroll="syncPublicScroll('top', $event)" class="overflow-x-auto overflow-y-hidden w-full hidden md:block" style="height: 16px;">
+              <div :style="`width: ${publicTableWidth}px; height: 1px;`"></div>
+            </div>
+            <!-- Public Matrix -->
+            <div ref="publicBottomScroll" @scroll="syncPublicScroll('bottom', $event)" class="overflow-x-auto shadow-sm ring-1 ring-black ring-opacity-5 rounded-lg border-t border-gray-200">
+              <table ref="publicMatrixTable" class="min-w-full divide-y divide-gray-300 table-fixed">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 w-1/4 sticky left-0 z-20 bg-gray-50 border-r-2 border-gray-300 min-w-[250px]">Task Category / Name</th>
+                    <th v-for="u in publicDisplayedUsers" :key="u.id" scope="col" class="px-3 py-3.5 text-center text-sm font-semibold border-l transition-colors min-w-[120px] text-gray-900" :style="{ width: (75 / Math.max(1, publicDisplayedUsers.length)) + '%' }">
+                      {{ u.full_name }}<br>
+                      <span class="text-xs font-normal text-gray-500">{{ u.designation }}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white">
+                  <template v-for="(group, cat) in publicGroupedCompetencies" :key="cat">
+                    <tr class="bg-gray-200 border-t-2 border-gray-300">
+                      <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-200 border-r-2 border-gray-300">{{ cat }}</td>
+                      <td v-for="u in publicDisplayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 bg-gray-50 align-top">
+                        <div v-if="getPublicUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
+                          <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getPublicUserCategoryProgress(u, cat).percent }}%</span>
+                          <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
+                            <div class="bg-green-500 h-1.5 rounded-full transition-all" :style="`width: ${getPublicUserCategoryProgress(u, cat).percent}%`"></div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-for="comp in group" :key="comp.id" class="hover:bg-gray-50 group">
+                      <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300">
+                        {{ comp.task_name }}
+                      </td>
+                      <td v-for="u in publicDisplayedUsers" :key="u.id" 
+                          :class="['whitespace-nowrap px-3 py-4 text-sm text-center border-l transition relative',
+                                   isPublicApplicable(u, comp) ? '' : 'bg-gray-100']">
+                        <div v-if="isPublicApplicable(u, comp)" class="inline-flex items-center justify-center gap-1">
+                          <span :class="getPublicStatusBadgeClass(u.id, comp.id)">
+                            {{ (getPublicProgressStatus(u.id, comp.id) || '').toUpperCase() || '-' }}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr class="bg-gray-100 border-t-2 border-gray-400">
+                    <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-100 border-r-2 border-gray-400">Section Progress</td>
+                    <td v-for="u in publicDisplayedUsers" :key="'overall-'+u.id" class="px-3 py-3 text-center border-l border-gray-400 bg-gray-50 align-top">
+                      <div class="flex flex-col items-center w-full justify-center">
+                        <span class="text-[10px] text-blue-900 font-bold mb-1">{{ publicAllUsersProgress[u.id]?.overall.percent || 0 }}%</span>
+                        <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
+                          <div class="bg-blue-600 h-1.5 rounded-full transition-all" :style="`width: ${publicAllUsersProgress[u.id]?.overall.percent || 0}%`"></div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- Legend -->
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center text-sm mt-4">
+              <span class="font-bold text-gray-700 mr-2">Legend:</span>
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-yellow-50 text-yellow-800 ring-yellow-600/20">T : Training</span>
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-purple-50 text-purple-700 ring-purple-600/20">M : Meets Requirements</span>
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-orange-50 text-orange-800 ring-orange-600/20">A : Assessment Requested</span>
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-green-50 text-green-700 ring-green-600/20">C : Competent</span>
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-blue-50 text-blue-700 ring-blue-700/10">X : Competent to Train</span>
+            </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Authenticated View -->
+    <div v-else>
+      <div class="flex justify-between items-center mb-6 bg-blue-50 p-4 rounded">
+        <p>Logged in as: <strong>{{ user.full_name }}</strong> ({{ user.designation }})</p>
+        <button @click="logout" class="bg-gray-500 hover:bg-gray-600 text-white py-1 px-3 rounded text-sm">
+          Logout
+        </button>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="flex gap-6 mb-4 border-b pb-2">
+        <button @click="currentTab = 'individual'" :class="currentTab === 'individual' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Individual</button>
+        <button @click="currentTab = 'overview'" :class="currentTab === 'overview' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Overview</button>
+        <button v-if="user.is_admin || user.is_superuser" @click="currentTab = 'assessor'" :class="currentTab === 'assessor' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Assessor</button>
+        <button v-if="user.is_admin || user.is_superuser" @click="currentTab = 'admin'; if(!user.is_admin && !['users', 'categories', 'superadmin'].includes(adminSubTab)) adminSubTab = 'users'; if(user.is_admin && !user.is_superuser && ['users', 'categories', 'superadmin'].includes(adminSubTab)) adminSubTab = 'competencies';" :class="currentTab === 'admin' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Admin Dashboard</button>
+      </div>
+      
+      <!-- Matrix & Progress View -->
+      <div v-if="currentTab === 'individual' || currentTab === 'overview'" class="space-y-6">
+        
+        <!-- Progress Bars -->
+        <div v-if="currentTab === 'individual'" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-3 text-gray-800">Your Progress</h3>
+          <div class="mb-5">
+            <div class="flex justify-between text-sm mb-1 font-semibold">
+              <span>Section Complete (You)</span>
+              <span>{{ userProgress.overall.percent }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+              <div class="bg-blue-600 h-2.5 rounded-full" :style="`width: ${userProgress.overall.percent}%`"></div>
+            </div>
+            
+            <div class="flex justify-between text-sm mb-1 font-semibold text-gray-600">
+              <span>Section Average ({{ user.designation }})</span>
+              <span>{{ designationAverage }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+              <div class="bg-indigo-400 h-2.5 rounded-full" :style="`width: ${designationAverage}%`"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Overview Filters -->
+        <div v-if="currentTab === 'overview'" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-end">
+          <div class="flex flex-col">
+            <label class="text-xs font-bold text-gray-700 mb-1">User Name</label>
+            <input v-model="overviewFilterName" placeholder="Filter by name..." class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="flex flex-col">
+            <label class="text-xs font-bold text-gray-700 mb-1">Task Name</label>
+            <input v-model="overviewFilterTask" placeholder="Filter by task..." class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="flex flex-col">
+            <label class="text-xs font-bold text-gray-700 mb-1">Category</label>
+            <select v-model="overviewFilterCategory" class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[150px]">
+              <option value="">All Categories</option>
+              <option v-for="cat in availableCategories" :key="cat" :value="cat">{{ cat }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col">
+            <label class="text-xs font-bold text-gray-700 mb-1">Group</label>
+            <select v-model="overviewFilterGroup" class="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[150px]">
+              <option value="">All Groups</option>
+              <option v-for="g in userGroups" :key="g.id" :value="g.name">{{ g.name }}</option>
+            </select>
+          </div>
+          <button @click="overviewFilterName=''; overviewFilterTask=''; overviewFilterCategory=''; overviewFilterGroup='';" class="text-sm text-blue-600 hover:underline mb-2 font-semibold">Clear Filters</button>
+        </div>
+
+        
+        <!-- Action Items (Tasks Due/Ready) -->
+        <div v-if="currentTab === 'individual' && (myRenewalDue.length > 0 || myObjectivesMet.length > 0 || myAwaitingAssessment.length > 0)" class="space-y-4 mb-6">
+          <!-- Renewal Due -->
+          <div v-if="myRenewalDue.length > 0" class="bg-red-50 p-4 rounded-lg shadow-sm border border-red-200">
+            <h3 class="text-lg font-bold mb-3 text-red-800">⚠️ Competencies Due for Renewal</h3>
+            <ul class="space-y-2">
+              <li v-for="comp in myRenewalDue" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-red-100 cursor-pointer hover:bg-red-50 transition" @click="openModal(user, comp)">
+                <span class="font-medium text-gray-800">{{ comp.category }} - {{ comp.task_name }}</span>
+                <span class="bg-red-100 text-red-800 px-3 py-1 rounded font-semibold text-xs whitespace-nowrap">Review</span>
+              </li>
+            </ul>
+          </div>
+          <!-- Objectives Met -->
+          <div v-if="myObjectivesMet.length > 0" class="bg-purple-50 p-4 rounded-lg shadow-sm border border-purple-200">
+            <h3 class="text-lg font-bold mb-3 text-purple-800">🎓 Objectives Met</h3>
+            <ul class="space-y-2">
+              <li v-for="comp in myObjectivesMet" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-purple-100 cursor-pointer hover:bg-purple-50 transition" @click="openModal(user, comp)">
+                <span class="font-medium text-gray-800">{{ comp.category }} - {{ comp.task_name }}</span>
+                <span class="bg-purple-100 text-purple-800 px-3 py-1 rounded font-semibold text-xs whitespace-nowrap">Request Assessment</span>
+              </li>
+            </ul>
+          </div>
+          <!-- Awaiting Assessment -->
+          <div v-if="myAwaitingAssessment.length > 0" class="bg-orange-50 p-4 rounded-lg shadow-sm border border-orange-200">
+            <h3 class="text-lg font-bold mb-3 text-orange-800">⏳ Awaiting Assessment</h3>
+            <ul class="space-y-2">
+              <li v-for="comp in myAwaitingAssessment" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-orange-100 cursor-pointer hover:bg-orange-50 transition" @click="openModal(user, comp)">
+                <span class="font-medium text-gray-800">{{ comp.category }} - {{ comp.task_name }}</span>
+                <span class="bg-orange-100 text-orange-800 px-3 py-1 rounded font-semibold text-xs whitespace-nowrap">View</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Top Scrollbar -->
+        <div ref="topScroll" @scroll="syncScroll('top', $event)" class="overflow-x-auto overflow-y-hidden w-full hidden md:block" style="height: 16px;">
+          <div :style="`width: ${tableWidth}px; height: 1px;`"></div>
+        </div>
+
+        <!-- Competency Matrix -->
+        <div ref="bottomScroll" @scroll="syncScroll('bottom', $event)" class="overflow-x-auto shadow-sm ring-1 ring-black ring-opacity-5 rounded-lg border-t border-gray-200">
+        <table ref="matrixTable" class="min-w-full divide-y divide-gray-300 table-fixed">
+          <thead class="bg-gray-50">
+            <tr>
+              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 w-1/4 sticky left-0 z-20 bg-gray-50 border-r-2 border-gray-300 min-w-[250px]">Task Category / Name</th>
+              <th v-for="u in displayedUsers" :key="u.id" scope="col" :class="['px-3 py-3.5 text-center text-sm font-semibold border-l transition-colors min-w-[120px]', u.id === user.id ? 'bg-blue-100 text-blue-900' : 'text-gray-900']" :style="{ width: (75 / Math.max(1, displayedUsers.length)) + '%' }">
+                {{ u.full_name }}<br>
+                <span :class="['text-xs font-normal', u.id === user.id ? 'text-blue-700' : 'text-gray-500']">{{ u.designation }}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200 bg-white">
+            <template v-for="(group, cat) in groupedCompetencies" :key="cat">
+              <tr class="bg-gray-200 border-t-2 border-gray-300">
+                <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-200 border-r-2 border-gray-300">{{ cat }}</td>
+                <td v-for="u in displayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 bg-gray-50 align-top">
+                  <div v-if="getUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
+                    <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getUserCategoryProgress(u, cat).percent }}%</span>
+                    <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
+                      <div class="bg-green-500 h-1.5 rounded-full transition-all" :style="`width: ${getUserCategoryProgress(u, cat).percent}%`"></div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <tr v-for="comp in group" :key="comp.id" class="hover:bg-gray-50 group">
+                <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 cursor-pointer bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300" @click="toggleCompetencyFilter(comp.id)">
+                  <div class="flex items-center justify-between">
+                    <span>{{ comp.task_name }}</span>
+                    <span v-if="selectedFilterCompetency === comp.id" class="text-blue-600 ml-2" title="Filter Active">🔍</span>
+                  </div>
+                </td>
+                <td v-for="u in displayedUsers" :key="u.id" 
+                    @click="isApplicable(u, comp) ? openModal(u, comp) : null" 
+                    :class="['whitespace-nowrap px-3 py-4 text-sm text-center border-l transition relative', u.id === user.id ? 'bg-blue-50/40' : '',
+                             isApplicable(u, comp) ? 'cursor-pointer hover:bg-blue-100' : 'bg-gray-100 cursor-not-allowed']">
+                  <div v-if="isApplicable(u, comp)" class="inline-flex items-center justify-center gap-1">
+                    <span :class="getStatusBadgeClass(u.id, comp.id)">
+                      {{ (getProgressStatus(u.id, comp.id) || '').toUpperCase() || '-' }}<span v-if="getProgressObj(u.id, comp.id)?.signoff_comment" class="ml-0.5">*</span>
+                    </span>
+                    <span v-if="isRenewalDue(u.id, comp.id)" class="text-red-500 text-lg font-bold" title="Renewal Due">⚠️</span>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <tr class="bg-gray-100 border-t-2 border-gray-400">
+              <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-100 border-r-2 border-gray-400">Section Progress</td>
+              <td v-for="u in displayedUsers" :key="'overall-'+u.id" class="px-3 py-3 text-center border-l border-gray-400 bg-gray-50 align-top">
+                <div class="flex flex-col items-center w-full justify-center">
+                  <span class="text-[10px] text-blue-900 font-bold mb-1">{{ allUsersProgress[u.id]?.overall.percent || 0 }}%</span>
+                  <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
+                    <div class="bg-blue-600 h-1.5 rounded-full transition-all" :style="`width: ${allUsersProgress[u.id]?.overall.percent || 0}%`"></div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        
+        <!-- Legend -->
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center text-sm mt-4">
+          <span class="font-bold text-gray-700 mr-2">Legend / Filters (Click to toggle):</span>
+          <button @click="toggleLegend('t')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('t') || activeLegends.length === 0 ? 'bg-yellow-50 text-yellow-800 ring-yellow-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">T : Training</button>
+          <button @click="toggleLegend('m')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('m') || activeLegends.length === 0 ? 'bg-purple-50 text-purple-700 ring-purple-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">M : Meets Requirements</button>
+          <button @click="toggleLegend('a')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('a') || activeLegends.length === 0 ? 'bg-orange-50 text-orange-800 ring-orange-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">A : Assessment Requested</button>
+          <button @click="toggleLegend('c')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('c') || activeLegends.length === 0 ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">C : Competent</button>
+          <button @click="toggleLegend('x')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('x') || activeLegends.length === 0 ? 'bg-blue-50 text-blue-700 ring-blue-700/10' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">X : Competent to Train</button>
+          <button @click="toggleLegend('renewal')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('renewal') || activeLegends.length === 0 ? 'bg-red-50 text-red-700 ring-red-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">⚠️ : Renewal Due</button>
+          <div class="ml-2 px-2 py-1 text-xs text-gray-500 font-semibold border-l border-gray-300">* : Sign-off comment attached</div>
+          <button @click="activeLegends = []; selectedFilterCompetency = null;" v-if="activeLegends.length > 0 || selectedFilterCompetency" class="text-xs text-blue-600 hover:underline ml-auto font-semibold">Clear Filters</button>
+        </div>
+      </div>
+      
+      <!-- Assessor Tab -->
+      <div v-else-if="currentTab === 'assessor' && (user.is_admin || user.is_superuser)" class="space-y-6">
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-3 text-orange-800">Requires Assessment (A)</h3>
+          <div v-if="Object.keys(usersRequiringAssessment).length === 0" class="text-sm text-gray-500 italic">
+            No users currently require assessment for competencies you are authorized to assess.
+          </div>
+          <div v-else class="space-y-4">
+            <div v-for="(comps, userId) in usersRequiringAssessment" :key="'a-'+userId" class="border border-gray-200 rounded p-3 bg-gray-50">
+              <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ getUserName(userId) }}</h4>
+              <ul class="space-y-1">
+                <li v-for="comp in comps" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
+                  <span>{{ comp.category }} - {{ comp.task_name }}</span>
+                  <button @click="openModal(getUser(userId), comp)" class="bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1 rounded font-semibold transition text-xs">Assess</button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-3 text-purple-800">Objectives Met (M)</h3>
+          <div v-if="Object.keys(usersObjectivesMet).length === 0" class="text-sm text-gray-500 italic">
+            No users have met objectives for competencies you are authorized to assess.
+          </div>
+          <div v-else class="space-y-4">
+            <div v-for="(comps, userId) in usersObjectivesMet" :key="'m-'+userId" class="border border-gray-200 rounded p-3 bg-gray-50">
+              <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ getUserName(userId) }}</h4>
+              <ul class="space-y-1">
+                <li v-for="comp in comps" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
+                  <span>{{ comp.category }} - {{ comp.task_name }}</span>
+                  <button @click="openModal(getUser(userId), comp)" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded font-semibold transition text-xs">View</button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admin Dashboard -->
+      <div v-else-if="currentTab === 'admin' && (user.is_admin || user.is_superuser)" class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+        <div class="flex justify-between items-end mb-6 border-b pb-2">
+          <div class="flex gap-4">
+            <button v-if="user.is_admin" @click="adminSubTab = 'competencies'" :class="adminSubTab === 'competencies' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Competencies</button>
+            <button v-if="user.is_admin" @click="adminSubTab = 'quizzes'" :class="adminSubTab === 'quizzes' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Quizzes</button>
+            <button v-if="user.is_superuser" @click="adminSubTab = 'users'" :class="adminSubTab === 'users' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Users</button>
+            <button v-if="user.is_superuser" @click="adminSubTab = 'categories'" :class="adminSubTab === 'categories' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Categories</button>
+            <button v-if="user.is_admin" @click="adminSubTab = 'statistics'" :class="adminSubTab === 'statistics' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Statistics</button>
+            <button v-if="user.is_superuser" @click="adminSubTab = 'superadmin'" :class="adminSubTab === 'superadmin' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Admin</button>
+          </div>
+        </div>
+        
+        <!-- Competencies Admin -->
+        <div v-if="adminSubTab === 'competencies' && user.is_admin" class="space-y-6">
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-semibold mb-4">{{ isEditingComp ? 'Edit Competency' : 'Add New Competency' }}</h3>
+            <form @submit.prevent="saveCompetency" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select v-model="newComp.category" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2 bg-white"><option disabled value="">Select a Category</option><option v-for="cat in availableCategories" :key="cat" :value="cat">{{ cat }}</option></select>
+              </div>
+              <div><label class="block text-sm font-medium text-gray-700 mb-1">Task Name</label><input v-model="newComp.task_name" required type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="e.g. Monthly Output"></div>
+              <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Renewal Period (Months)</label><input v-model.number="newComp.renewal_period_months" type="number" min="1" class="block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" :placeholder="`Default: ${globalSettings.default_renewal_period || 36}`"></div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm">
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_qatrack" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires QATrack+ Practical Evidence</span></label>
+                <div v-if="newComp.requires_qatrack" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
+                  <div><label class="block text-sm font-medium text-gray-700 mb-1">Required Count</label><input v-model.number="newComp.required_qatrack_count" type="number" min="1" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"></div>
+                  <div><label class="block text-sm font-medium text-gray-700 mb-1">Test Identifier</label><input v-model="newComp.qatrack_test_identifier" type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="e.g. LINAC_MONTHLY_QA"></div>
+                </div>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_instructions" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires Protocol Reading</span></label>
+                <div v-if="newComp.requires_instructions" class="mt-3 pt-3 border-t border-gray-100">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Reading Prerequisites</label>
+                  <div v-for="(rp, idx) in newComp.reading_prerequisites" :key="idx" class="flex gap-2 mb-2">
+                    <input v-model="rp.name" class="block w-full rounded border px-3 py-1 text-sm" placeholder="e.g. Protocol">
+                    <button type="button" @click="newComp.reading_prerequisites.splice(idx, 1)" class="bg-red-100 hover:bg-red-200 text-red-600 font-bold px-3 py-1 rounded shadow-sm transition">X</button>
+                  </div>
+                  <button type="button" @click="newComp.reading_prerequisites.push({id: Date.now().toString() + Math.random().toString(), name: ''})" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded shadow-sm font-semibold transition">+ Add Reading Prerequisite</button>
+                </div>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_prerequisite_competencies" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires Pre-requisite Competencies</span></label>
+                <div v-if="newComp.requires_prerequisite_competencies" class="mt-3 pt-3 border-t border-gray-100">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Select competencies that must be met before this one:</label>
+                  <div class="max-h-48 overflow-y-auto border border-gray-200 p-2 rounded bg-gray-50">
+                    <template v-for="catGroup in orderedCompetenciesByGroup" :key="catGroup.category">
+                      <div class="font-bold text-gray-700 bg-gray-200 px-2 py-1 mt-1 mb-1 rounded text-xs uppercase tracking-wider">{{ catGroup.category }}</div>
+                      <label v-for="c in catGroup.items" :key="c.id" class="flex items-center space-x-2 text-sm text-gray-800 mb-1.5 p-1 hover:bg-gray-100 rounded ml-2">
+                        <input type="checkbox" :value="c.id" v-model="newComp.prerequisite_competencies" class="h-4 w-4 text-blue-600 rounded">
+                        <span class="font-medium">{{c.task_name}}</span>
+                      </label>
+                    </template>
+                    <div v-if="orderedCompetenciesByGroup.length === 0" class="text-xs text-gray-500 italic p-1">No other competencies available.</div>
+                  </div>
+                </div>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_quiz" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires MCQ Quiz</span></label>
+                <div v-if="newComp.requires_quiz" class="mt-3 pt-3 border-t border-gray-100">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Select quizzes required for this competency:</label>
+                  <div class="max-h-48 overflow-y-auto border border-gray-200 p-2 rounded bg-gray-50">
+                      <label v-for="q in quizLibrary" :key="q.id" class="flex items-center space-x-2 text-sm text-gray-800 mb-1.5 p-1 hover:bg-gray-100 rounded">
+                          <input type="checkbox" :value="q.id" v-model="newComp.quiz_ids" class="h-4 w-4 text-blue-600 rounded">
+                          <span>{{ q.name }}</span>
+                      </label>
+                      <div v-if="quizLibrary.length === 0" class="text-xs text-gray-500 italic p-1">No quizzes in library. Create them in the 'Quizzes' tab.</div>
+                  </div>
+                </div>
+              </div>
+              <div class="sm:col-span-2 mt-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Applicable User Groups</label>
+                <div class="flex flex-wrap gap-4 bg-white p-3 border rounded shadow-sm">
+                  <label v-for="g in userGroups" :key="g.id" class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" :value="g.name" v-model="newComp.target_groups" class="h-4 w-4 text-blue-600 rounded">
+                    <span class="text-sm font-medium text-gray-700">{{ g.name }}</span>
+                  </label>
+                </div>
+              </div>
+              <div class="sm:col-span-2 flex gap-2 mt-2">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">{{ isEditingComp ? 'Update Competency' : 'Save Competency' }}</button>
+                <button type="button" v-if="isEditingComp" @click="saveAsNewComp" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow-sm">Save As New</button>
+                <button type="button" v-if="isEditingComp" @click="cancelEditComp" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded transition">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="flex justify-between items-center mb-2 mt-8">
+            <h4 class="font-bold text-gray-800">Competencies List</h4>
+            <select v-model="compListFilterCat" class="border border-gray-300 px-3 py-1.5 rounded-md text-sm shadow-sm bg-white">
+              <option value="">All Categories</option>
+              <option v-for="cat in availableCategories" :key="cat" :value="cat">{{cat}}</option>
+            </select>
+          </div>
+          <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
+            <thead class="bg-gray-50"><tr>
+              <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleCompListSort('category')">Category <span v-if="compListSortCol==='category'">{{ compListSortDir === 1 ? '▲' : '▼' }}</span></th>
+              <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleCompListSort('task_name')">Task <span v-if="compListSortCol==='task_name'">{{ compListSortDir === 1 ? '▲' : '▼' }}</span></th>
+              <th class="px-3 py-2 text-right text-sm font-semibold">Order / Actions</th>
+            </tr></thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="(c, idx) in filteredAndSortedCompetencies" :key="c.id">
+                <td class="px-3 py-2 text-sm">{{ c.category }}</td>
+                <td class="px-3 py-2 text-sm">{{ c.task_name }}</td>
+                <td class="px-3 py-2 text-sm text-right flex justify-end items-center gap-3">
+                  <button @click="moveCompetency(competencies.indexOf(c), -1)" class="text-gray-500 hover:text-gray-800" :disabled="competencies.indexOf(c) === 0" title="Move Up">↑</button>
+                  <button @click="moveCompetency(competencies.indexOf(c), 1)" class="text-gray-500 hover:text-gray-800" :disabled="competencies.indexOf(c) === competencies.length - 1" title="Move Down">↓</button>
+                  <button @click="editComp(c)" class="text-blue-600 hover:text-blue-800">Edit</button>
+                  <button @click="deleteComp(c.id)" class="text-red-600 hover:text-red-800">Delete</button>
+                </td>
+              </tr>
+              <tr v-if="filteredAndSortedCompetencies.length === 0"><td colspan="3" class="px-3 py-4 text-center text-gray-500 italic">No competencies match filter.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Quizzes Admin -->
+        <div v-if="adminSubTab === 'quizzes' && user.is_admin" class="space-y-6">
+            <!-- Quiz Editor View -->
+            <div v-if="activeLibraryQuiz" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">{{ isEditingQuiz ? 'Edit Quiz' : 'Create New Quiz' }}</h3>
+                <div class="space-y-4">
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Quiz Name</label><input v-model="activeLibraryQuiz.name" placeholder="Unique Quiz Name" class="block w-full rounded-md border-gray-300 shadow-sm border px-3 py-2"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label><input v-model.number="activeLibraryQuiz.passing_score_percent" type="number" min="1" max="100" class="block w-32 rounded-md border-gray-300 shadow-sm border px-3 py-2"></div>
+                    
+                    <h4 class="font-semibold mb-2 pt-2 border-t">Questions</h4>
+                    <div v-for="(q, idx) in activeLibraryQuiz.questions" :key="idx" class="bg-white p-4 border rounded shadow-sm mb-4 relative">
+                        <button @click="activeLibraryQuiz.questions.splice(idx, 1)" class="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-bold">Remove</button>
+                        <label class="block text-sm font-medium mb-1 text-gray-700">Question {{idx+1}}</label>
+                        <input v-model="q.question_text" class="block w-full rounded border-gray-300 border px-3 py-2 mb-2 focus:ring-blue-500 focus:border-blue-500">
+                        <div class="mb-3"><label class="block text-sm font-medium mb-1 text-gray-700">Question Type</label><select v-model="q.question_type" class="block w-48 rounded border-gray-300 border px-3 py-2 text-sm bg-white focus:ring-blue-500 focus:border-blue-500"><option value="multiple_choice">Multiple Choice</option><option value="true_false">True / False</option><option value="short_answer">Short Answer</option></select></div>
+                        <div v-if="!q.question_type || q.question_type === 'multiple_choice'"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs font-semibold text-gray-600">Option A</label><input v-model="q.option_a" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option B</label><input v-model="q.option_b" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option C</label><input v-model="q.option_c" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option D</label><input v-model="q.option_d" class="block w-full rounded border px-2 py-1 text-sm"></div></div><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Option</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                        <div v-else-if="q.question_type === 'true_false'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="True">True</option><option value="False">False</option></select></div>
+                        <div v-else-if="q.question_type === 'short_answer'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer (Exact Match)</label><input v-model="q.correct_option" class="block w-full rounded border-gray-300 border px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Case-insensitive answer"></div>
+                    </div>
+                    <button @click="activeLibraryQuiz.questions.push({question_text:'', question_type: 'multiple_choice', option_a:'', option_b:'', option_c:'', option_d:'', correct_option:'A'})" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-sm mb-4 font-semibold shadow-sm">+ Add Question</button>
+                </div>
+                <div class="mt-4 flex gap-2">
+                    <button @click="saveLibraryQuiz" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">Save Quiz</button>
+                    <button @click="cancelEditLibraryQuiz" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded transition">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Quiz List View -->
+            <div v-else>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Quiz Library</h3>
+                    <button @click="createNewLibraryQuiz" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">+ Create New Quiz</button>
+                </div>
+                <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
+                    <thead class="bg-gray-50"><tr>
+                      <th class="px-3 py-2 text-left text-sm font-semibold">Quiz Name</th>
+                      <th class="px-3 py-2 text-left text-sm font-semibold">Passing Score</th>
+                      <th class="px-3 py-2 text-left text-sm font-semibold">Average Score</th>
+                      <th class="px-3 py-2 text-center text-sm font-semibold">Taken By</th>
+                      <th class="px-3 py-2 text-center text-sm font-semibold">In Use</th>
+                      <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
+                    </tr></thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                      <tr v-for="q in quizLibrary" :key="q.id">
+                        <td class="px-3 py-2 text-sm font-medium">{{ q.name }}</td>
+                        <td class="px-3 py-2 text-sm">{{ q.passing_score_percent }}%</td>
+                        <td class="px-3 py-2 text-sm align-middle w-48">
+                          <div class="flex items-center gap-2">
+                            <div class="relative w-full bg-gray-200 rounded-full h-2">
+                              <div class="bg-blue-500 h-2 rounded-full" :style="`width: ${quizStats[q.id]?.average || 0}%`"></div>
+                              <div class="absolute -top-1 -bottom-1 border-l-2 border-dashed border-gray-700 z-10" :style="`left: ${q.passing_score_percent}%`" title="Passing Score"></div>
+                            </div>
+                            <span class="text-xs font-bold text-gray-700 w-8">{{ quizStats[q.id]?.average || 0 }}%</span>
+                          </div>
+                        </td>
+                        <td class="px-3 py-2 text-sm text-center">{{ quizStats[q.id]?.count || 0 }}</td>
+                        <td class="px-3 py-2 text-sm text-center">
+                          <span v-if="quizStats[q.id]?.inUse" class="text-green-600 font-bold">✓</span>
+                          <span v-else class="text-red-600 font-bold">✗</span>
+                        </td>
+                        <td class="px-3 py-2 text-sm text-right flex justify-end items-center gap-3">
+                          <button @click="editLibraryQuiz(q.id)" class="text-blue-600 hover:text-blue-800">Edit</button>
+                          <button @click="deleteLibraryQuiz(q.id)" class="text-red-600 hover:text-red-800">Delete</button>
+                        </td>
+                      </tr>
+                      <tr v-if="quizLibrary.length === 0"><td colspan="3" class="px-3 py-4 text-center text-gray-500 italic">No quizzes in the library.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Users Admin -->
+        <div v-if="adminSubTab === 'users' && user.is_superuser" class="space-y-6">
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-semibold mb-4">{{ isEditingUser ? 'Edit User' : 'Add New User' }}</h3>
+            <form @submit.prevent="saveUser" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><label class="block text-sm font-medium text-gray-700 mb-1">Username</label><input v-model="newUserData.username" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
+              <div><label class="block text-sm font-medium text-gray-700 mb-1">Password</label><input v-model="newUserData.password" type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2" placeholder="Leave blank for none"></div>
+              <div><label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label><input v-model="newUserData.full_name" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
+              <div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input v-model="newUserData.email" required type="email" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
+              <div><label class="block text-sm font-medium text-gray-700 mb-1">Date in Post</label><input v-model="newUserData.date_in_post" type="date" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Designation (Group)</label>
+                <select v-model="newUserData.designation" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2 bg-white">
+                  <option v-for="g in userGroups" :key="g.id" :value="g.name">{{ g.name }}</option>
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Active In Sections (Databases)</label>
+                <div class="flex flex-wrap gap-4 bg-white p-2 border border-gray-300 rounded-md">
+                  <label v-for="section in globalSettings.sections" :key="'chk-'+section.name" class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" :value="section.name" v-model="newUserData.active_in" class="h-4 w-4 text-blue-600 rounded">
+                    <span class="text-sm font-medium text-gray-700">{{ section.name }}</span>
+                  </label>
+                </div>
+              </div>
+              <div class="sm:col-span-2 flex items-center gap-6 mt-2">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                  <input type="checkbox" v-model="newUserData.is_admin" class="h-4 w-4 text-blue-600 rounded"> 
+                  <span class="text-sm font-medium text-gray-700">Grant Assessor Privileges</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer">
+                  <input type="checkbox" v-model="newUserData.is_superuser" class="h-4 w-4 text-purple-600 rounded"> 
+                  <span class="text-sm font-medium text-gray-700">Grant Admin Privileges</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer">
+                  <input type="checkbox" v-model="newUserData.is_active" class="h-4 w-4 text-green-600 rounded"> 
+                  <span class="text-sm font-medium text-gray-700">Active Account</span>
+                </label>
+              </div>
+              <div class="sm:col-span-2 flex gap-2 mt-2">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">{{ isEditingUser ? 'Update User' : 'Save User' }}</button>
+                <button type="button" v-if="isEditingUser" @click="saveAsNewUser" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow-sm">Save As New</button>
+                <button type="button" v-if="isEditingUser" @click="cancelEditUser" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded transition">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort('username')">Username <span v-if="userSortCol === 'username'">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort('full_name')">Name <span v-if="userSortCol === 'full_name'">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort('designation')">Role <span v-if="userSortCol === 'designation'">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th v-for="s in globalSettings.sections" :key="'th-'+s.name" class="px-3 py-2 text-center text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort(s.name)">{{ s.name }} <span v-if="userSortCol === s.name">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th class="px-3 py-2 text-center text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort('is_admin')">Assessor <span v-if="userSortCol === 'is_admin'">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th class="px-3 py-2 text-center text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort('is_superuser')">Admin <span v-if="userSortCol === 'is_superuser'">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th class="px-3 py-2 text-center text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleUserSort('is_active')">Status <span v-if="userSortCol === 'is_active'">{{ userSortDir === 1 ? '▲' : '▼' }}</span></th>
+                <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="u in sortedAdminUsers" :key="u.id" :class="{ 'opacity-50 bg-gray-50': u.is_active === 0 }">
+                <td class="px-3 py-2 text-sm">{{ u.username }}</td><td class="px-3 py-2 text-sm">{{ u.full_name }}</td><td class="px-3 py-2 text-sm">{{ u.designation }}</td>
+                <td v-for="s in globalSettings.sections" :key="'td-'+s.name" class="px-3 py-2 text-sm text-center"><span v-if="(u.active_in || []).includes(s.name)" class="text-green-600 font-bold">✓</span></td>
+                <td class="px-3 py-2 text-sm text-center"><span v-if="u.is_admin" class="text-green-600 font-bold">Yes</span><span v-else class="text-gray-400">No</span></td>
+                <td class="px-3 py-2 text-sm text-center"><span v-if="u.is_superuser" class="text-purple-600 font-bold">Yes</span><span v-else class="text-gray-400">No</span></td>
+                <td class="px-3 py-2 text-sm text-center">
+                  <button @click="toggleUserActive(u)" :class="['px-2 py-1 rounded text-xs font-bold transition shadow-sm', u.is_active !== 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-200 text-gray-600 hover:bg-gray-300']">
+                    {{ u.is_active !== 0 ? 'Active' : 'Archived' }}
+                  </button>
+                </td>
+                <td class="px-3 py-2 text-sm text-right flex justify-end gap-3"><button @click="editUser(u)" class="text-blue-600 hover:text-blue-800">Edit</button><button @click="deleteUser(u.id)" class="text-red-600 hover:text-red-800">Delete</button></td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div class="mt-12 pt-8 border-t border-gray-200">
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
+              <h3 class="text-lg font-semibold mb-4">User Groups</h3>
+              <form @submit.prevent="saveGroup" class="flex gap-4">
+                <input v-model="newGroup" required type="text" class="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2" placeholder="e.g. Dosimetrist">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition shadow-sm">Add Group</button>
+              </form>
+            </div>
+            <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
+              <thead class="bg-gray-50"><tr><th class="px-3 py-2 text-left text-sm font-semibold">Group Name</th><th class="px-3 py-2 text-right text-sm font-semibold">Order / Actions</th></tr></thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-for="(g, idx) in userGroups" :key="g.id">
+                  <td class="px-3 py-2 text-sm">
+                    <span v-if="editingGroupId !== g.id">{{ g.name }}</span>
+                    <input v-else v-model="editGroupValue" @keyup.enter="updateGroup(g.id)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
+                  </td>
+                  <td class="px-3 py-2 text-sm text-right flex justify-end items-center gap-3">
+                    <button @click="moveGroup(idx, -1)" class="text-gray-500 hover:text-gray-800" :disabled="idx === 0" title="Move Up">↑</button>
+                    <button @click="moveGroup(idx, 1)" class="text-gray-500 hover:text-gray-800" :disabled="idx === userGroups.length - 1" title="Move Down">↓</button>
+                    <button v-if="editingGroupId !== g.id" @click="startEditGroup(g)" class="text-blue-600 hover:text-blue-800 mr-3 font-semibold">Edit</button>
+                    <button v-else @click="updateGroup(g.id)" class="text-green-600 hover:text-green-800 mr-3 font-semibold">Save</button>
+                    <button @click="deleteGroup(g.id)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <!-- Categories Admin -->
+        <div v-if="adminSubTab === 'categories' && user.is_superuser" class="space-y-6">
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 class="text-lg font-semibold mb-4">Competency Categories</h3>
+              <form @submit.prevent="saveCategory" class="flex gap-4">
+                <input v-model="newCategoryName" required type="text" class="block w-full max-w-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2" placeholder="e.g. Linac QA">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition shadow-sm">Add Category</button>
+              </form>
+            </div>
+            
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 class="text-lg font-semibold mb-4">Category Display Order</h3>
+              <div class="flex flex-col gap-2 max-w-2xl">
+                <div v-for="(cat, idx) in categoryOrder" :key="cat.category" class="bg-white border border-gray-300 rounded px-3 py-2 flex items-center justify-between shadow-sm">
+                  <div class="text-sm font-medium flex-grow">
+                    <span v-if="editingCategoryName !== cat.category">{{ cat.category }}</span>
+                    <input v-else v-model="editCategoryValue" @keyup.enter="updateCategory(cat.category)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
+                  </div>
+                  <div class="flex gap-2 items-center">
+                    <button @click="moveCategory(idx, -1)" :disabled="idx === 0" class="text-gray-500 hover:text-gray-800 disabled:opacity-30" title="Move Up">↑</button>
+                    <button @click="moveCategory(idx, 1)" :disabled="idx === categoryOrder.length - 1" class="text-gray-500 hover:text-gray-800 disabled:opacity-30" title="Move Down">↓</button>
+                    <button v-if="editingCategoryName !== cat.category" @click="startEditCategory(cat)" class="text-blue-600 hover:text-blue-800 ml-3 font-semibold">Edit</button>
+                    <button v-else @click="updateCategory(cat.category)" class="text-green-600 hover:text-green-800 ml-3 font-semibold">Save</button>
+                    <button @click="deleteCategory(cat.category)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </div>
+        
+        <!-- Statistics Admin -->
+        <div v-if="adminSubTab === 'statistics' && user.is_admin" class="space-y-6">
+          <div v-if="!statistics" class="text-center text-gray-500 p-4">Loading statistics...</div>
+          <div v-else>
+            <div class="mb-12">
+              <h3 class="text-xl font-bold text-blue-900 mb-4 bg-blue-50 p-3 rounded-lg shadow-sm border border-blue-100">Overall Section Statistics</h3>
+              
+              <!-- Summary Cards -->
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-yellow-50 p-4 rounded border border-yellow-200 shadow-sm text-center">
+                  <div class="text-xs font-bold text-yellow-800 mb-1">In Training (T)</div>
+                  <div class="text-2xl font-bold text-yellow-900">{{ sectionSummaryStats.t }}</div>
+                </div>
+                <div class="bg-purple-50 p-4 rounded border border-purple-200 shadow-sm text-center">
+                  <div class="text-xs font-bold text-purple-800 mb-1">Meets Requirements (M)</div>
+                  <div class="text-2xl font-bold text-purple-900">{{ sectionSummaryStats.m }}</div>
+                </div>
+                <div class="bg-orange-50 p-4 rounded border border-orange-200 shadow-sm text-center">
+                  <div class="text-xs font-bold text-orange-800 mb-1">Ready for Assessment (A)</div>
+                  <div class="text-2xl font-bold text-orange-900">{{ sectionSummaryStats.a }}</div>
+                </div>
+                <div class="bg-green-50 p-4 rounded border border-green-200 shadow-sm text-center">
+                  <div class="text-xs font-bold text-green-800 mb-1">Competent (C/X)</div>
+                  <div class="text-2xl font-bold text-green-900">{{ sectionSummaryStats.c + sectionSummaryStats.x }}</div>
+                </div>
+              </div>
+              
+              <!-- Chart -->
+              <div class="bg-white p-4 rounded border border-gray-200 shadow-sm mb-6">
+                <h4 class="font-bold text-gray-800 mb-2">Competency Progression Over Time</h4>
+                <div class="relative h-64 w-full">
+                  <canvas id="statChart-overall"></canvas>
+                </div>
+              </div>
+              
+              <!-- Users Table -->
+              <div class="bg-white rounded border border-gray-200 shadow-sm overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-300">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-sm font-semibold w-[20%] cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatUserSort('name')">User <span v-if="statUserSortCol === 'name'" class="text-xs">{{ statUserSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-left text-sm font-semibold w-[20%] cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatUserSort('designation')">Designation <span v-if="statUserSortCol === 'designation'" class="text-xs">{{ statUserSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-left text-sm font-semibold w-[20%] cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatUserSort('time_in_post')">Time in Post <span v-if="statUserSortCol === 'time_in_post'" class="text-xs">{{ statUserSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-left text-sm font-semibold w-[20%] cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatUserSort('section')">Section Progress <span v-if="statUserSortCol === 'section'" class="text-xs">{{ statUserSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-left text-sm font-semibold w-[20%] cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatUserSort('overall')">Overall Progress <span v-if="statUserSortCol === 'overall'" class="text-xs">{{ statUserSortDir === 1 ? '▲' : '▼' }}</span></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200">
+                    <tr v-for="u in sectionApplicableUsers" :key="u.id" class="hover:bg-gray-50">
+                      <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ u.full_name }}</td>
+                      <td class="px-4 py-2 text-sm text-gray-500">{{ u.designation }}</td>
+                      <td class="px-4 py-2 text-sm text-gray-500">{{ getTimeInPost(u.date_in_post) }}</td>
+                      <td class="px-4 py-2 text-sm align-middle">
+                        <div class="flex items-center gap-3">
+                          <div class="relative w-full bg-gray-200 rounded-full h-2 flex-grow">
+                            <div class="bg-blue-500 h-2 rounded-full" :style="`width: ${u.section_percent}%`"></div>
+                            <div class="absolute -top-1 -bottom-1 border-l-2 border-dashed border-gray-700 z-10" :style="`left: ${getStatSectionDesignationAverage(u.designation)}%`" :title="`Designation Average: ${getStatSectionDesignationAverage(u.designation)}%`"></div>
+                          </div>
+                          <span class="font-medium text-xs text-gray-700 w-8 text-right">{{ u.section_percent }}%</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2 text-sm align-middle">
+                        <div class="flex items-center gap-3">
+                          <div class="relative w-full bg-gray-200 rounded-full h-2 flex-grow">
+                            <div class="bg-indigo-500 h-2 rounded-full" :style="`width: ${u.overall_percent}%`"></div>
+                            <div class="absolute -top-1 -bottom-1 border-l-2 border-dashed border-gray-700 z-10" :style="`left: ${getStatOverallDesignationAverage(u.designation)}%`" :title="`Designation Average: ${getStatOverallDesignationAverage(u.designation)}%`"></div>
+                          </div>
+                          <span class="font-medium text-xs text-gray-700 w-8 text-right">{{ u.overall_percent }}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <!-- Global Competency Status Table -->
+            <div class="bg-white p-4 rounded border border-gray-200 shadow-sm mt-12">
+              <h4 class="font-bold text-gray-800 mb-4">System-wide Competency Status Overview</h4>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-300 border border-gray-200">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('category')">Category <span v-if="statCompSortCol === 'category'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('task_name')">Task <span v-if="statCompSortCol === 'task_name'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('t')">In Training (T) <span v-if="statCompSortCol === 't'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('m')">Meets Reqs (M) <span v-if="statCompSortCol === 'm'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('a')">Assessment (A) <span v-if="statCompSortCol === 'a'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('c')">Competent (C/X) <span v-if="statCompSortCol === 'c'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('total')">Total Applicable Staff <span v-if="statCompSortCol === 'total'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200">
+                    <template v-for="group in groupedStatCompetencies" :key="'gsc-'+group.category">
+                      <!-- Category Header Row -->
+                      <tr class="bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors" @click="toggleStatCategory(group.category)">
+                        <td class="px-4 py-2 text-sm font-bold text-gray-800 flex items-center gap-2">
+                          <span class="text-gray-500 w-4 text-center">{{ expandedStatCategories.includes(group.category) ? '▼' : '▶' }}</span>
+                          {{ group.category }}
+                        </td>
+                        <td class="px-4 py-2 text-sm font-bold text-gray-600">All Tasks Combined</td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold">{{ group.t }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold">{{ group.m }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold">{{ group.a }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-bold text-green-700">{{ group.c }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold text-gray-600">{{ group.total }}</td>
+                      </tr>
+                      <!-- Nested Task Rows -->
+                      <tr v-if="expandedStatCategories.includes(group.category)" v-for="c in group.items" :key="c.id" class="hover:bg-gray-50 bg-white">
+                        <td class="px-4 py-2 text-sm text-gray-400 pl-10">↳</td>
+                        <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ c.task_name }}</td>
+                        <td class="px-4 py-2 text-sm text-center">{{ c.t }}</td>
+                        <td class="px-4 py-2 text-sm text-center">{{ c.m }}</td>
+                        <td class="px-4 py-2 text-sm text-center">{{ c.a }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-bold text-green-700">{{ c.c }}</td>
+                        <td class="px-4 py-2 text-sm text-center text-gray-500">{{ c.total }}</td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Superadmin Admin Tab -->
+        <div v-if="adminSubTab === 'superadmin' && user.is_superuser" class="space-y-6">
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-semibold mb-4 text-blue-900">Database Management</h3>
+            
+            <div class="mb-4">
+              <h4 class="font-semibold text-gray-800 mb-2">Database Information</h4>
+              <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm bg-white">
+                <thead class="bg-gray-100">
+                  <tr>
+                    <th class="px-3 py-2 text-left text-sm font-semibold">Database</th>
+                    <th class="px-3 py-2 text-left text-sm font-semibold">Size</th>
+                    <th class="px-3 py-2 text-left text-sm font-semibold">Entries</th>
+                    <th class="px-3 py-2 text-left text-sm font-semibold">Last Backup</th>
+                    <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="(info, name) in dbInfo.info" :key="name">
+                    <td class="px-3 py-2 text-sm font-medium">{{ name }}</td>
+                    <td class="px-3 py-2 text-sm">{{ info.size }}</td>
+                    <td class="px-3 py-2 text-sm">{{ info.entries }}</td>
+                  <td class="px-3 py-2 text-sm">{{ [dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0] ? new Date([dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0]).toLocaleString() : 'Never' }}</td>
+                    <td class="px-3 py-2 text-sm text-right flex justify-end gap-2">
+                      <button @click="backupDatabase(name)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-semibold py-1 px-2 rounded text-xs transition shadow-sm">Backup</button>
+                      <button @click="triggerRestore(name)" class="bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold py-1 px-2 rounded text-xs transition shadow-sm">Restore</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="mt-2 text-sm text-gray-600">Last 'All Sections' Backup: <span class="font-bold">{{ dbInfo.settings.last_backup_all ? new Date(dbInfo.settings.last_backup_all).toLocaleString() : 'Never' }}</span></div>
+              <input type="file" ref="individualRestoreInput" @change="onIndividualRestoreFileSelected" accept=".json" class="hidden">
+            </div>
+
+            <div class="border border-gray-300 p-4 rounded bg-white shadow-sm mt-6">
+              <h4 class="font-bold text-gray-800 mb-2">Backup / Restore All Data</h4>
+              <p class="text-xs text-gray-500 mb-4">Download a JSON backup of all database files, or restore all databases from a previous JSON backup. <span class="text-red-600 font-bold">Restoring will overwrite current data!</span></p>
+              
+              <div class="flex flex-col md:flex-row items-center gap-4">
+                <button @click="backupDatabase('all')" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm whitespace-nowrap">Backup All Sections</button>
+                <div class="h-8 border-l border-gray-300 hidden md:block"></div>
+                <div class="flex items-center gap-2 w-full md:w-auto">
+                  <input type="file" @change="onBackupFileSelected" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 border border-gray-300 rounded p-1">
+                  <button @click="restoreDatabase('all')" :disabled="!backupFile" class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm disabled:opacity-50 whitespace-nowrap">Restore All</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-semibold mb-4 text-purple-900">Frontend Management</h3>
+            <p class="text-sm text-gray-600 mb-3">Upload a new <code class="bg-gray-200 px-1 rounded">index.html</code> file to update the application's interface.</p>
+            <div class="flex items-center gap-3">
+              <input type="file" @change="onFrontendFileSelected" accept=".html,.htm" class="block w-full max-w-sm text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 border border-gray-300 rounded p-1 bg-white">
+              <button @click="uploadFrontend" :disabled="!frontendFile" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm disabled:opacity-50">Upload & Overwrite</button>
+            </div>
+          </div>
+
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-semibold mb-4 text-teal-900">Global Settings</h3>
+            <div class="flex items-center gap-4 bg-white p-3 border border-gray-300 rounded shadow-sm max-w-md">
+              <label class="block text-sm font-medium text-gray-700">Default Renewal Period (Months):</label>
+              <input type="number" v-model.number="globalSettings.default_renewal_period" class="block w-24 rounded-md border-gray-300 shadow-sm border px-3 py-1.5 text-sm focus:ring-teal-500 focus:border-teal-500">
+              <button @click="saveGlobalSettings" class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm">Save</button>
+            </div>
+          </div>
+
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-6">
+            <h3 class="text-lg font-semibold mb-4 text-orange-900">Section Management</h3>
+            <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm bg-white">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-3 py-2 text-left text-sm font-semibold">Section Name</th>
+                  <th class="px-3 py-2 text-center text-sm font-semibold">Status</th>
+                  <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="(section, idx) in globalSettings.sections" :key="section.name">
+                  <td class="px-3 py-2 text-sm font-medium">{{ section.name }}</td>
+                  <td class="px-3 py-2 text-sm text-center">
+                    <button @click="toggleSectionActive(idx)" :class="['px-2 py-1 rounded text-xs font-bold transition shadow-sm', section.active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600']">{{ section.active ? 'Active' : 'Inactive' }}</button>
+                  </td>
+                  <td class="px-3 py-2 text-sm text-right flex justify-end gap-2">
+                    <button @click="deleteSection(section.name)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="mt-4 flex gap-3 max-w-sm">
+              <input v-model="newSectionName" @keyup.enter="addSection" placeholder="New Section Name" class="block w-full rounded-md border-gray-300 shadow-sm border px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
+              <button @click="addSection" class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">Add New</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Cell Modal -->
+      <div v-if="selectedCell" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h3 class="text-xl font-bold text-gray-900">{{ selectedCell.comp.task_name }}</h3>
+              <p class="text-sm text-gray-500">{{ selectedCell.user.full_name }} ({{ selectedCell.user.designation }})</p>
+            </div>
+            <button @click="closeModal" class="text-gray-400 hover:text-gray-600">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <div class="mb-4 flex flex-col gap-1 border-b pb-4">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-sm font-semibold">Current Status:</span>
+              <span :class="getStatusBadgeClass(selectedCell.user.id, selectedCell.comp.id)">
+                {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Requested', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(selectedCell.user.id, selectedCell.comp.id)] || 'Not Started' }}
+              </span>
+            </div>
+            <div class="text-xs text-gray-500 font-medium">Date Started: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
+            <div class="text-xs text-gray-500 font-medium">Date Signed Off: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off || 'N/A' }}</span></div>
+            <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id">Signed Off By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id) }}</span></div>
+            <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.reviewer_id) }} on {{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed }}</span></div>
+            <div class="text-xs text-gray-500 font-medium mt-1" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.signoff_comment">Sign-off Comment: <span class="text-gray-800 italic">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id).signoff_comment }}</span></div>
+          </div>
+
+          <!-- Milestones View -->
+          <div class="mb-4">
+            <h4 class="font-semibold text-gray-800 mb-3">Training Milestones</h4>
+            <div class="flex flex-col gap-3">
+              <template v-if="selectedCell.comp.requires_prerequisite_competencies && selectedCell.comp.prerequisite_competencies?.length > 0">
+                <div v-for="pc in getOrderedPrereqs(selectedCell.comp.prerequisite_competencies)" :key="pc.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
+                  <span class="text-gray-800 font-medium text-sm">Prerequisite: {{ pc.category }} - {{ pc.task_name }}</span>
+                  <div class="flex items-center gap-2">
+                    <span v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, pc.id))" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded">✓ Met</span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded">✗ Pending</span>
+                  </div>
+                </div>
+              </template>
+
+              <template v-if="selectedCell.comp.requires_instructions">
+                <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
+                  <span class="text-gray-800 font-medium text-sm">{{ rp.name }}</span>
+                  <div class="flex items-center gap-2">
+                    <label v-if="selectedCell.user.id === user.id && !getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                      <input type="checkbox" class="hidden" @change="updateMilestone('reading', $event.target.checked, rp.id)">
+                      Mark as Read
+                    </label>
+                    <label v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="cursor-pointer text-xs text-gray-500 hover:underline whitespace-nowrap">
+                      <input type="checkbox" class="hidden" @change="updateMilestone('reading', false, rp.id)">
+                      Unmark
+                    </label>
+
+                    <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded">✓ Read</span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded">✗ Unread</span>
+                  </div>
+                </div>
+              </template>
+              
+              <template v-if="selectedCell.comp.requires_quiz && cellQuizzes.length > 0">
+                <div v-for="qz in cellQuizzes" :key="qz.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
+                  <span class="text-gray-800 font-medium text-sm">Pass Quiz: {{ qz.name }}</span>
+                  <div class="flex items-center gap-2">
+                    <button v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="loadQuizForTaking(qz.id)" class="text-xs text-blue-600 hover:underline whitespace-nowrap">Retake</button>
+                    <button v-else-if="selectedCell.user.id === user.id" @click="loadQuizForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">Take Quiz</button>
+
+                    <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
+                    <span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                  </div>
+                </div>
+              </template>
+
+              <div v-if="takingQuiz" class="mt-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                <h4 class="font-bold text-gray-800 mb-3">Assessment Quiz: {{ quizData?.name }}</h4>
+                <div v-for="(q, idx) in quizData.questions" :key="q.id" class="mb-5 bg-white p-3 border rounded">
+                  <p class="font-semibold text-sm mb-2 text-gray-800">{{idx+1}}. {{q.question_text}}</p>
+                  <div v-if="!q.question_type || q.question_type === 'multiple_choice'" class="flex flex-col gap-2 text-sm text-gray-700 pl-2">
+                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="A" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> A) {{q.option_a}}</label>
+                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="B" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> B) {{q.option_b}}</label>
+                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="C" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> C) {{q.option_c}}</label>
+                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="D" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> D) {{q.option_d}}</label>
+                  </div>
+                  <div v-else-if="q.question_type === 'true_false'" class="flex flex-col gap-2 text-sm text-gray-700 pl-2">
+                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="True" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> True</label>
+                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="False" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> False</label>
+                  </div>
+                  <div v-else-if="q.question_type === 'short_answer'" class="pl-2">
+                    <input type="text" v-model="quizAnswers[q.id]" placeholder="Type your answer here..." class="block w-full md:w-1/2 rounded border-gray-300 border px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                  </div>
+                </div>
+                <div class="flex gap-2"><button @click="submitQuiz" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded">Submit Answers</button><button @click="takingQuiz = false" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold px-4 py-2 rounded">Cancel</button></div>
+              </div>
+              
+              <template v-if="selectedCell.comp.required_qatrack_count > 0">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2">
+                  <div class="flex flex-col">
+                    <span class="text-gray-800 font-medium text-sm">QATrack+ Practical Evidence: <code class="text-xs bg-gray-100 px-1 rounded">{{ selectedCell.comp.qatrack_test_identifier }}</code></span>
+                    <span v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_manual_override" class="text-xs font-bold text-red-600 mt-0.5">Manual Override Active</span>
+                  </div>
+                  <div class="flex items-center gap-2 sm:ml-auto">
+                    <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0 }} / {{ selectedCell.comp.required_qatrack_count }}</span>
+                    <span v-if="(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0) >= selectedCell.comp.required_qatrack_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                  </div>
+                </div>
+              </template>
+
+              <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm'" class="mt-2 bg-purple-50 border border-purple-200 p-3 rounded flex flex-col gap-2">
+                <p class="text-sm font-semibold text-purple-800">You have met all prerequisites. Are you ready for an assessment?</p>
+                <button @click="requestAssessment" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">Request Assessment</button>
+              </div>
+              
+              <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'a'" class="mt-2 bg-orange-50 border border-orange-200 p-3 rounded flex flex-col gap-2">
+                <p class="text-sm font-semibold text-orange-800">You have requested sign-off for this competency.</p>
+                <button @click="revertAssessment" class="bg-white border border-orange-300 text-orange-700 hover:bg-orange-100 text-sm font-medium py-1.5 px-3 rounded transition shadow-sm">Revert to Meets Requirements (Not Ready)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Assessor Sign-Off View -->
+          <div v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'a' && getProgressStatus(user.id, selectedCell.comp.id) === 'x'" class="mb-4">
+            <h4 class="font-semibold text-gray-800 mb-2">Assessor Action Required</h4>
+            <p class="text-sm text-gray-600 mb-4">Trainee has completed prerequisites.</p>
+            <textarea v-model="signoffComment" placeholder="Optional comment or restriction (e.g. 'Review after holiday')" class="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-3 focus:ring-blue-500 focus:border-blue-500"></textarea>
+            <div class="flex flex-col gap-2">
+              <button @click="signOff('m')" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded">Grant 'M' (Meets Requirements)</button>
+              <button @click="signOff('c')" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded">Grant 'C' (Competent)</button>
+              <button @click="signOff('x')" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">Grant 'X' (Competent to Train)</button>
+            </div>
+          </div>
+
+          <!-- Renewal View -->
+          <div v-if="selectedCell.user.id === user.id && (getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' || getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'c' || getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'x') && isRenewalDue(selectedCell.user.id, selectedCell.comp.id)" class="mb-4 bg-red-50 border border-red-200 p-4 rounded-lg">
+            <h4 class="font-bold text-red-800 mb-2">Renewal Due</h4>
+            <p class="text-sm text-red-700 mb-4">It has been over {{ selectedCell.comp.renewal_period_months }} months since you were signed off. Please confirm you are still competent, or request a re-assessment.</p>
+            <div class="flex gap-3">
+              <button @click="renewCompetency" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm">Confirm & Renew</button>
+              <button @click="requestReassessment" class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm">Request Re-assessment</button>
+            </div>
+          </div>
+          
+          <!-- Admin Controls -->
+          <div v-if="user.is_superuser" class="mt-4 pt-4 border-t border-red-200">
+            <h4 class="font-semibold text-red-800 mb-2">Overrides & Controls</h4>
+            
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-sm font-medium text-gray-700">Force Status:</span>
+              <select v-model="adminEdit.status" class="rounded border-gray-300 px-2 py-1 text-sm border bg-white flex-grow">
+                <option value="t">T - Training</option>
+                <option value="m">M - Meets Requirements</option>
+                <option value="a">A - Assessment Requested</option>
+                <option value="c">C - Competent</option>
+                <option value="x">X - Competent to Train</option>
+              </select>
+              <button @click="adminForceStatus" class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm whitespace-nowrap">Apply</button>
+            </div>
+            <div v-if="['c', 'x'].includes(adminEdit.status)" class="flex flex-col gap-2 mb-3">
+              <label class="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <span class="whitespace-nowrap">Sign-off Date:</span>
+                <input type="date" v-model="adminEdit.date_override" class="rounded border-gray-300 px-2 py-1 text-sm border bg-white flex-grow">
+              </label>
+              <textarea v-model="adminEdit.signoff_comment" placeholder="Optional sign-off comment" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"></textarea>
+            </div>
+
+            <div class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
+              <template v-if="selectedCell.comp.requires_instructions">
+                <label v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex items-center space-x-2 text-sm text-gray-800">
+                  <input type="checkbox" :value="rp.id" v-model="adminEdit.readings_completed" class="rounded text-red-600 focus:ring-red-500">
+                  <span>Read: {{ rp.name }} (Manual Override)</span>
+                </label>
+              </template>
+              <div v-if="selectedCell.comp.requires_quiz" class="flex flex-col gap-2 text-sm text-gray-800">
+                <div v-for="qz in cellQuizzes" :key="qz.id" class="flex justify-between items-center border-b border-red-200 pb-1">
+                  <span>Quiz: {{ qz.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'Passed' : 'Pending/Failed' }}</strong></span>
+                  <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                </div>
+              </div>
+              <div v-if="selectedCell.comp.required_qatrack_count > 0" class="flex flex-col gap-1 mt-1">
+                <label class="text-sm text-gray-800 flex items-center justify-between">
+                  <span>QATrack+ Count:</span>
+                  <input type="number" v-model.number="adminEdit.qatrack_records" class="w-16 rounded border-gray-300 px-2 py-1 text-sm border bg-white">
+                </label>
+                <label class="flex items-center space-x-2 text-sm text-gray-800"><input type="checkbox" v-model="adminEdit.qatrack_manual_override" class="rounded text-red-600 focus:ring-red-500"><span>Disable API Sync (Manual mode)</span></label>
+              </div>
+              
+              <button @click="saveAdminOverrides" class="mt-2 bg-gray-800 hover:bg-gray-900 text-white py-1.5 rounded text-sm font-medium transition shadow-sm w-full">Save Overrides</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Dialog -->
+    <div v-if="customDialog.isOpen" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4">
+      <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm transform transition-all">
+        <h3 class="text-lg font-bold text-gray-900 mb-2">{{ customDialog.title }}</h3>
+        <p class="text-sm text-gray-700 mb-6 whitespace-pre-wrap">{{ customDialog.message }}</p>
+        
+        <input v-if="customDialog.type === 'prompt'" v-model="customDialog.inputValue" @keyup.enter="closeDialog(customDialog.inputValue)" :placeholder="customDialog.placeholder" class="w-full border border-gray-300 rounded px-3 py-2 focus:ring-blue-500 focus:border-blue-500 mb-6 text-sm" autofocus>
+        
+        <div class="flex justify-end gap-3">
+          <button v-if="customDialog.type === 'confirm' || customDialog.type === 'prompt'" @click="closeDialog(false)" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1.5 px-4 rounded text-sm transition">Cancel</button>
+          <button v-if="customDialog.type === 'confirm'" @click="closeDialog(true)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">Confirm</button>
+          <button v-if="customDialog.type === 'prompt'" @click="closeDialog(customDialog.inputValue)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">OK</button>
+          <button v-if="customDialog.type === 'alert'" @click="closeDialog(true)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer Version and Author -->
+    <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
+      <div class="flex-1"></div>
+      <div class="flex-1 flex justify-center">
+        <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
+      </div>
+      <div class="flex-1 text-right">
+        James Burnley v1.0
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
+
+    createApp({
+      setup() {
+        const username = ref('');
+        const password = ref('');
+        const token = ref(localStorage.getItem('token'));
+        const user = ref(JSON.parse(localStorage.getItem('user') || 'null'));
+        const loginError = ref('');
+        
+        const customDialog = ref({ isOpen: false, type: 'alert', title: '', message: '', inputValue: '', placeholder: '', resolvePromise: null });
+
+        const showDialog = (type, title, message, placeholder = '') => {
+          return new Promise((resolve) => {
+            customDialog.value = { isOpen: true, type, title, message, inputValue: '', placeholder, resolvePromise: resolve };
+          });
+        };
+
+        const customAlert = (message, title = "Information") => showDialog('alert', title, message);
+        const customConfirm = (message, title = "Confirmation") => showDialog('confirm', title, message);
+        const customPrompt = (message, title = "Input Required", placeholder = "") => showDialog('prompt', title, message, placeholder);
+
+        const topScroll = ref(null);
+        const bottomScroll = ref(null);
+        const matrixTable = ref(null);
+        const tableWidth = ref(0);
+
+        const updateTableWidth = () => {
+          if (matrixTable.value) {
+            tableWidth.value = matrixTable.value.scrollWidth;
+          }
+        };
+
+        const syncScroll = (source, e) => {
+          if (source === 'top' && bottomScroll.value) {
+            bottomScroll.value.scrollLeft = e.target.scrollLeft;
+          } else if (source === 'bottom' && topScroll.value) {
+            topScroll.value.scrollLeft = e.target.scrollLeft;
+          }
+        };
+
+        let resizeObserver = null;
+        watch(matrixTable, (el) => {
+          if (resizeObserver) resizeObserver.disconnect();
+          if (el) {
+            resizeObserver = new ResizeObserver(() => {
+              updateTableWidth();
+            });
+            resizeObserver.observe(el);
+            updateTableWidth();
+          }
+        });
+
+        const publicTopScroll = ref(null);
+        const publicBottomScroll = ref(null);
+        const publicMatrixTable = ref(null);
+        const publicTableWidth = ref(0);
+
+        const updatePublicTableWidth = () => {
+          if (publicMatrixTable.value) {
+            publicTableWidth.value = publicMatrixTable.value.scrollWidth;
+          }
+        };
+
+        const syncPublicScroll = (source, e) => {
+          if (source === 'top' && publicBottomScroll.value) {
+            publicBottomScroll.value.scrollLeft = e.target.scrollLeft;
+          } else if (source === 'bottom' && publicTopScroll.value) {
+            publicTopScroll.value.scrollLeft = e.target.scrollLeft;
+          }
+        };
+
+        let publicResizeObserver = null;
+        watch(publicMatrixTable, (el) => {
+          if (publicResizeObserver) publicResizeObserver.disconnect();
+          if (el) {
+            publicResizeObserver = new ResizeObserver(() => {
+              updatePublicTableWidth();
+            });
+            publicResizeObserver.observe(el);
+            updatePublicTableWidth();
+          }
+        });
+
+        const closeDialog = (result) => {
+          if (customDialog.value.resolvePromise) customDialog.value.resolvePromise(result);
+          customDialog.value.isOpen = false;
+        };
+        
+        const users = ref([]);
+        const competencies = ref([]);
+        const progress = ref([]);
+        const userGroups = ref([]);
+        const selectedCell = ref(null);
+        const currentTab = ref('individual');
+        const signoffComment = ref('');
+        const trueOverallProgress = ref({});
+
+        const overviewFilterName = ref('');
+        const overviewFilterTask = ref('');
+        const overviewFilterCategory = ref('');
+        const overviewFilterGroup = ref('');
+        
+        const adminSubTab = ref('competencies');
+        const isEditingComp = ref(false);
+        const newComp = ref({ category: '', task_name: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36 });
+        
+        const categoryOrder = ref([]);
+
+        const availableCategories = computed(() => categoryOrder.value.map(co => co.category));
+
+        const newCategoryName = ref('');
+        const editingCategoryName = ref(null);
+        const editCategoryValue = ref('');
+
+        const publicSummaryData = ref({ users: [], competencies: [], progress: [], categoryOrder: [], userGroups: [] });
+
+        const fetchPublicSummary = async () => {
+          try {
+            const res = await fetch('/api/public/summary', { headers: { 'X-Database': selectedDb.value } });
+            if (res.ok) {
+              publicSummaryData.value = await res.json();
+            }
+          } catch(e) { console.error(e); }
+        };
+
+        const publicDisplayedUsers = computed(() => {
+          const order = {};
+          (publicSummaryData.value.userGroups || []).forEach((g, index) => {
+            order[g.name] = index;
+          });
+          return [...publicSummaryData.value.users].sort((a, b) => {
+            const orderA = order[a.designation] !== undefined ? order[a.designation] : 999;
+            const orderB = order[b.designation] !== undefined ? order[b.designation] : 999;
+            if (orderA !== orderB) return orderA - orderB;
+            // Fallback alphabetical sorting within same role
+            return (a.full_name || '').localeCompare(b.full_name || '');
+          });
+        });
+
+        const isPublicApplicable = (u, comp) => {
+          return comp.target_groups && comp.target_groups.includes(u.designation);
+        };
+
+        const publicGroupedCompetencies = computed(() => {
+          const groups = {};
+          publicSummaryData.value.competencies.forEach(c => {
+            const applicable = publicDisplayedUsers.value.some(u => c.target_groups && c.target_groups.includes(u.designation));
+            if (applicable) {
+              if (!groups[c.category]) groups[c.category] = [];
+              groups[c.category].push(c);
+            }
+          });
+          
+          const orderedGroups = {};
+          Object.keys(groups).sort((a, b) => {
+            const indexA = publicSummaryData.value.categoryOrder.findIndex(co => co.category === a);
+            const indexB = publicSummaryData.value.categoryOrder.findIndex(co => co.category === b);
+            return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
+          }).forEach(k => orderedGroups[k] = groups[k]);
+          
+          return orderedGroups;
+        });
+
+        const publicAllUsersProgress = computed(() => {
+          const stats = {};
+          publicDisplayedUsers.value.forEach(u => {
+            const myProgress = publicSummaryData.value.progress.filter(p => p.user_id === u.id);
+            const myCompetencies = publicSummaryData.value.competencies.filter(c => c.target_groups && c.target_groups.includes(u.designation));
+            
+            const categories = [...new Set(myCompetencies.map(c => c.category))];
+            let overallComplete = 0;
+            const catStats = {};
+
+            categories.forEach(cat => {
+              const catComps = myCompetencies.filter(c => c.category === cat);
+              let catComplete = 0;
+              catComps.forEach(c => {
+                const p = myProgress.find(pr => pr.competency_id === c.id);
+                if (p && (p.current_status === 'c' || p.current_status === 'x')) { catComplete++; overallComplete++; }
+              });
+              catStats[cat] = { complete: catComplete, total: catComps.length, percent: Math.round((catComplete / (catComps.length || 1)) * 100) };
+            });
+            stats[u.id] = { overall: { complete: overallComplete, total: myCompetencies.length, percent: Math.round((overallComplete / (myCompetencies.length || 1)) * 100) }, categories: catStats };
+          });
+          return stats;
+        });
+
+        const getPublicUserCategoryProgress = (u, cat) => {
+          if (!publicAllUsersProgress.value[u.id] || !publicAllUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0 };
+          return publicAllUsersProgress.value[u.id].categories[cat];
+        };
+
+        const getPublicProgressStatus = (userId, compId) => {
+          const p = publicSummaryData.value.progress.find(p => p.user_id === userId && p.competency_id === compId);
+          if (p) return p.current_status;
+          
+          const u = publicSummaryData.value.users.find(user => user.id === userId);
+          const c = publicSummaryData.value.competencies.find(comp => comp.id === compId);
+          if (u && c && isPublicApplicable(u, c)) return 't';
+          
+          return '';
+        };
+
+        const getPublicStatusBadgeClass = (userId, compId) => {
+          const status = getPublicProgressStatus(userId, compId);
+          const baseClass = "inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset ";
+          if (status === 't') return baseClass + "bg-yellow-50 text-yellow-800 ring-yellow-600/20";
+          if (status === 'a') return baseClass + "bg-orange-50 text-orange-800 ring-orange-600/20";
+          if (status === 'm') return baseClass + "bg-purple-50 text-purple-700 ring-purple-600/20";
+          if (status === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
+          if (status === 'x') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
+          return "text-gray-400"; // Empty state
+        };
+
+        const fetchPublicData = async () => {
+          try {
+            const secRes = await fetch('/api/public/sections');
+            if (secRes.ok) {
+              globalSettings.value.sections = await secRes.json();
+            }
+            await fetchPublicSummary();
+          } catch(e) { console.error(e); }
+        };
+
+        const saveCategory = async () => {
+          try {
+            await fetch('/api/categories', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ name: newCategoryName.value }) });
+            newCategoryName.value = '';
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const deleteCategory = async (catName) => {
+          if (!catName) return;
+          const compsInCat = competencies.value.filter(c => c.category === catName);
+          const msg = compsInCat.length > 0 ?
+            `WARNING: Deleting the category "${catName}" will also delete ${compsInCat.length} associated competencies and all their progress data. This cannot be undone. Are you sure?` :
+            `Are you sure you want to delete the empty category "${catName}"?`;
+          if (!(await customConfirm(msg, "Delete Category"))) return;
+          
+          try {
+            for (const c of compsInCat) {
+              const res = await fetch(`/api/competencies/${c.id}`, { method: 'DELETE', headers: getHeaders() });
+              if (!res.ok) throw new Error(`Failed to delete competency: ${c.task_name}`);
+            }
+            await fetch(`/api/categories/${encodeURIComponent(catName)}`, { method: 'DELETE', headers: getHeaders() });
+            await fetchData();
+            customAlert(`Category "${catName}" and its associated items have been deleted.`, "Success");
+          } catch (e) {
+            customAlert(e.message, "Error");
+          }
+        };
+
+        const isEditingUser = ref(false);
+        const editingUserId = ref(null);
+        const newUserData = ref({ username: '', full_name: '', email: '', designation: 'Trainee', is_admin: false, is_superuser: false, is_active: true, password: '', active_in: ['QA', 'Planning', 'Brachytherapy', 'SABR'], date_in_post: '' });
+        
+        const startEditCategory = (cat) => {
+            editingCategoryName.value = cat.category;
+            editCategoryValue.value = cat.category;
+        };
+
+        const updateCategory = async (oldName) => {
+            await fetch(`/api/categories/rename`, { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ oldName: oldName, newName: editCategoryValue.value }) });
+            editingCategoryName.value = null;
+            editCategoryValue.value = '';
+            await fetchData();
+        };
+
+        const moveCategory = async (index, direction) => {
+          const arr = [...categoryOrder.value];
+          if (direction === -1 && index > 0) [arr[index], arr[index - 1]] = [arr[index - 1], arr[index]];
+          else if (direction === 1 && index < arr.length - 1) [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
+          else return;
+          categoryOrder.value = arr;
+          try {
+            await fetch('/api/category_order', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ categories: categoryOrder.value.map(c => c.category) })
+            });
+            await fetchData();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        // Quiz logic
+        const quizLibrary = ref([]);
+        const activeLibraryQuiz = ref(null);
+        const isEditingQuiz = ref(false);
+        const cellQuizzes = ref([]);
+        const takingQuiz = ref(false);
+        const quizData = ref(null);
+        const quizAnswers = ref({});
+        
+        const newGroup = ref('');
+        const editingGroupId = ref(null);
+        const editGroupValue = ref('');
+        
+        const adminEdit = ref({ readings_completed: [], qatrack_records: null, qatrack_manual_override: false, status: 't', signoff_comment: '', date_override: '' });
+        
+        const activeLegends = ref([]);
+        const selectedFilterCompetency = ref(null);
+
+        const myAssessorCompetencies = computed(() => {
+          if (!user.value) return [];
+          return progress.value
+            .filter(p => p.user_id === user.value.id && p.current_status === 'x')
+            .map(p => p.competency_id);
+        });
+
+        const usersRequiringAssessment = computed(() => {
+          const result = {};
+          const myComps = myAssessorCompetencies.value;
+          progress.value.forEach(p => {
+            if (p.current_status === 'a' && myComps.includes(p.competency_id) && p.user_id !== user.value.id) {
+              const comp = competencies.value.find(c => c.id === p.competency_id);
+              const u = users.value.find(u => u.id === p.user_id);
+              if (comp && u && (u.active_in || []).includes(selectedDb.value) && u.is_active) {
+                if (!result[p.user_id]) result[p.user_id] = [];
+                result[p.user_id].push(comp);
+              }
+            }
+          });
+          return result;
+        });
+
+        const usersObjectivesMet = computed(() => {
+          const result = {};
+          const myComps = myAssessorCompetencies.value;
+          progress.value.forEach(p => {
+            if (p.current_status === 'm' && myComps.includes(p.competency_id) && p.user_id !== user.value.id) {
+              const comp = competencies.value.find(c => c.id === p.competency_id);
+              const u = users.value.find(u => u.id === p.user_id);
+              if (comp && u && (u.active_in || []).includes(selectedDb.value) && u.is_active) {
+                if (!result[p.user_id]) result[p.user_id] = [];
+                result[p.user_id].push(comp);
+              }
+            }
+          });
+          return result;
+        });
+        
+        const myRenewalDue = computed(() => {
+          if (!user.value) return [];
+          return competencies.value.filter(c => isApplicable(user.value, c) && isRenewalDue(user.value.id, c.id));
+        });
+        
+        const myObjectivesMet = computed(() => {
+          if (!user.value) return [];
+          return competencies.value.filter(c => isApplicable(user.value, c) && getProgressStatus(user.value.id, c.id) === 'm' && !isRenewalDue(user.value.id, c.id));
+        });
+        
+        const myAwaitingAssessment = computed(() => {
+          if (!user.value) return [];
+          return competencies.value.filter(c => isApplicable(user.value, c) && getProgressStatus(user.value.id, c.id) === 'a');
+        });
+
+        const getUserName = (userId) => {
+          const u = users.value.find(user => user.id === parseInt(userId, 10));
+          return u ? u.full_name : 'Unknown';
+        };
+        
+        const getUser = (userId) => {
+          return users.value.find(user => user.id === parseInt(userId, 10));
+        };
+        
+        const statistics = ref(null);
+        let chartInstances = {};
+        
+        const expandedStatCategories = ref([]);
+        const toggleStatCategory = (cat) => {
+          if (expandedStatCategories.value.includes(cat)) expandedStatCategories.value = expandedStatCategories.value.filter(c => c !== cat);
+          else expandedStatCategories.value.push(cat);
+        };
+
+        const toggleLegend = (status) => {
+          if (activeLegends.value.includes(status)) {
+            activeLegends.value = activeLegends.value.filter(s => s !== status);
+          } else {
+            activeLegends.value.push(status);
+          }
+        };
+
+        const getTimeInPost = (dateString) => {
+          if (!dateString) return '';
+          const start = new Date(dateString);
+          if (isNaN(start.getTime())) return '';
+          const now = new Date();
+          
+          let years = now.getFullYear() - start.getFullYear();
+          let months = now.getMonth() - start.getMonth();
+          
+          if (months < 0) { years--; months += 12; }
+          
+          let parts = [];
+          if (years > 0) parts.push(`${years} yr${years !== 1 ? 's' : ''}`);
+          if (months > 0 || years === 0) parts.push(`${months} mo${months !== 1 ? 's' : ''}`);
+          
+          return parts.join(', ');
+        };
+
+        const toggleCompetencyFilter = (compId) => {
+          if (selectedFilterCompetency.value === compId) {
+            selectedFilterCompetency.value = null;
+          } else {
+            selectedFilterCompetency.value = compId;
+          }
+        };
+        
+        const sectionSummaryStats = computed(() => {
+            if (!statistics.value || !statistics.value.categoryStats) {
+                return { t: 0, m: 0, a: 0, c: 0, x: 0 };
+            }
+            return Object.values(statistics.value.categoryStats).reduce((acc, cat) => {
+                acc.t += cat.t || 0;
+                acc.m += cat.m || 0;
+                acc.a += cat.a || 0;
+                acc.c += cat.c || 0;
+                acc.x += cat.x || 0;
+                return acc;
+            }, { t: 0, m: 0, a: 0, c: 0, x: 0 });
+        });
+
+        const statUserSortCol = ref('name');
+        const statUserSortDir = ref(1);
+        
+        const toggleStatUserSort = (col) => {
+          if (statUserSortCol.value === col) { statUserSortDir.value *= -1; } 
+          else { statUserSortCol.value = col; statUserSortDir.value = 1; }
+        };
+
+        const sectionApplicableUsers = computed(() => {
+          if (!statistics.value) return [];
+          let filteredUsers = statistics.value.userStats.filter(u => u.overall_totalApplicable > 0);
+          
+          return filteredUsers.sort((a, b) => {
+            let valA, valB;
+            if (statUserSortCol.value === 'name') { valA = a.full_name; valB = b.full_name; }
+            else if (statUserSortCol.value === 'designation') { valA = a.designation; valB = b.designation; }
+            else if (statUserSortCol.value === 'section') { valA = a.section_percent; valB = b.section_percent; }
+            else if (statUserSortCol.value === 'overall') { valA = a.overall_percent; valB = b.overall_percent; }
+            else if (statUserSortCol.value === 'time_in_post') { valA = a.date_in_post ? -new Date(a.date_in_post).getTime() : -Infinity; valB = b.date_in_post ? -new Date(b.date_in_post).getTime() : -Infinity; }
+            
+            if (typeof valA === 'string') return valA.localeCompare(valB) * statUserSortDir.value;
+            return (valA - valB) * statUserSortDir.value;
+          });
+        });
+
+        const userSortCol = ref('full_name');
+        const userSortDir = ref(1);
+        
+        const toggleUserSort = (col) => {
+          if (userSortCol.value === col) { userSortDir.value *= -1; } 
+          else { userSortCol.value = col; userSortDir.value = 1; }
+        };
+
+        const sortedAdminUsers = computed(() => {
+          return [...users.value].sort((a, b) => {
+            let valA, valB;
+            if (['username', 'full_name', 'designation'].includes(userSortCol.value)) {
+              valA = a[userSortCol.value]; valB = b[userSortCol.value];
+              return (valA || '').localeCompare(valB || '') * userSortDir.value;
+            } else if ((globalSettings.value.sections || []).some(s => s.name === userSortCol.value)) {
+              valA = (a.active_in || []).includes(userSortCol.value) ? 1 : 0;
+              valB = (b.active_in || []).includes(userSortCol.value) ? 1 : 0;
+              return (valA - valB) * userSortDir.value;
+            } else {
+              valA = a[userSortCol.value]; valB = b[userSortCol.value];
+              return (valA - valB) * userSortDir.value;
+            }
+          });
+        });
+
+        const compListFilterCat = ref('');
+        const compListSortCol = ref('');
+        const compListSortDir = ref(1);
+
+        const toggleCompListSort = (col) => {
+          if (compListSortCol.value === col) compListSortDir.value *= -1;
+          else { compListSortCol.value = col; compListSortDir.value = 1; }
+        };
+
+        const filteredAndSortedCompetencies = computed(() => {
+          let filtered = competencies.value;
+          if (compListFilterCat.value) filtered = filtered.filter(c => c.category === compListFilterCat.value);
+          if (compListSortCol.value) {
+            return [...filtered].sort((a, b) => {
+              return (a[compListSortCol.value] || '').localeCompare(b[compListSortCol.value] || '') * compListSortDir.value;
+            });
+          }
+          return filtered;
+        });
+
+        const orderedCompetenciesByGroup = computed(() => {
+          const groups = {};
+          competencies.value.forEach(c => {
+            if (c.id === newComp.value.id) return;
+            if (!groups[c.category]) groups[c.category] = [];
+            groups[c.category].push(c);
+          });
+          
+          const ordered = [];
+          categoryOrder.value.forEach(co => {
+            if (groups[co.category]) {
+              ordered.push({ category: co.category, items: groups[co.category] });
+              delete groups[co.category];
+            }
+          });
+          Object.keys(groups).sort().forEach(cat => {
+            ordered.push({ category: cat, items: groups[cat] });
+          });
+          return ordered;
+        });
+
+        const getOrderedPrereqs = (pcIds) => {
+          if (!pcIds || !pcIds.length) return [];
+          const comps = competencies.value.filter(c => pcIds.includes(c.id));
+          return comps.sort((a, b) => {
+            let indexA = categoryOrder.value.findIndex(co => co.category === a.category);
+            let indexB = categoryOrder.value.findIndex(co => co.category === b.category);
+            if (indexA === -1) indexA = 999;
+            if (indexB === -1) indexB = 999;
+            if (indexA !== indexB) return indexA - indexB;
+            return competencies.value.indexOf(a) - competencies.value.indexOf(b);
+          });
+        };
+
+        const statCompSortCol = ref('category');
+        const statCompSortDir = ref(1);
+        const toggleStatCompSort = (col) => {
+          if (statCompSortCol.value === col) { statCompSortDir.value *= -1; }
+          else { statCompSortCol.value = col; statCompSortDir.value = 1; }
+        };
+
+        const statCompetencies = computed(() => {
+          if (!statistics.value) return [];
+          let comps = competencies.value.map(c => {
+            const applicableUsers = activeUsers.value.filter(u => c.target_groups && c.target_groups.includes(u.designation));
+            const stats = { t: 0, m: 0, a: 0, c: 0 };
+            applicableUsers.forEach(u => {
+              const p = progress.value.find(pr => pr.user_id === u.id && pr.competency_id === c.id);
+              const status = p ? p.current_status : 't';
+              if (status === 'c' || status === 'x') stats.c++;
+              else if (status === 'a') stats.a++;
+              else if (status === 'm') stats.m++;
+              else stats.t++;
+            });
+            return { ...c, t: stats.t, m: stats.m, a: stats.a, c: stats.c, total: applicableUsers.length };
+          });
+
+          return comps.sort((a, b) => {
+            let valA = a[statCompSortCol.value];
+            let valB = b[statCompSortCol.value];
+            let res = (typeof valA === 'string') ? valA.localeCompare(valB) * statCompSortDir.value : (valA - valB) * statCompSortDir.value;
+            if (res === 0 && statCompSortCol.value !== 'task_name') return a.task_name.localeCompare(b.task_name);
+            return res;
+          });
+        });
+        
+        const groupedStatCompetencies = computed(() => {
+          const groups = {};
+          statCompetencies.value.forEach(c => {
+            if (!groups[c.category]) {
+              groups[c.category] = { category: c.category, t: 0, m: 0, a: 0, c: 0, total: 0, items: [] };
+            }
+            groups[c.category].items.push(c);
+            groups[c.category].t += c.t;
+            groups[c.category].m += c.m;
+            groups[c.category].a += c.a;
+            groups[c.category].c += c.c;
+            groups[c.category].total += c.total;
+          });
+          
+          const ordered = [];
+          categoryOrder.value.forEach(co => {
+            if (groups[co.category]) {
+              ordered.push(groups[co.category]);
+              delete groups[co.category];
+            }
+          });
+          Object.keys(groups).sort().forEach(cat => ordered.push(groups[cat]));
+          return ordered;
+        });
+
+        function getStatSectionDesignationAverage(designation) {
+          if (!statistics.value) return 0;
+          const usersInDesig = statistics.value.userStats.filter(u => u.designation === designation && u.section_totalApplicable > 0);
+          if (usersInDesig.length === 0) return 0;
+          let sum = 0;
+          usersInDesig.forEach(u => {
+            sum += u.section_percent;
+          });
+          return Math.round(sum / usersInDesig.length);
+        }
+
+        function getStatOverallDesignationAverage(designation) {
+          if (!statistics.value) return 0;
+          const usersInDesig = statistics.value.userStats.filter(u => u.designation === designation && u.overall_totalApplicable > 0);
+          if (usersInDesig.length === 0) return 0;
+          let sum = 0;
+          usersInDesig.forEach(u => {
+            sum += u.overall_percent;
+          });
+          return Math.round(sum / usersInDesig.length);
+        }
+
+        const quizStats = computed(() => {
+          const stats = {};
+          quizLibrary.value.forEach(q => {
+            let totalScore = 0;
+            let count = 0;
+            progress.value.forEach(p => {
+              if (p.quizzes_completed && p.quizzes_completed[q.id]) {
+                totalScore += p.quizzes_completed[q.id].score;
+                count++;
+              }
+            });
+            stats[q.id] = {
+              average: count > 0 ? Math.round(totalScore / count) : 0,
+              count: count,
+              inUse: competencies.value.some(c => c.quiz_ids && c.quiz_ids.includes(q.id))
+            };
+          });
+          return stats;
+        });
+
+        const renderOverallChart = () => {
+          if (!statistics.value) return;
+          
+          const timeData = statistics.value.timeStats.overall || [];
+          const ctxId = 'statChart-overall';
+          const ctx = document.getElementById(ctxId);
+          if (!ctx) return;
+
+          if (chartInstances.overall) {
+            chartInstances.overall.destroy();
+          }
+
+          chartInstances.overall = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: timeData.map(d => d.date),
+              datasets: [{
+                label: 'Overall Competency (%)',
+                data: timeData.map(d => d.overallPercent),
+                borderColor: 'rgb(37, 99, 235)',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                fill: true,
+                tension: 0.2
+              }]
+            },
+            options: {
+              maintainAspectRatio: false,
+              scales: {
+                y: { min: 0, max: 100 }
+              }
+            }
+          });
+        };
+
+        const selectedDb = ref(localStorage.getItem('selectedDb') || 'QA');
+        const handleDbChange = async () => {
+          localStorage.setItem('selectedDb', selectedDb.value);
+          
+          const wasOnAdminTab = currentTab.value === 'admin';
+          // Clear active UI states that belong to the previous database
+          selectedCell.value = null;
+          takingQuiz.value = false;
+          isEditingComp.value = false;
+          isEditingUser.value = false;
+          activeLibraryQuiz.value = null;
+          isEditingQuiz.value = false;
+
+          if (!token.value) {
+            await fetchPublicSummary();
+          }
+
+          if (user.value && user.value.username) {
+            try {
+              const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Database': selectedDb.value },
+                body: JSON.stringify({ username: user.value.username, password: password.value })
+              });
+              if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                token.value = data.token;
+                user.value = data.user;
+                
+                const hasAdminRights = user.value.is_admin || user.value.is_superuser;
+                if (wasOnAdminTab && !hasAdminRights) {
+                  await customAlert(`Unauthorized Access: You do not have admin rights in the '${selectedDb.value}' database. Redirecting to Individual View.`, "Unauthorized");
+                  currentTab.value = 'individual';
+                }
+                
+                await fetchData();
+                await syncAllProgress();
+                if (wasOnAdminTab && adminSubTab.value === 'statistics' && (user.value.is_admin || user.value.is_superuser)) {
+                  await fetchStatistics();
+                }
+                return; // Seamless switch successful!
+              }
+            } catch (err) { console.error('Seamless login failed:', err); }
+          }
+          // If seamless switch failed or user didn't exist in the new DB, log them out
+          logout();
+        };
+
+        const getHeaders = (isJson = false) => {
+          const h = { 'Authorization': `Bearer ${token.value}`, 'X-Database': selectedDb.value };
+          if (isJson) h['Content-Type'] = 'application/json';
+          return h;
+        };
+
+        const moveGroup = async (index, direction) => {
+          const arr = [...userGroups.value];
+          if (direction === -1 && index > 0) [arr[index], arr[index - 1]] = [arr[index - 1], arr[index]];
+          else if (direction === 1 && index < arr.length - 1) [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
+          else return;
+          
+          const orderedIds = arr.map(g => g.id);
+          await fetch('/api/groups/reorder', { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ orderedIds }) });
+          await fetchData();
+        };
+
+        const sortedUsers = computed(() => {
+          const order = {};
+          userGroups.value.forEach((g, index) => {
+            order[g.name] = index;
+          });
+          return [...users.value].sort((a, b) => {
+            const orderA = order[a.designation] !== undefined ? order[a.designation] : 999;
+            const orderB = order[b.designation] !== undefined ? order[b.designation] : 999;
+            if (orderA !== orderB) return orderA - orderB;
+            // Fallback alphabetical sorting within same role
+            return (a.full_name || '').localeCompare(b.full_name || '');
+          });
+        });
+
+        const activeUsers = computed(() => sortedUsers.value.filter(u => u.is_active !== 0 && (u.active_in || []).includes(selectedDb.value)));
+
+        const displayedUsers = computed(() => {
+          let filtered = activeUsers.value;
+
+          if (currentTab.value === 'individual' && user.value) {
+            return filtered.filter(u => u.id === user.value.id);
+          }
+          
+          if (currentTab.value === 'overview') {
+            if (overviewFilterGroup.value) {
+              filtered = filtered.filter(u => u.designation === overviewFilterGroup.value);
+            }
+            if (overviewFilterName.value) {
+              const term = overviewFilterName.value.toLowerCase();
+              filtered = filtered.filter(u => u.full_name.toLowerCase().includes(term) || u.username.toLowerCase().includes(term));
+            }
+
+            if (selectedFilterCompetency.value) {
+              const comp = competencies.value.find(c => c.id === selectedFilterCompetency.value);
+              if (comp) {
+                filtered = filtered.filter(u => isApplicable(u, comp));
+              }
+              
+              if (activeLegends.value.length > 0) {
+                filtered = filtered.filter(u => {
+                  const status = getProgressStatus(u.id, selectedFilterCompetency.value);
+                  const effectiveStatus = status === '' ? 'none' : status;
+                  const isRen = isRenewalDue(u.id, selectedFilterCompetency.value);
+                  return activeLegends.value.includes(effectiveStatus) || (isRen && activeLegends.value.includes('renewal'));
+                });
+              }
+            } else if (activeLegends.value.length > 0) {
+              filtered = filtered.filter(u => {
+                const myComps = competencies.value.filter(c => isApplicable(u, c));
+                return myComps.some(c => {
+                  const status = getProgressStatus(u.id, c.id);
+                  const effectiveStatus = status === '' ? 'none' : status;
+                  const isRen = isRenewalDue(u.id, c.id);
+                  return activeLegends.value.includes(effectiveStatus) || (isRen && activeLegends.value.includes('renewal'));
+                });
+              });
+            }
+          }
+
+          return filtered;
+        });
+
+        const groupedCompetencies = computed(() => {
+          const groups = {};
+          competencies.value.forEach(c => {
+            if (currentTab.value === 'overview') {
+              if (overviewFilterCategory.value && c.category !== overviewFilterCategory.value) return;
+              if (overviewFilterTask.value && !c.task_name.toLowerCase().includes(overviewFilterTask.value.toLowerCase())) return;
+            }
+
+            const applicable = displayedUsers.value.some(u => c.target_groups && c.target_groups.includes(u.designation));
+            if (applicable) {
+              if (!groups[c.category]) groups[c.category] = [];
+              groups[c.category].push(c);
+            }
+          });
+          
+          const orderedGroups = {};
+          Object.keys(groups).sort((a, b) => {
+            const indexA = categoryOrder.value.findIndex(co => co.category === a);
+            const indexB = categoryOrder.value.findIndex(co => co.category === b);
+            return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
+          }).forEach(k => orderedGroups[k] = groups[k]);
+          
+          return orderedGroups;
+        });
+
+        const allUsersProgress = computed(() => {
+          const stats = {};
+          activeUsers.value.forEach(u => {
+            const myProgress = progress.value.filter(p => p.user_id === u.id);
+            const myCompetencies = competencies.value.filter(c => c.target_groups && c.target_groups.includes(u.designation));
+            
+            const categories = [...new Set(myCompetencies.map(c => c.category))];
+            let overallComplete = 0;
+            const catStats = {};
+
+            categories.forEach(cat => {
+              const catComps = myCompetencies.filter(c => c.category === cat);
+              let catComplete = 0;
+              catComps.forEach(c => {
+                const p = myProgress.find(pr => pr.competency_id === c.id);
+                if (p && (p.current_status === 'c' || p.current_status === 'x')) { catComplete++; overallComplete++; }
+              });
+              catStats[cat] = { complete: catComplete, total: catComps.length, percent: Math.round((catComplete / (catComps.length || 1)) * 100) };
+            });
+            stats[u.id] = { overall: { complete: overallComplete, total: myCompetencies.length, percent: Math.round((overallComplete / (myCompetencies.length || 1)) * 100) }, categories: catStats };
+          });
+          return stats;
+        });
+
+        // Calculate real-time progress for the logged-in user
+        const userProgress = computed(() => user.value ? (allUsersProgress.value[user.value.id] || { overall: { percent: 0 }, categories: {} }) : { overall: { percent: 0 }, categories: {} });
+        
+        const getUserCategoryProgress = (u, cat) => {
+          if (!allUsersProgress.value[u.id] || !allUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0 };
+          return allUsersProgress.value[u.id].categories[cat];
+        };
+        
+        const designationAverage = computed(() => {
+          if (!user.value) return 0;
+          const sameDesigUsers = activeUsers.value.filter(u => u.designation === user.value.designation);
+          if (sameDesigUsers.length === 0) return 0;
+          let sum = 0;
+          sameDesigUsers.forEach(u => {
+            sum += (allUsersProgress.value[u.id]?.overall.percent || 0);
+          });
+          return Math.round(sum / sameDesigUsers.length);
+        });
+
+        const fetchData = async () => {
+          const [uRes, cRes, pRes, gRes, catOrderRes, opRes, setRes] = await Promise.all([
+            fetch('/api/users', { headers: getHeaders() }),
+            fetch('/api/competencies', { headers: getHeaders() }),
+            fetch('/api/progress', { headers: getHeaders() }),
+            fetch('/api/groups', { headers: getHeaders() }),
+            fetch('/api/category_order', { headers: getHeaders() }),
+            fetch('/api/progress/overall', { headers: getHeaders() }),
+            fetch('/api/settings', { headers: getHeaders() })
+          ]);
+          const uData = await uRes.json();
+          users.value = uData.map(u => {
+            try { u.active_in = JSON.parse(u.active_in || '[]'); } catch(e) { u.active_in = []; }
+            return u;
+          });
+          competencies.value = await cRes.json();
+          progress.value = await pRes.json();
+          userGroups.value = await gRes.json();
+          
+          const fetchedOrder = await catOrderRes.json();
+          const allCats = new Set(competencies.value.map(c => c.category).filter(Boolean));
+          const orderCats = new Set(fetchedOrder.map(c => c.category));
+          allCats.forEach(c => { if (!orderCats.has(c)) fetchedOrder.push({category: c, display_order: fetchedOrder.length}); });
+          categoryOrder.value = fetchedOrder;
+          
+          trueOverallProgress.value = await opRes.json();
+          if (setRes.ok) {
+            const settingsData = await setRes.json();
+            globalSettings.value.default_renewal_period = parseInt(settingsData.default_renewal_period) || 36;
+            if (settingsData.sections) {
+              try { globalSettings.value.sections = JSON.parse(settingsData.sections); } catch(e) {}
+            } else {
+              globalSettings.value.sections = [{name: 'QA', active: true}, {name: 'Planning', active: true}, {name: 'Brachytherapy', active: true}, {name: 'SABR', active: true}];
+            }
+            if (!isEditingComp.value && !newComp.value.task_name) {
+              newComp.value.renewal_period_months = globalSettings.value.default_renewal_period;
+            }
+          }
+          
+          await fetchQuizLibrary();
+        };
+
+        const isApplicable = (u, comp) => {
+          return comp.target_groups && comp.target_groups.includes(u.designation);
+        };
+
+        const getProgressObj = (userId, compId) => {
+          return progress.value.find(p => p.user_id === userId && p.competency_id === compId);
+        };
+
+        const getProgressStatus = (userId, compId) => {
+          const p = progress.value.find(p => p.user_id === userId && p.competency_id === compId);
+          if (p) return p.current_status;
+          
+          const u = users.value.find(user => user.id === userId);
+          const c = competencies.value.find(comp => comp.id === compId);
+          if (u && c && isApplicable(u, c)) return 't';
+          
+          return '';
+        };
+
+        const getStatusBadgeClass = (userId, compId) => {
+          const status = getProgressStatus(userId, compId);
+          const baseClass = "inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset ";
+          if (status === 't') return baseClass + "bg-yellow-50 text-yellow-800 ring-yellow-600/20";
+          if (status === 'a') return baseClass + "bg-orange-50 text-orange-800 ring-orange-600/20";
+          if (status === 'm') return baseClass + "bg-purple-50 text-purple-700 ring-purple-600/20";
+          if (status === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
+          if (status === 'x') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
+          return "text-gray-400"; // Empty state
+        };
+
+        const getAssessorName = (assessorId) => {
+          const assessor = users.value.find(u => u.id === assessorId);
+          return assessor ? assessor.full_name : 'Unknown';
+        };
+
+        const isRenewalDue = (userId, compId) => {
+          const p = getProgressObj(userId, compId);
+          if (!p || (p.current_status !== 'm' && p.current_status !== 'c' && p.current_status !== 'x')) return false;
+          if (!p.date_signed_off) return false;
+          
+          const comp = competencies.value.find(c => c.id === compId);
+          if (!comp || !comp.renewal_period_months) return false;
+
+          const signedOffDate = new Date(p.date_reviewed || p.date_signed_off);
+          const renewalDate = new Date(signedOffDate.setMonth(signedOffDate.getMonth() + comp.renewal_period_months));
+          return new Date() >= renewalDate;
+        };
+
+        const openModal = async (u, comp) => { 
+          selectedCell.value = { user: u, comp }; 
+          signoffComment.value = '';
+          const p = getProgressObj(u.id, comp.id);
+          const currentStatus = p ? p.current_status : 't';
+          adminEdit.value = {
+            readings_completed: p && p.readings_completed ? p.readings_completed : [],
+            qatrack_records: p ? p.qatrack_records : null,
+            qatrack_manual_override: p ? !!p.qatrack_manual_override : false,
+            status: currentStatus,
+            signoff_comment: p && p.signoff_comment ? p.signoff_comment : '',
+            date_override: p && p.date_signed_off ? p.date_signed_off.split('T')[0] : ''
+          };
+          if (comp.requires_quiz) {
+            const res = await fetch(`/api/competency/${comp.id}/quiz`, { headers: getHeaders() });
+            cellQuizzes.value = await res.json();
+          } else {
+            cellQuizzes.value = [];
+          }
+        };
+        const closeModal = () => { selectedCell.value = null; takingQuiz.value = false; };
+
+        const getMilestone = (userId, compId, milestone, itemId) => {
+          const p = progress.value.find(p => p.user_id === userId && p.competency_id === compId);
+          if (!p) return null;
+          if (milestone === 'reading') {
+            return p.readings_completed && p.readings_completed.includes(itemId);
+          }
+          if (milestone === 'quiz') {
+            return p.quizzes_completed && p.quizzes_completed[itemId] ? p.quizzes_completed[itemId] : null;
+          }
+          return false;
+        };
+
+        const updateMilestone = async (milestone, value, itemId) => {
+          const payload = { competency_id: selectedCell.value.comp.id, milestone, value };
+          if (milestone === 'reading') payload.reading_id = itemId;
+          await fetch('/api/competency/milestone', {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify(payload)
+          });
+          await syncProgress(selectedCell.value.comp.id);
+          await fetchData();
+        };
+
+        const syncProgress = async (compId) => {
+          const res = await fetch('/api/competency/sync', {
+            method: 'POST',
+            headers: getHeaders(true),
+            body: JSON.stringify({ competency_id: compId })
+          });
+          const data = await res.json();
+          return data.promoted || data.demoted || data.initialized;
+        };
+        
+        const syncAllProgress = async () => {
+          if (!user.value) return;
+          const myCompetencies = competencies.value.filter(c => c.target_groups && c.target_groups.includes(user.value.designation));
+          let changed = false;
+          for (const c of myCompetencies) {
+             const status = getProgressStatus(user.value.id, c.id);
+             if (status === 't' || status === 'm' || status === 'a' || status === '') {
+                 const stateChanged = await syncProgress(c.id);
+                 if (stateChanged) changed = true;
+             }
+          }
+          if (changed) await fetchData();
+        };
+
+        const requestAssessment = async () => {
+          try {
+            const res = await fetch('/api/competency/request-assessment', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            customAlert("Assessment requested successfully.", "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const renewCompetency = async () => {
+          if (!(await customConfirm("Are you sure you want to renew this competency and confirm ongoing competence?", "Renew Competency"))) return;
+          try {
+            const res = await fetch('/api/competency/renew', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            customAlert("Competency renewed successfully.", "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const requestReassessment = async () => {
+          if (!(await customConfirm("Are you sure you want to request a re-assessment? Your status will revert to training (t).", "Request Re-assessment"))) return;
+          try {
+            const res = await fetch('/api/competency/request-reassessment', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            customAlert("Re-assessment requested.", "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const revertAssessment = async () => {
+          try {
+            const res = await fetch('/api/competency/revert-assessment', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            customAlert("Assessment request reverted.", "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const signOff = async (actionType) => {
+          try {
+            const res = await fetch('/api/competency/signoff', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ trainee_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, action_type: actionType, comment: signoffComment.value })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            customAlert(data.message, "Success");
+            await fetchData();
+            closeModal();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const adminForceStatus = async () => {
+          if (!(await customConfirm(`Are you sure you want to force status to '${adminEdit.value.status}'?`, "Force Status"))) return;
+          try {
+            const res = await fetch('/api/progress/admin-force-status', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, status: adminEdit.value.status, signoff_comment: adminEdit.value.signoff_comment, date_override: adminEdit.value.date_override })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to force status');
+            customAlert(data.message, "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const adminResetQuiz = async (quizId) => {
+          if (!(await customConfirm("Reset this user's quiz progress? They will need to retake it.", "Reset Quiz"))) return;
+          try {
+            const res = await fetch('/api/progress/admin-reset-quiz', {
+              method: 'POST', headers: getHeaders(true),
+              body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, quiz_id: quizId })
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const saveAdminOverrides = async () => {
+          try {
+            const res = await fetch('/api/progress/admin-update', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, ...adminEdit.value })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to update overrides');
+            customAlert(data.message, "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const saveCompetency = async () => {
+          try {
+            if (!newComp.value.requires_qatrack) {
+              newComp.value.required_qatrack_count = 0;
+              newComp.value.qatrack_test_identifier = '';
+            }
+            const url = isEditingComp.value ? `/api/competencies/${newComp.value.id}` : '/api/competencies';
+            const method = isEditingComp.value ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+              method,
+              headers: getHeaders(true),
+              body: JSON.stringify(newComp.value)
+            });
+            if (!res.ok) throw new Error('Failed to save competency');
+            await fetchData();
+            if (isEditingComp.value) {
+              customAlert("Competency updated successfully.", "Success");
+            } else {
+              cancelEditComp();
+              customAlert("Competency created successfully.", "Success");
+            }
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const saveAsNewComp = async () => {
+          try {
+            if (!newComp.value.requires_qatrack) {
+              newComp.value.required_qatrack_count = 0;
+              newComp.value.qatrack_test_identifier = '';
+            }
+            const compToSave = { ...newComp.value };
+            delete compToSave.id;
+            const res = await fetch(`/api/competencies`, {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify(compToSave)
+            });
+            if (!res.ok) throw new Error('Failed to save as new competency');
+            cancelEditComp();
+            await fetchData();
+            customAlert("Competency saved as new.", "Success");
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const editComp = (c) => { newComp.value = JSON.parse(JSON.stringify(c)); newComp.value.requires_qatrack = newComp.value.required_qatrack_count > 0; newComp.value.requires_prerequisite_competencies = !!c.requires_prerequisite_competencies; newComp.value.prerequisite_competencies = Array.isArray(c.prerequisite_competencies) ? c.prerequisite_competencies : []; newComp.value.quiz_ids = Array.isArray(c.quiz_ids) ? c.quiz_ids : []; if (!newComp.value.target_groups) newComp.value.target_groups = []; if (!Array.isArray(newComp.value.reading_prerequisites)) newComp.value.reading_prerequisites = []; if (newComp.value.renewal_period_months === undefined) newComp.value.renewal_period_months = globalSettings.value.default_renewal_period || 36; isEditingComp.value = true; };
+        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36 }; isEditingComp.value = false; };
+        
+        const deleteComp = async (id) => {
+          if (!(await customConfirm('Are you sure you want to delete this competency?', "Delete Competency"))) return;
+          try {
+            const res = await fetch(`/api/competencies/${id}`, { method: 'DELETE', headers: getHeaders() });
+            if (!res.ok) throw new Error('Failed to delete');
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const moveCompetency = async (index, direction) => {
+          const arr = [...competencies.value];
+          if (direction === -1 && index > 0) [arr[index], arr[index - 1]] = [arr[index - 1], arr[index]];
+          else if (direction === 1 && index < arr.length - 1) [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
+          else return;
+          
+          const orderedIds = arr.map(c => c.id);
+          await fetch('/api/competencies/reorder', { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ orderedIds }) });
+          await fetchData();
+        };
+        
+        const startEditGroup = (g) => {
+          editingGroupId.value = g.id;
+          editGroupValue.value = g.name;
+        };
+
+        const updateGroup = async (id) => {
+          try {
+            await fetch(`/api/groups/${id}`, { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ name: editGroupValue.value }) });
+            editingGroupId.value = null;
+            editGroupValue.value = '';
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const saveGroup = async () => {
+          try {
+            await fetch('/api/groups', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ name: newGroup.value }) });
+            newGroup.value = '';
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        const deleteGroup = async (id) => {
+          if (!(await customConfirm('Are you sure you want to delete this group?', "Delete Group"))) return;
+          try {
+            await fetch(`/api/groups/${id}`, { method: 'DELETE', headers: getHeaders() });
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const saveUser = async () => {
+          try {
+            const url = isEditingUser.value ? `/api/users/${editingUserId.value}` : '/api/users';
+            const method = isEditingUser.value ? 'PUT' : 'POST';
+            const res = await fetch(url, { method, headers: getHeaders(true), body: JSON.stringify(newUserData.value) });
+            if (!res.ok) throw new Error('Failed to save user');
+            await fetchData();
+            if (isEditingUser.value) {
+              customAlert("User updated successfully.", "Success");
+            } else {
+              cancelEditUser();
+              customAlert("User created successfully.", "Success");
+            }
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const saveAsNewUser = async () => {
+          try {
+            const userToSave = { ...newUserData.value };
+            const res = await fetch(`/api/users`, {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify(userToSave)
+            });
+            if (!res.ok) throw new Error((await res.json()).error || 'Failed to save as new user');
+            cancelEditUser();
+            await fetchData();
+            customAlert("User saved as new.", "Success");
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const toggleUserActive = async (u) => {
+          try {
+            const updatedUser = { ...u, is_active: u.is_active === 0 ? 1 : 0 };
+            const res = await fetch(`/api/users/${u.id}`, { method: 'PUT', headers: getHeaders(true), body: JSON.stringify(updatedUser) });
+            if (!res.ok) throw new Error('Failed to update status');
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const editUser = (u) => { newUserData.value = { ...u, is_admin: !!u.is_admin, is_superuser: !!u.is_superuser, is_active: u.is_active !== 0, password: u.password || '', active_in: Array.isArray(u.active_in) ? u.active_in : [], date_in_post: u.date_in_post || '' }; isEditingUser.value = true; editingUserId.value = u.id; };
+        const cancelEditUser = () => { newUserData.value = { username: '', full_name: '', email: '', designation: 'Trainee', is_admin: false, is_superuser: false, is_active: true, password: '', active_in: globalSettings.value.sections ? globalSettings.value.sections.map(s=>s.name) : [], date_in_post: '' }; isEditingUser.value = false; editingUserId.value = null; };
+        
+        const deleteUser = async (id) => {
+          if (!(await customConfirm('Are you sure you want to delete this user?', "Delete User"))) return;
+          try {
+            const res = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: getHeaders() });
+            if (!res.ok) throw new Error('Failed to delete');
+            await fetchData();
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const fetchQuizLibrary = async () => {
+            try {
+                const res = await fetch('/api/quizzes/library', { headers: getHeaders() });
+                quizLibrary.value = await res.json();
+            } catch(e) { console.error(e); }
+        };
+
+        const createNewLibraryQuiz = () => {
+            isEditingQuiz.value = false;
+            activeLibraryQuiz.value = { name: '', passing_score_percent: 80, questions: [] };
+        };
+
+        const editLibraryQuiz = async (quizId) => {
+            try {
+                const res = await fetch(`/api/quizzes/library/${quizId}`, { headers: getHeaders() });
+                activeLibraryQuiz.value = await res.json();
+                isEditingQuiz.value = true;
+            } catch(e) { console.error(e); }
+        };
+
+        const cancelEditLibraryQuiz = () => {
+            activeLibraryQuiz.value = null;
+            isEditingQuiz.value = false;
+        };
+
+        const saveLibraryQuiz = async () => {
+            if (!activeLibraryQuiz.value) return;
+            try {
+                const url = isEditingQuiz.value ? `/api/quizzes/library/${activeLibraryQuiz.value.id}` : '/api/quizzes/library';
+                const method = isEditingQuiz.value ? 'PUT' : 'POST';
+                const res = await fetch(url, { method, headers: getHeaders(true), body: JSON.stringify(activeLibraryQuiz.value) });
+                if (!res.ok) throw new Error('Failed to save quiz');
+                await fetchQuizLibrary();
+                if (isEditingQuiz.value) {
+                  customAlert("Quiz updated successfully.", "Success");
+                } else {
+                  cancelEditLibraryQuiz();
+                  customAlert("Quiz created successfully.", "Success");
+                }
+            } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const deleteLibraryQuiz = async (quizId) => {
+            if (!(await customConfirm('Are you sure you want to delete this quiz? This will remove it from all competencies it is attached to.', "Delete Quiz"))) return;
+            try {
+                const res = await fetch(`/api/quizzes/library/${quizId}`, { method: 'DELETE', headers: getHeaders() });
+                if (!res.ok) throw new Error('Failed to delete quiz');
+                await fetchQuizLibrary();
+            } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const loadQuizForTaking = (quizId) => {
+          const qz = cellQuizzes.value.find(q => q.id === quizId);
+          if (qz && qz.questions.length > 0) {
+            quizData.value = qz;
+            const milestone = getMilestone(selectedCell.value.user.id, selectedCell.value.comp.id, 'quiz', quizId);
+            quizAnswers.value = milestone && milestone.answers ? { ...milestone.answers } : {};
+            takingQuiz.value = true;
+          } else {
+            customAlert("This quiz has no questions configured.", "Warning");
+          }
+        };
+        
+        const submitQuiz = async () => {
+          try {
+            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/submit-quiz`, { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ quiz_id: quizData.value.id, answers: quizAnswers.value }) });
+            const result = await res.json();
+            if (result.passed) {
+              await customAlert(`You passed! Score: ${result.score}% (Required: ${result.passing_score}%)`, "Quiz Passed");
+              takingQuiz.value = false;
+              await syncProgress(selectedCell.value.comp.id);
+              await fetchData();
+              openModal(selectedCell.value.user, selectedCell.value.comp);
+            } else {
+              await customAlert(`You failed. Score: ${result.score}% (Required: ${result.passing_score}%). Please try again.`, "Quiz Failed");
+              takingQuiz.value = false;
+              await syncProgress(selectedCell.value.comp.id);
+              await fetchData();
+              openModal(selectedCell.value.user, selectedCell.value.comp);
+            }
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const login = async () => {
+          loginError.value = '';
+          try {
+            const response = await fetch('/api/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Database': selectedDb.value },
+              body: JSON.stringify({ username: username.value, password: password.value })
+            });
+            
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'Login failed. Check database or run a seed script.');
+            
+            token.value = data.token;
+            user.value = data.user;
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            
+            await fetchData();
+            await syncAllProgress();
+          } catch (err) {
+            loginError.value = err.message;
+          }
+        };
+
+        const logout = () => {
+          token.value = null;
+          user.value = null;
+          username.value = '';
+          password.value = '';
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        };
+
+        const fetchStatistics = async () => {
+          try {
+            const res = await fetch('/api/statistics', { headers: getHeaders() });
+            statistics.value = await res.json();
+          } catch(e) { console.error(e); }
+        };
+
+        watch(statistics, () => {
+          nextTick(() => renderOverallChart());
+        });
+
+        watch(adminSubTab, (newTab) => {
+          if (newTab === 'statistics') {
+            fetchStatistics().then(() => nextTick(() => renderOverallChart()));
+          }
+          if (newTab === 'quizzes' || newTab === 'competencies') {
+            fetchQuizLibrary();
+          }
+          if (newTab === 'superadmin') {
+            fetchDbInfo();
+          }
+        });
+        
+        const dbInfo = ref({ info: {}, settings: {} });
+        const backupFile = ref(null);
+        const frontendFile = ref(null);
+        const globalSettings = ref({ default_renewal_period: 36, sections: [{name: 'QA', active: true}, {name: 'Planning', active: true}, {name: 'Brachytherapy', active: true}, {name: 'SABR', active: true}] });
+        const newSectionName = ref('');
+        const activeSections = computed(() => (globalSettings.value.sections || []).filter(s => s.active));
+
+        const fetchDbInfo = async () => {
+          try {
+            const res = await fetch('/api/admin/db-info', { headers: getHeaders() });
+            if (res.ok) {
+              dbInfo.value = await res.json();
+              globalSettings.value.default_renewal_period = parseInt(dbInfo.value.settings.default_renewal_period) || 36;
+              if (dbInfo.value.settings.sections) {
+                try { globalSettings.value.sections = JSON.parse(dbInfo.value.settings.sections); } catch(e) {}
+              }
+            }
+          } catch(e) { console.error(e); }
+        };
+
+        const onBackupFileSelected = (e) => {
+          backupFile.value = e.target.files[0];
+        };
+
+        const individualRestoreInput = ref(null);
+        const restoreScope = ref(null);
+
+        const triggerRestore = (scope) => {
+          restoreScope.value = scope;
+          if (individualRestoreInput.value) {
+            individualRestoreInput.value.click();
+          }
+        };
+
+        const onIndividualRestoreFileSelected = async (e) => {
+          const file = e.target.files[0];
+          if (file && restoreScope.value) {
+            backupFile.value = file;
+            await restoreDatabase(restoreScope.value);
+            e.target.value = ''; // Reset the input
+            backupFile.value = null;
+            restoreScope.value = null;
+          }
+        };
+
+        const onFrontendFileSelected = (e) => {
+          frontendFile.value = e.target.files[0];
+        };
+
+        const backupDatabase = async (scope) => {
+          try {
+            const res = await fetch(`/api/admin/backup/${scope}`, { method: 'POST', headers: getHeaders() });
+            if (!res.ok) throw new Error('Backup failed');
+            const data = await res.json();
+            
+            const blob = new Blob([JSON.stringify(data.backup)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_${scope}_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            await fetchDbInfo();
+            customAlert(`Backup of ${scope} downloaded successfully.`, "Success");
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const restoreDatabase = async (scope) => {
+          if (!backupFile.value) return;
+          if (!(await customConfirm(`Are you sure you want to restore ${scope}? This will overwrite the current database!`, "RESTORE WARNING"))) return;
+          
+          try {
+            const fileText = await backupFile.value.text();
+            const backupData = JSON.parse(fileText);
+            
+            const res = await fetch(`/api/admin/restore/${scope}`, { 
+              method: 'POST', 
+              headers: getHeaders(true),
+              body: JSON.stringify({ backup: backupData })
+            });
+            if (!res.ok) throw new Error('Restore failed');
+            await customAlert(`Database restored successfully. The application will now reload to apply changes.`, "Success");
+            window.location.reload();
+          } catch(e) { customAlert("Invalid backup file or restore failed: " + e.message, "Error"); }
+        };
+
+        const uploadFrontend = async () => {
+          if (!frontendFile.value) return;
+          if (!(await customConfirm("Are you sure you want to overwrite the current frontend application? This action cannot be undone unless you have a backup of the HTML file.", "Upload Frontend"))) return;
+          
+          try {
+            const htmlContent = await frontendFile.value.text();
+            const res = await fetch('/api/admin/upload-frontend', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ html: htmlContent })
+            });
+            if (!res.ok) throw new Error('Frontend upload failed');
+            await customAlert(`Frontend updated successfully. The application will now reload.`, "Success");
+            window.location.reload();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const saveGlobalSettings = async () => {
+          try {
+            const res = await fetch('/api/admin/settings', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ default_renewal_period: globalSettings.value.default_renewal_period })
+            });
+            if (!res.ok) throw new Error('Failed to save settings');
+            customAlert(`Global settings saved successfully.`, "Success");
+            await fetchDbInfo();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+        
+        const toggleSectionActive = async (idx) => {
+          globalSettings.value.sections[idx].active = !globalSettings.value.sections[idx].active;
+          await saveSections();
+        };
+
+        const addSection = async () => {
+          const name = newSectionName.value.trim();
+          if (!name) return;
+          if (globalSettings.value.sections.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+            return customAlert("A section with this name already exists.");
+          }
+          globalSettings.value.sections.push({ name, active: true });
+          await saveSections();
+          newSectionName.value = '';
+        };
+
+        const saveSections = async () => {
+          try {
+            const res = await fetch('/api/admin/sections', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ sections: globalSettings.value.sections }) });
+            if (!res.ok) throw new Error('Failed to save sections');
+            await fetchDbInfo();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const deleteSection = async (name) => {
+          try {
+            const infoRes = await fetch(`/api/admin/sections/${name}/info`, { headers: getHeaders() });
+            const info = await infoRes.json();
+            const msg = `WARNING: Are you sure you want to delete the section "${name}"?\n\nThis will remove:\n- ${info.competencies} competencies\n- ${info.quizzes} quizzes\n- ${info.categories} categories\n\nThis action cannot be undone.`;
+            if (!(await customConfirm(msg, "Delete Section"))) return;
+            
+            const res = await fetch(`/api/admin/sections/${name}`, { method: 'DELETE', headers: getHeaders() });
+            if (!res.ok) throw new Error('Failed to delete section');
+            customAlert(`Section "${name}" has been deleted.`, "Success");
+            
+            if (selectedDb.value === name) { const remaining = globalSettings.value.sections.filter(s => s.name !== name); if (remaining.length > 0) { selectedDb.value = remaining[0].name; handleDbChange(); } } else { await fetchDbInfo(); }
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+        
+        onMounted(async () => {
+          if (token.value) {
+            try {
+              const secRes = await fetch('/api/public/sections');
+              if (secRes.ok) {
+                globalSettings.value.sections = await secRes.json();
+              }
+              await fetchData();
+              await syncAllProgress();
+            } catch (err) { console.error("Error loading initial data:", err); }
+          }
+          if (!token.value) {
+            await fetchPublicData();
+          }
+        });
+
+        return { username, password, token, user, loginError, users, sortedUsers, displayedUsers, competencies, getProgressStatus, getStatusBadgeClass, getAssessorName, isRenewalDue,
+                 login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable,
+                 currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, moveCompetency, availableCategories,
+                 categoryOrder, moveCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
+                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory,
+                 compListFilterCat, compListSortCol, compListSortDir, toggleCompListSort, filteredAndSortedCompetencies, 
+                 newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort,
+                 quizLibrary, activeLibraryQuiz, isEditingQuiz, createNewLibraryQuiz, editLibraryQuiz, cancelEditLibraryQuiz, saveLibraryQuiz, deleteLibraryQuiz, cellQuizzes, takingQuiz, quizData, quizAnswers, loadQuizForTaking, submitQuiz, quizStats,
+                 userGroups, newGroup, moveGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, saveAdminOverrides, adminForceStatus,
+                 selectedDb, handleDbChange,
+                 activeLegends, selectedFilterCompetency, toggleLegend, toggleCompetencyFilter,
+                 overviewFilterName, overviewFilterTask, overviewFilterCategory, overviewFilterGroup,
+                 statistics, sectionSummaryStats, sectionApplicableUsers, expandedStatCategories, toggleStatCategory, groupedStatCompetencies,
+                 getStatSectionDesignationAverage, getStatOverallDesignationAverage, getTimeInPost,
+                 usersRequiringAssessment, usersObjectivesMet, getUserName, getUser,
+                 myRenewalDue, myObjectivesMet, myAwaitingAssessment, activeSections,
+                 statUserSortCol, statUserSortDir, toggleStatUserSort,
+                 statCompSortCol, statCompSortDir, toggleStatCompSort,
+                 statCompetencies,
+                 topScroll, bottomScroll, matrixTable, tableWidth, syncScroll, signoffComment, trueOverallProgress, publicSummaryData,
+                 publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
+                 publicDisplayedUsers, publicGroupedCompetencies, isPublicApplicable, getPublicStatusBadgeClass, getPublicProgressStatus, getPublicUserCategoryProgress, publicAllUsersProgress,
+                 customDialog, closeDialog,
+                 dbInfo, backupFile, frontendFile, globalSettings,
+                 onBackupFileSelected, onFrontendFileSelected, backupDatabase, restoreDatabase, uploadFrontend, saveGlobalSettings, individualRestoreInput, triggerRestore, onIndividualRestoreFileSelected,
+                 newSectionName, addSection, deleteSection, toggleSectionActive
+               };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
