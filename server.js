@@ -87,9 +87,9 @@ app.use(express.json({ limit: '50mb' }));
 // --- STATIC FRONTEND ---
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Fallback to serve index.html from the root folder
+// Fallback to serve index.html from the public folder
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // --- DATABASE CONNECTION ---
@@ -1463,13 +1463,12 @@ app.post('/api/admin/upload-frontend', authenticateToken, requireSuperuser, asyn
   const { html } = req.body;
   if (!html) return res.status(400).json({error: 'No html content provided'});
   try {
-    const rootIndexPath = path.join(__dirname, 'index.html');
-    fs.writeFileSync(rootIndexPath, html, 'utf8');
     const publicDir = path.join(__dirname, 'public');
-    if (fs.existsSync(publicDir)) {
-      const publicIndexPath = path.join(publicDir, 'index.html');
-      fs.writeFileSync(publicIndexPath, html, 'utf8');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir);
     }
+    const publicIndexPath = path.join(publicDir, 'index.html');
+    fs.writeFileSync(publicIndexPath, html, 'utf8');
     res.json({ success: true });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
