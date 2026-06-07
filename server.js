@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3003;
 const SECRET_KEY = 'super-secret-key-for-development'; // Replace in production
 
 const sharedDbPath = path.resolve(__dirname, 'shared.db');
@@ -236,6 +236,8 @@ const initDb = (db) => {
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN signoff_comment TEXT", () => {});
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN date_reviewed TEXT", () => {});
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER", () => {});
+    db.run("ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'", () => {});
+    db.run("ALTER TABLE competencies ADD COLUMN description TEXT", () => {});
   });
 };
 
@@ -291,7 +293,7 @@ app.get('/api/public/summary', async (req, res) => {
     const dbName = req.headers['x-database'] || 'QA';
     const dbInstance = getDb(dbName);
     const users = await query(sharedDb, 'SELECT id, full_name, designation, active_in FROM users WHERE is_active = 1');
-    const competencies = await query(dbInstance, 'SELECT id, category, task_name, display_order FROM competencies ORDER BY display_order ASC, id ASC');
+    const competencies = await query(dbInstance, 'SELECT id, category, task_name, display_order, target_users, description FROM competencies ORDER BY display_order ASC, id ASC');
     const competencyGroups = await query(dbInstance, 'SELECT * FROM competency_groups');
     const progress = await query(dbInstance, 'SELECT user_id, competency_id, current_status, date_signed_off, date_reviewed FROM staff_competency_progress');
     const categoryOrder = await query(dbInstance, 'SELECT category, display_order FROM category_order ORDER BY display_order ASC');
@@ -305,6 +307,11 @@ app.get('/api/public/summary', async (req, res) => {
 
     competencies.forEach(c => {
       c.target_groups = compTargetGroups[c.id] || [];
+      try { 
+        let tu = JSON.parse(c.target_users || '[]'); 
+        while(typeof tu === 'string') tu = JSON.parse(tu);
+        c.target_users = Array.isArray(tu) ? tu : [];
+      } catch(e) { c.target_users = []; }
     });
 
     const activeUsers = [];
@@ -522,6 +529,11 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
         c.prerequisite_competencies = Array.isArray(pc) ? pc : [];
       } catch(e) { c.prerequisite_competencies = []; }
       c.requires_prerequisite_competencies = !!c.requires_prerequisite_competencies;
+      try { 
+        let tu = JSON.parse(c.target_users || '[]'); 
+        while(typeof tu === 'string') tu = JSON.parse(tu);
+        c.target_users = Array.isArray(tu) ? tu : [];
+      } catch(e) { c.target_users = []; }
     });
     
     res.json(competencies);
@@ -531,13 +543,14 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/competencies', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, reading_prerequisites, renewal_period_months } = req.body;
+  const { category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
+    const tuStr = JSON.stringify(target_users || []);
     await execute(req.db, 
-      `INSERT INTO competencies (category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [category, task_name, required_qatrack_count || 0, qatrack_test_identifier || null, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36]
+      `INSERT INTO competencies (category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [category, task_name, required_qatrack_count || 0, qatrack_test_identifier || null, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null]
     );
     const result = await query(req.db, `SELECT last_insert_rowid() AS id`);
     const comp_id = result[0].id;
@@ -570,13 +583,14 @@ app.put('/api/competencies/reorder', authenticateToken, requireAdmin, async (req
 });
 
 app.put('/api/competencies/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, reading_prerequisites, renewal_period_months } = req.body;
+  const { category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
+    const tuStr = JSON.stringify(target_users || []);
     await execute(req.db, 
-      `UPDATE competencies SET category = ?, task_name = ?, required_qatrack_count = ?, qatrack_test_identifier = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ? WHERE id = ?`,
-      [category, task_name, required_qatrack_count || 0, qatrack_test_identifier || null, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, req.params.id]
+      `UPDATE competencies SET category = ?, task_name = ?, required_qatrack_count = ?, qatrack_test_identifier = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ? WHERE id = ?`,
+      [category, task_name, required_qatrack_count || 0, qatrack_test_identifier || null, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, req.params.id]
     );
     await execute(req.db, `DELETE FROM competency_groups WHERE competency_id = ?`, [req.params.id]);
     if (target_groups && target_groups.length > 0) {
@@ -654,7 +668,7 @@ app.get('/api/progress/overall', authenticateToken, async (req, res) => {
 
     for (const dbName of allDbNames) {
       const dbInstance = getDb(dbName);
-      const competencies = await query(dbInstance, 'SELECT id, category FROM competencies');
+      const competencies = await query(dbInstance, 'SELECT id, category, target_users FROM competencies');
       const competencyGroups = await query(dbInstance, 'SELECT * FROM competency_groups');
       const progress = await query(dbInstance, 'SELECT user_id, competency_id, current_status FROM staff_competency_progress');
       
@@ -666,7 +680,11 @@ app.get('/api/progress/overall', authenticateToken, async (req, res) => {
 
       for (const user of users) {
          if (!user.active_in.includes(dbName)) continue;
-         const applicableCompIds = competencies.filter(c => (compTargetGroups[c.id] || []).includes(user.designation)).map(c => c.id);
+         const applicableCompIds = competencies.filter(c => {
+             let tu = [];
+             try { tu = JSON.parse(c.target_users || '[]'); } catch(e) {}
+             return (compTargetGroups[c.id] || []).includes(user.designation) || tu.includes(user.id);
+         }).map(c => c.id);
          const completed = progress.filter(p => p.user_id === user.id && applicableCompIds.includes(p.competency_id) && ['c', 'x'].includes(p.current_status)).length;
          
          userStatsMap[user.id].totalApplicable += applicableCompIds.length;
@@ -1305,7 +1323,11 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
       for (const user of users) {
          const uStat = userStatsMap[user.id];
          if (!uStat.active_in.includes(dbName)) continue;
-         const applicableComps = competencies.filter(c => (compTargetGroups[c.id] || []).includes(user.designation));
+         const applicableComps = competencies.filter(c => {
+             let tu = [];
+             try { tu = JSON.parse(c.target_users || '[]'); } catch(e) {}
+             return (compTargetGroups[c.id] || []).includes(user.designation) || tu.includes(user.id);
+         });
          const applicableCompIds = applicableComps.map(c => c.id);
          const userProgress = progress.filter(p => p.user_id === user.id && applicableCompIds.includes(p.competency_id));
          const completed = userProgress.filter(p => ['c', 'x'].includes(p.current_status)).length;
@@ -1327,7 +1349,9 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
           const applicableUsers = users.filter(u => {
               let activeIn = [];
               try { activeIn = JSON.parse(u.active_in || '[]'); } catch(e){}
-              return activeIn.includes(dbName) && (compTargetGroups[c.id] || []).includes(u.designation);
+              let tu = [];
+              try { tu = JSON.parse(c.target_users || '[]'); } catch(e) {}
+              return activeIn.includes(dbName) && ((compTargetGroups[c.id] || []).includes(u.designation) || tu.includes(u.id));
           });
           applicableUsers.forEach(u => {
             const p = progress.find(pr => pr.user_id === u.id && pr.competency_id === c.id);
@@ -1345,7 +1369,11 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
           let activeIn = [];
           try { activeIn = JSON.parse(u.active_in || '[]'); } catch(e){}
           if(activeIn.includes(dbName)) {
-             totalAllApplicable += competencies.filter(c => (compTargetGroups[c.id] || []).includes(u.designation)).length;
+             totalAllApplicable += competencies.filter(c => {
+                 let tu = [];
+                 try { tu = JSON.parse(c.target_users || '[]'); } catch(e) {}
+                 return (compTargetGroups[c.id] || []).includes(u.designation) || tu.includes(u.id);
+             }).length;
           }
         });
 

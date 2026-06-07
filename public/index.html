@@ -58,11 +58,11 @@
             </div>
             <!-- Public Matrix -->
             <div ref="publicBottomScroll" @scroll="syncPublicScroll('bottom', $event)" class="overflow-x-auto shadow-sm ring-1 ring-black ring-opacity-5 rounded-lg border-t border-gray-200">
-              <table ref="publicMatrixTable" class="min-w-full divide-y divide-gray-300 table-fixed">
+              <table ref="publicMatrixTable" class="min-w-full divide-y divide-gray-300">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 w-1/4 sticky left-0 z-20 bg-gray-50 border-r-2 border-gray-300 min-w-[250px]">Task Category / Name</th>
-                    <th v-for="u in publicDisplayedUsers" :key="u.id" scope="col" class="px-3 py-3.5 text-center text-sm font-semibold border-l transition-colors min-w-[120px] text-gray-900" :style="{ width: (75 / Math.max(1, publicDisplayedUsers.length)) + '%' }">
+                    <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sticky left-0 z-20 bg-gray-50 border-r-2 border-gray-300 min-w-[250px]">Task Category / Name</th>
+                    <th v-for="u in publicDisplayedUsers" :key="u.id" scope="col" class="px-3 py-3.5 text-center text-sm font-semibold border-l transition-colors min-w-[120px] text-gray-900">
                       {{ u.full_name }}<br>
                       <span class="text-xs font-normal text-gray-500">{{ u.designation }}</span>
                     </th>
@@ -234,11 +234,11 @@
 
         <!-- Competency Matrix -->
         <div ref="bottomScroll" @scroll="syncScroll('bottom', $event)" class="overflow-x-auto shadow-sm ring-1 ring-black ring-opacity-5 rounded-lg border-t border-gray-200">
-        <table ref="matrixTable" class="min-w-full divide-y divide-gray-300 table-fixed">
+        <table ref="matrixTable" class="min-w-full divide-y divide-gray-300">
           <thead class="bg-gray-50">
             <tr>
-              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 w-1/4 sticky left-0 z-20 bg-gray-50 border-r-2 border-gray-300 min-w-[250px]">Task Category / Name</th>
-              <th v-for="u in displayedUsers" :key="u.id" scope="col" :class="['px-3 py-3.5 text-center text-sm font-semibold border-l transition-colors min-w-[120px]', u.id === user.id ? 'bg-blue-100 text-blue-900' : 'text-gray-900']" :style="{ width: (75 / Math.max(1, displayedUsers.length)) + '%' }">
+              <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sticky left-0 z-20 bg-gray-50 border-r-2 border-gray-300 min-w-[250px]">Task Category / Name</th>
+              <th v-for="u in displayedUsers" :key="u.id" scope="col" :class="['px-3 py-3.5 text-center text-sm font-semibold border-l transition-colors min-w-[120px]', u.id === user.id ? 'bg-blue-100 text-blue-900' : 'text-gray-900']">
                 {{ u.full_name }}<br>
                 <span :class="['text-xs font-normal', u.id === user.id ? 'text-blue-700' : 'text-gray-500']">{{ u.designation }}</span>
               </th>
@@ -246,9 +246,11 @@
           </thead>
           <tbody class="divide-y divide-gray-200 bg-white">
             <template v-for="(group, cat) in groupedCompetencies" :key="cat">
-              <tr class="bg-gray-200 border-t-2 border-gray-300">
-                <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-200 border-r-2 border-gray-300">{{ cat }}</td>
-                <td v-for="u in displayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 bg-gray-50 align-top">
+              <tr class="bg-gray-200 border-t-2 border-gray-300" :class="{'cursor-pointer hover:bg-gray-300 transition-colors group/cat': currentTab === 'individual'}" @click="currentTab === 'individual' ? toggleMatrixCategory(cat) : null">
+                <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 border-r-2 border-gray-300" :class="currentTab === 'individual' ? 'bg-gray-200 group-hover/cat:bg-gray-300' : 'bg-gray-200'">
+                  <span v-if="currentTab === 'individual'" class="text-gray-500 w-4 inline-block text-center mr-1">{{ expandedMatrixCategories.includes(cat) ? '▼' : '▶' }}</span>{{ cat }}
+                </td>
+                <td v-for="u in displayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 align-top" :class="currentTab === 'individual' ? 'bg-gray-50 group-hover/cat:bg-gray-100' : 'bg-gray-50'">
                   <div v-if="getUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
                     <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getUserCategoryProgress(u, cat).percent }}%</span>
                     <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
@@ -257,8 +259,8 @@
                   </div>
                 </td>
               </tr>
-              <tr v-for="comp in group" :key="comp.id" class="hover:bg-gray-50 group">
-                <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 cursor-pointer bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300" @click="toggleCompetencyFilter(comp.id)">
+              <tr v-for="comp in group" :key="comp.id" v-show="currentTab === 'overview' || expandedMatrixCategories.includes(cat)" class="hover:bg-gray-50 group">
+                <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 cursor-pointer bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300" @click="currentTab === 'individual' ? (isApplicable(user, comp) ? openModal(user, comp) : null) : toggleCompetencyFilter(comp.id)">
                   <div class="flex items-center justify-between">
                     <span>{{ comp.task_name }}</span>
                     <span v-if="selectedFilterCompetency === comp.id" class="text-blue-600 ml-2" title="Filter Active">🔍</span>
@@ -368,6 +370,7 @@
                 <select v-model="newComp.category" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2 bg-white"><option disabled value="">Select a Category</option><option v-for="cat in availableCategories" :key="cat" :value="cat">{{ cat }}</option></select>
               </div>
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Task Name</label><input v-model="newComp.task_name" required type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="e.g. Monthly Output"></div>
+              <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label><textarea v-model="newComp.description" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="Provide additional details about this competency..."></textarea></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Renewal Period (Months)</label><input v-model.number="newComp.renewal_period_months" type="number" min="1" class="block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" :placeholder="`Default: ${globalSettings.default_renewal_period || 36}`"></div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm">
                 <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_qatrack" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires QATrack+ Practical Evidence</span></label>
@@ -425,6 +428,16 @@
                   </label>
                 </div>
               </div>
+              <div class="sm:col-span-2 mt-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Applicable Individual Users</label>
+                <div class="max-h-48 overflow-y-auto border border-gray-200 p-2 rounded bg-white shadow-sm">
+                  <label v-for="u in availableIndividualUsers" :key="u.id" class="flex items-center space-x-2 text-sm text-gray-800 mb-1.5 p-1 hover:bg-gray-50 rounded cursor-pointer">
+                    <input type="checkbox" :value="u.id" v-model="newComp.target_users" class="h-4 w-4 text-blue-600 rounded">
+                    <span class="font-medium">{{ u.full_name }} <span class="text-xs text-gray-500 font-normal">({{ u.designation }})</span></span>
+                  </label>
+                  <div v-if="availableIndividualUsers.length === 0" class="text-xs text-gray-500 italic p-1">No additional users available.</div>
+                </div>
+              </div>
               <div class="sm:col-span-2 flex gap-2 mt-2">
                 <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">{{ isEditingComp ? 'Update Competency' : 'Save Competency' }}</button>
                 <button type="button" v-if="isEditingComp" @click="saveAsNewComp" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow-sm">Save As New</button>
@@ -439,26 +452,31 @@
               <option v-for="cat in availableCategories" :key="cat" :value="cat">{{cat}}</option>
             </select>
           </div>
-          <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
-            <thead class="bg-gray-50"><tr>
-              <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleCompListSort('category')">Category <span v-if="compListSortCol==='category'">{{ compListSortDir === 1 ? '▲' : '▼' }}</span></th>
-              <th class="px-3 py-2 text-left text-sm font-semibold cursor-pointer select-none hover:bg-gray-200" @click="toggleCompListSort('task_name')">Task <span v-if="compListSortCol==='task_name'">{{ compListSortDir === 1 ? '▲' : '▼' }}</span></th>
-              <th class="px-3 py-2 text-right text-sm font-semibold">Order / Actions</th>
-            </tr></thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr v-for="(c, idx) in filteredAndSortedCompetencies" :key="c.id">
-                <td class="px-3 py-2 text-sm">{{ c.category }}</td>
-                <td class="px-3 py-2 text-sm">{{ c.task_name }}</td>
-                <td class="px-3 py-2 text-sm text-right flex justify-end items-center gap-3">
-                  <button @click="moveCompetency(competencies.indexOf(c), -1)" class="text-gray-500 hover:text-gray-800" :disabled="competencies.indexOf(c) === 0" title="Move Up">↑</button>
-                  <button @click="moveCompetency(competencies.indexOf(c), 1)" class="text-gray-500 hover:text-gray-800" :disabled="competencies.indexOf(c) === competencies.length - 1" title="Move Down">↓</button>
-                  <button @click="editComp(c)" class="text-blue-600 hover:text-blue-800">Edit</button>
-                  <button @click="deleteComp(c.id)" class="text-red-600 hover:text-red-800">Delete</button>
-                </td>
-              </tr>
-              <tr v-if="filteredAndSortedCompetencies.length === 0"><td colspan="3" class="px-3 py-4 text-center text-gray-500 italic">No competencies match filter.</td></tr>
-            </tbody>
-          </table>
+          <div class="flex flex-col gap-2">
+            <div class="hidden sm:flex items-center px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded border border-gray-200">
+              <div class="w-6"></div>
+              <div class="w-1/4 select-none">Category</div>
+              <div class="flex-grow select-none">Task</div>
+              <div class="w-24 text-right">Actions</div>
+            </div>
+            <div v-for="(c, idx) in filteredAndSortedCompetencies" :key="c.id"
+                draggable="true"
+                @dragstart="dragStartCompetency(competencies.indexOf(c))"
+                @dragover.prevent
+                @drop="dropCompetency(competencies.indexOf(c))"
+                class="bg-white border border-gray-300 rounded px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between shadow-sm cursor-move hover:bg-gray-50 transition-colors">
+              <div class="flex items-center flex-grow text-sm">
+                <span class="text-gray-400 w-6 flex-shrink-0" title="Drag to reorder">☰</span>
+                <span class="font-medium text-gray-700 w-1/4 truncate pr-2" :title="c.category">{{ c.category }}</span>
+                <span class="flex-grow truncate pr-2" :title="c.task_name">{{ c.task_name }}</span>
+              </div>
+              <div class="flex justify-end gap-3 items-center mt-2 sm:mt-0 w-full sm:w-24">
+                <button @click="editComp(c)" class="text-blue-600 hover:text-blue-800 font-semibold">Edit</button>
+                <button @click="deleteComp(c.id)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+              </div>
+            </div>
+            <div v-if="filteredAndSortedCompetencies.length === 0" class="px-3 py-4 text-center text-gray-500 italic border border-gray-200 rounded bg-gray-50">No competencies match filter.</div>
+          </div>
         </div>
         
         <!-- Quizzes Admin -->
@@ -615,24 +633,30 @@
                 <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition shadow-sm">Add Group</button>
               </form>
             </div>
-            <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
-              <thead class="bg-gray-50"><tr><th class="px-3 py-2 text-left text-sm font-semibold">Group Name</th><th class="px-3 py-2 text-right text-sm font-semibold">Order / Actions</th></tr></thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-for="(g, idx) in userGroups" :key="g.id">
-                  <td class="px-3 py-2 text-sm">
-                    <span v-if="editingGroupId !== g.id">{{ g.name }}</span>
-                    <input v-else v-model="editGroupValue" @keyup.enter="updateGroup(g.id)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
-                  </td>
-                  <td class="px-3 py-2 text-sm text-right flex justify-end items-center gap-3">
-                    <button @click="moveGroup(idx, -1)" class="text-gray-500 hover:text-gray-800" :disabled="idx === 0" title="Move Up">↑</button>
-                    <button @click="moveGroup(idx, 1)" class="text-gray-500 hover:text-gray-800" :disabled="idx === userGroups.length - 1" title="Move Down">↓</button>
-                    <button v-if="editingGroupId !== g.id" @click="startEditGroup(g)" class="text-blue-600 hover:text-blue-800 mr-3 font-semibold">Edit</button>
-                    <button v-else @click="updateGroup(g.id)" class="text-green-600 hover:text-green-800 mr-3 font-semibold">Save</button>
-                    <button @click="deleteGroup(g.id)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="flex flex-col gap-2 max-w-2xl">
+              <div class="flex items-center px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded border border-gray-200">
+                <div class="w-6"></div>
+                <div class="flex-grow">Group Name</div>
+                <div class="w-32 text-right">Actions</div>
+              </div>
+              <div v-for="(g, idx) in userGroups" :key="g.id"
+                  draggable="true"
+                  @dragstart="dragStartGroup(idx)"
+                  @dragover.prevent
+                  @drop="dropGroup(idx)"
+                  class="bg-white border border-gray-300 rounded px-3 py-2 flex items-center justify-between shadow-sm cursor-move hover:bg-gray-50 transition-colors">
+                <div class="text-sm font-medium flex-grow flex items-center gap-2">
+                  <span class="text-gray-400 w-6 flex-shrink-0" title="Drag to reorder">☰</span>
+                  <span v-if="editingGroupId !== g.id" class="flex-grow">{{ g.name }}</span>
+                  <input v-else v-model="editGroupValue" @keyup.enter="updateGroup(g.id)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex gap-2 items-center w-32 justify-end">
+                  <button v-if="editingGroupId !== g.id" @click="startEditGroup(g)" class="text-blue-600 hover:text-blue-800 font-semibold">Edit</button>
+                  <button v-else @click="updateGroup(g.id)" class="text-green-600 hover:text-green-800 font-semibold">Save</button>
+                  <button @click="deleteGroup(g.id)" class="text-red-600 hover:text-red-800 font-semibold ml-2">Delete</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -649,14 +673,18 @@
             <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <h3 class="text-lg font-semibold mb-4">Category Display Order</h3>
               <div class="flex flex-col gap-2 max-w-2xl">
-                <div v-for="(cat, idx) in categoryOrder" :key="cat.category" class="bg-white border border-gray-300 rounded px-3 py-2 flex items-center justify-between shadow-sm">
-                  <div class="text-sm font-medium flex-grow">
+                <div v-for="(cat, idx) in categoryOrder" :key="cat.category"
+                     draggable="true"
+                     @dragstart="dragStartCategory(idx)"
+                     @dragover.prevent
+                     @drop="dropCategory(idx)" 
+                     class="bg-white border border-gray-300 rounded px-3 py-2 flex items-center justify-between shadow-sm cursor-move hover:bg-gray-50 transition-colors">
+                  <div class="text-sm font-medium flex-grow flex items-center gap-2">
+                    <span class="text-gray-400" title="Drag to reorder">☰</span>
                     <span v-if="editingCategoryName !== cat.category">{{ cat.category }}</span>
                     <input v-else v-model="editCategoryValue" @keyup.enter="updateCategory(cat.category)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
                   </div>
                   <div class="flex gap-2 items-center">
-                    <button @click="moveCategory(idx, -1)" :disabled="idx === 0" class="text-gray-500 hover:text-gray-800 disabled:opacity-30" title="Move Up">↑</button>
-                    <button @click="moveCategory(idx, 1)" :disabled="idx === categoryOrder.length - 1" class="text-gray-500 hover:text-gray-800 disabled:opacity-30" title="Move Down">↓</button>
                     <button v-if="editingCategoryName !== cat.category" @click="startEditCategory(cat)" class="text-blue-600 hover:text-blue-800 ml-3 font-semibold">Edit</button>
                     <button v-else @click="updateCategory(cat.category)" class="text-green-600 hover:text-green-800 ml-3 font-semibold">Save</button>
                     <button @click="deleteCategory(cat.category)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
@@ -754,7 +782,8 @@
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('t')">In Training (T) <span v-if="statCompSortCol === 't'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('m')">Meets Reqs (M) <span v-if="statCompSortCol === 'm'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('a')">Assessment (A) <span v-if="statCompSortCol === 'a'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
-                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('c')">Competent (C/X) <span v-if="statCompSortCol === 'c'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('c')">Competent (C) <span v-if="statCompSortCol === 'c'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('x')">Assessor (X) <span v-if="statCompSortCol === 'x'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('total')">Total Applicable Staff <span v-if="statCompSortCol === 'total'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                     </tr>
                   </thead>
@@ -767,11 +796,24 @@
                           {{ group.category }}
                         </td>
                         <td class="px-4 py-2 text-sm font-bold text-gray-600">All Tasks Combined</td>
-                        <td class="px-4 py-2 text-sm text-center font-semibold">{{ group.t }}</td>
-                        <td class="px-4 py-2 text-sm text-center font-semibold">{{ group.m }}</td>
-                        <td class="px-4 py-2 text-sm text-center font-semibold">{{ group.a }}</td>
-                        <td class="px-4 py-2 text-sm text-center font-bold text-green-700">{{ group.c }}</td>
-                        <td class="px-4 py-2 text-sm text-center font-semibold text-gray-600">{{ group.total }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold">
+                          {{ group.t }}
+                        </td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold">-</td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold">-</td>
+                        <td class="px-4 py-2 text-sm text-center font-bold text-green-700">
+                          {{ group.c }}
+                          <svg v-if="group.c === 1" class="w-4 h-4 inline text-orange-500 ml-1 mb-0.5" fill="currentColor" viewBox="0 0 20 20" title="Warning: Only 1"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                          <svg v-if="group.c === 0" class="w-4 h-4 inline text-red-600 ml-1 mb-0.5" fill="currentColor" viewBox="0 0 20 20" title="Critical: 0"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-center font-bold text-blue-700">
+                          {{ group.x }}
+                          <svg v-if="group.x === 1" class="w-4 h-4 inline text-orange-500 ml-1 mb-0.5" fill="currentColor" viewBox="0 0 20 20" title="Warning: Only 1"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                          <svg v-if="group.x === 0" class="w-4 h-4 inline text-red-600 ml-1 mb-0.5" fill="currentColor" viewBox="0 0 20 20" title="Critical: 0"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold text-gray-600">
+                          {{ group.total }}
+                        </td>
                       </tr>
                       <!-- Nested Task Rows -->
                       <tr v-if="expandedStatCategories.includes(group.category)" v-for="c in group.items" :key="c.id" class="hover:bg-gray-50 bg-white">
@@ -781,6 +823,7 @@
                         <td class="px-4 py-2 text-sm text-center">{{ c.m }}</td>
                         <td class="px-4 py-2 text-sm text-center">{{ c.a }}</td>
                         <td class="px-4 py-2 text-sm text-center font-bold text-green-700">{{ c.c }}</td>
+                        <td class="px-4 py-2 text-sm text-center font-bold text-blue-700">{{ c.x }}</td>
                         <td class="px-4 py-2 text-sm text-center text-gray-500">{{ c.total }}</td>
                       </tr>
                     </template>
@@ -889,11 +932,13 @@
       </div>
 
       <!-- Interactive Cell Modal -->
-      <div v-if="selectedCell" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div v-if="selectedCell" @click.self="closeModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
           <div class="flex justify-between items-start mb-4">
             <div>
-              <h3 class="text-xl font-bold text-gray-900">{{ selectedCell.comp.task_name }}</h3>
+              <h3 class="text-xl font-bold text-gray-900">{{ selectedCell.comp.category }}</h3>
+              <div class="text-lg font-bold text-gray-800">{{ selectedCell.comp.task_name }}</div>
+              <p v-if="selectedCell.comp.description" class="text-sm text-gray-600 mt-1 mb-2 whitespace-pre-wrap">{{ selectedCell.comp.description }}</p>
               <p class="text-sm text-gray-500">{{ selectedCell.user.full_name }} ({{ selectedCell.user.designation }})</p>
             </div>
             <button @click="closeModal" class="text-gray-400 hover:text-gray-600">
@@ -1083,7 +1128,7 @@
     </div>
 
     <!-- Custom Dialog -->
-    <div v-if="customDialog.isOpen" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4">
+    <div v-if="customDialog.isOpen" @click.self="closeDialog(false)" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4">
       <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm transform transition-all">
         <h3 class="text-lg font-bold text-gray-900 mb-2">{{ customDialog.title }}</h3>
         <p class="text-sm text-gray-700 mb-6 whitespace-pre-wrap">{{ customDialog.message }}</p>
@@ -1106,13 +1151,13 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v1.0
+        James Burnley v1.1
       </div>
     </div>
   </div>
 
   <script>
-    const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
+    const { createApp, ref, computed, watch, nextTick, onMounted, onUnmounted } = Vue;
 
     createApp({
       setup() {
@@ -1201,6 +1246,16 @@
           customDialog.value.isOpen = false;
         };
         
+        const handleKeydown = (e) => {
+          if (e.key === 'Escape') {
+            if (customDialog.value.isOpen) {
+              closeDialog(false);
+            } else if (selectedCell.value) {
+              closeModal();
+            }
+          }
+        };
+        
         const users = ref([]);
         const competencies = ref([]);
         const progress = ref([]);
@@ -1217,7 +1272,7 @@
         
         const adminSubTab = ref('competencies');
         const isEditingComp = ref(false);
-        const newComp = ref({ category: '', task_name: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36 });
+        const newComp = ref({ category: '', task_name: '', description: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36 });
         
         const categoryOrder = ref([]);
 
@@ -1253,13 +1308,13 @@
         });
 
         const isPublicApplicable = (u, comp) => {
-          return comp.target_groups && comp.target_groups.includes(u.designation);
+          return (comp.target_groups && comp.target_groups.includes(u.designation)) || (comp.target_users && comp.target_users.includes(u.id));
         };
 
         const publicGroupedCompetencies = computed(() => {
           const groups = {};
           publicSummaryData.value.competencies.forEach(c => {
-            const applicable = publicDisplayedUsers.value.some(u => c.target_groups && c.target_groups.includes(u.designation));
+            const applicable = publicDisplayedUsers.value.some(u => isPublicApplicable(u, c));
             if (applicable) {
               if (!groups[c.category]) groups[c.category] = [];
               groups[c.category].push(c);
@@ -1280,7 +1335,7 @@
           const stats = {};
           publicDisplayedUsers.value.forEach(u => {
             const myProgress = publicSummaryData.value.progress.filter(p => p.user_id === u.id);
-            const myCompetencies = publicSummaryData.value.competencies.filter(c => c.target_groups && c.target_groups.includes(u.designation));
+            const myCompetencies = publicSummaryData.value.competencies.filter(c => isPublicApplicable(u, c));
             
             const categories = [...new Set(myCompetencies.map(c => c.category))];
             let overallComplete = 0;
@@ -1382,18 +1437,15 @@
             await fetchData();
         };
 
-        const moveCategory = async (index, direction) => {
-          const arr = [...categoryOrder.value];
-          if (direction === -1 && index > 0) [arr[index], arr[index - 1]] = [arr[index - 1], arr[index]];
-          else if (direction === 1 && index < arr.length - 1) [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
-          else return;
-          categoryOrder.value = arr;
+        const draggedCategoryIndex = ref(null);
+        const dragStartCategory = (idx) => { draggedCategoryIndex.value = idx; };
+        const dropCategory = async (idx) => {
+          if (draggedCategoryIndex.value === null || draggedCategoryIndex.value === idx) return;
+          const item = categoryOrder.value.splice(draggedCategoryIndex.value, 1)[0];
+          categoryOrder.value.splice(idx, 0, item);
+          draggedCategoryIndex.value = null;
           try {
-            await fetch('/api/category_order', {
-              method: 'POST',
-              headers: getHeaders(true),
-              body: JSON.stringify({ categories: categoryOrder.value.map(c => c.category) })
-            });
+            await fetch('/api/category_order', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ categories: categoryOrder.value.map(c => c.category) }) });
             await fetchData();
           } catch(e) { customAlert(e.message, "Error"); }
         };
@@ -1415,6 +1467,15 @@
         
         const activeLegends = ref([]);
         const selectedFilterCompetency = ref(null);
+
+        const expandedMatrixCategories = ref([]);
+        const toggleMatrixCategory = (cat) => {
+          if (expandedMatrixCategories.value.includes(cat)) {
+            expandedMatrixCategories.value = expandedMatrixCategories.value.filter(c => c !== cat);
+          } else {
+            expandedMatrixCategories.value.push(cat);
+          }
+        };
 
         const myAssessorCompetencies = computed(() => {
           if (!user.value) return [];
@@ -1587,22 +1648,10 @@
         });
 
         const compListFilterCat = ref('');
-        const compListSortCol = ref('');
-        const compListSortDir = ref(1);
-
-        const toggleCompListSort = (col) => {
-          if (compListSortCol.value === col) compListSortDir.value *= -1;
-          else { compListSortCol.value = col; compListSortDir.value = 1; }
-        };
 
         const filteredAndSortedCompetencies = computed(() => {
           let filtered = competencies.value;
           if (compListFilterCat.value) filtered = filtered.filter(c => c.category === compListFilterCat.value);
-          if (compListSortCol.value) {
-            return [...filtered].sort((a, b) => {
-              return (a[compListSortCol.value] || '').localeCompare(b[compListSortCol.value] || '') * compListSortDir.value;
-            });
-          }
           return filtered;
         });
 
@@ -1650,17 +1699,18 @@
         const statCompetencies = computed(() => {
           if (!statistics.value) return [];
           let comps = competencies.value.map(c => {
-            const applicableUsers = activeUsers.value.filter(u => c.target_groups && c.target_groups.includes(u.designation));
-            const stats = { t: 0, m: 0, a: 0, c: 0 };
+            const applicableUsers = activeUsers.value.filter(u => isApplicable(u, c));
+            const stats = { t: 0, m: 0, a: 0, c: 0, x: 0 };
             applicableUsers.forEach(u => {
               const p = progress.value.find(pr => pr.user_id === u.id && pr.competency_id === c.id);
               const status = p ? p.current_status : 't';
-              if (status === 'c' || status === 'x') stats.c++;
+              if (status === 'x') stats.x++;
+              else if (status === 'c') stats.c++;
               else if (status === 'a') stats.a++;
               else if (status === 'm') stats.m++;
               else stats.t++;
             });
-            return { ...c, t: stats.t, m: stats.m, a: stats.a, c: stats.c, total: applicableUsers.length };
+            return { ...c, t: stats.t, m: stats.m, a: stats.a, c: stats.c, x: stats.x, total: applicableUsers.length };
           });
 
           return comps.sort((a, b) => {
@@ -1676,14 +1726,37 @@
           const groups = {};
           statCompetencies.value.forEach(c => {
             if (!groups[c.category]) {
-              groups[c.category] = { category: c.category, t: 0, m: 0, a: 0, c: 0, total: 0, items: [] };
+              groups[c.category] = { category: c.category, t: 0, m: 0, a: 0, c: 0, x: 0, total: 0, items: [] };
             }
             groups[c.category].items.push(c);
-            groups[c.category].t += c.t;
-            groups[c.category].m += c.m;
-            groups[c.category].a += c.a;
-            groups[c.category].c += c.c;
-            groups[c.category].total += c.total;
+          });
+          
+          Object.keys(groups).forEach(cat => {
+            const catGroup = groups[cat];
+            const catComps = catGroup.items;
+            
+            const userStatuses = {}; 
+            
+            catComps.forEach(c => {
+              const applicableUsers = activeUsers.value.filter(u => isApplicable(u, c));
+              applicableUsers.forEach(u => {
+                if (!userStatuses[u.id]) userStatuses[u.id] = [];
+                const p = progress.value.find(pr => pr.user_id === u.id && pr.competency_id === c.id);
+                const status = p ? p.current_status : 't';
+                userStatuses[u.id].push(status);
+              });
+            });
+            
+            catGroup.total = Object.keys(userStatuses).length;
+            
+            Object.values(userStatuses).forEach(statuses => {
+              const allX = statuses.every(s => s === 'x');
+              const allCorX = statuses.every(s => s === 'c' || s === 'x');
+              
+              if (allX) catGroup.x++;
+              else if (allCorX) catGroup.c++;
+              else catGroup.t++;
+            });
           });
           
           const ordered = [];
@@ -1829,13 +1902,15 @@
           return h;
         };
 
-        const moveGroup = async (index, direction) => {
-          const arr = [...userGroups.value];
-          if (direction === -1 && index > 0) [arr[index], arr[index - 1]] = [arr[index - 1], arr[index]];
-          else if (direction === 1 && index < arr.length - 1) [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
-          else return;
+        const draggedGroupIndex = ref(null);
+        const dragStartGroup = (idx) => { draggedGroupIndex.value = idx; };
+        const dropGroup = async (idx) => {
+          if (draggedGroupIndex.value === null || draggedGroupIndex.value === idx) return;
+          const item = userGroups.value.splice(draggedGroupIndex.value, 1)[0];
+          userGroups.value.splice(idx, 0, item);
+          draggedGroupIndex.value = null;
           
-          const orderedIds = arr.map(g => g.id);
+          const orderedIds = userGroups.value.map(g => g.id);
           await fetch('/api/groups/reorder', { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ orderedIds }) });
           await fetchData();
         };
@@ -1856,6 +1931,10 @@
 
         const activeUsers = computed(() => sortedUsers.value.filter(u => u.is_active !== 0 && (u.active_in || []).includes(selectedDb.value)));
 
+        const availableIndividualUsers = computed(() => {
+          return sortedUsers.value.filter(u => !(newComp.value.target_groups || []).includes(u.designation));
+        });
+
         const displayedUsers = computed(() => {
           let filtered = activeUsers.value;
 
@@ -1870,6 +1949,19 @@
             if (overviewFilterName.value) {
               const term = overviewFilterName.value.toLowerCase();
               filtered = filtered.filter(u => u.full_name.toLowerCase().includes(term) || u.username.toLowerCase().includes(term));
+            }
+            
+            if (overviewFilterCategory.value) {
+              filtered = filtered.filter(u => {
+                return competencies.value.some(c => c.category === overviewFilterCategory.value && isApplicable(u, c));
+              });
+            }
+
+            if (overviewFilterTask.value) {
+              const term = overviewFilterTask.value.toLowerCase();
+              filtered = filtered.filter(u => {
+                return competencies.value.some(c => c.task_name.toLowerCase().includes(term) && isApplicable(u, c));
+              });
             }
 
             if (selectedFilterCompetency.value) {
@@ -1910,7 +2002,7 @@
               if (overviewFilterTask.value && !c.task_name.toLowerCase().includes(overviewFilterTask.value.toLowerCase())) return;
             }
 
-            const applicable = displayedUsers.value.some(u => c.target_groups && c.target_groups.includes(u.designation));
+            const applicable = displayedUsers.value.some(u => isApplicable(u, c));
             if (applicable) {
               if (!groups[c.category]) groups[c.category] = [];
               groups[c.category].push(c);
@@ -1931,7 +2023,7 @@
           const stats = {};
           activeUsers.value.forEach(u => {
             const myProgress = progress.value.filter(p => p.user_id === u.id);
-            const myCompetencies = competencies.value.filter(c => c.target_groups && c.target_groups.includes(u.designation));
+            const myCompetencies = competencies.value.filter(c => isApplicable(u, c));
             
             const categories = [...new Set(myCompetencies.map(c => c.category))];
             let overallComplete = 0;
@@ -2013,7 +2105,7 @@
         };
 
         const isApplicable = (u, comp) => {
-          return comp.target_groups && comp.target_groups.includes(u.designation);
+          return (comp.target_groups && comp.target_groups.includes(u.designation)) || (comp.target_users && comp.target_users.includes(u.id));
         };
 
         const getProgressObj = (userId, compId) => {
@@ -2118,7 +2210,7 @@
         
         const syncAllProgress = async () => {
           if (!user.value) return;
-          const myCompetencies = competencies.value.filter(c => c.target_groups && c.target_groups.includes(user.value.designation));
+          const myCompetencies = competencies.value.filter(c => isApplicable(user.value, c));
           let changed = false;
           for (const c of myCompetencies) {
              const status = getProgressStatus(user.value.id, c.id);
@@ -2267,8 +2359,7 @@
             if (isEditingComp.value) {
               customAlert("Competency updated successfully.", "Success");
             } else {
-              cancelEditComp();
-              customAlert("Competency created successfully.", "Success");
+              customAlert("Competency created successfully. You can modify it and save again to create another.", "Success");
             }
           } catch (err) { customAlert(err.message, "Error"); }
         };
@@ -2287,14 +2378,15 @@
               body: JSON.stringify(compToSave)
             });
             if (!res.ok) throw new Error('Failed to save as new competency');
-            cancelEditComp();
+            newComp.value.id = undefined;
+            isEditingComp.value = false;
             await fetchData();
-            customAlert("Competency saved as new.", "Success");
+            customAlert("Competency saved as new. You can modify it and save again to create another.", "Success");
           } catch (err) { customAlert(err.message, "Error"); }
         };
         
-        const editComp = (c) => { newComp.value = JSON.parse(JSON.stringify(c)); newComp.value.requires_qatrack = newComp.value.required_qatrack_count > 0; newComp.value.requires_prerequisite_competencies = !!c.requires_prerequisite_competencies; newComp.value.prerequisite_competencies = Array.isArray(c.prerequisite_competencies) ? c.prerequisite_competencies : []; newComp.value.quiz_ids = Array.isArray(c.quiz_ids) ? c.quiz_ids : []; if (!newComp.value.target_groups) newComp.value.target_groups = []; if (!Array.isArray(newComp.value.reading_prerequisites)) newComp.value.reading_prerequisites = []; if (newComp.value.renewal_period_months === undefined) newComp.value.renewal_period_months = globalSettings.value.default_renewal_period || 36; isEditingComp.value = true; };
-        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36 }; isEditingComp.value = false; };
+        const editComp = (c) => { newComp.value = JSON.parse(JSON.stringify(c)); newComp.value.requires_qatrack = newComp.value.required_qatrack_count > 0; newComp.value.requires_prerequisite_competencies = !!c.requires_prerequisite_competencies; newComp.value.prerequisite_competencies = Array.isArray(c.prerequisite_competencies) ? c.prerequisite_competencies : []; newComp.value.quiz_ids = Array.isArray(c.quiz_ids) ? c.quiz_ids : []; if (!newComp.value.target_groups) newComp.value.target_groups = []; if (!newComp.value.target_users) newComp.value.target_users = []; if (!Array.isArray(newComp.value.reading_prerequisites)) newComp.value.reading_prerequisites = []; if (newComp.value.renewal_period_months === undefined) newComp.value.renewal_period_months = globalSettings.value.default_renewal_period || 36; isEditingComp.value = true; };
+        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36 }; isEditingComp.value = false; };
         
         const deleteComp = async (id) => {
           if (!(await customConfirm('Are you sure you want to delete this competency?', "Delete Competency"))) return;
@@ -2305,13 +2397,15 @@
           } catch (err) { customAlert(err.message, "Error"); }
         };
         
-        const moveCompetency = async (index, direction) => {
-          const arr = [...competencies.value];
-          if (direction === -1 && index > 0) [arr[index], arr[index - 1]] = [arr[index - 1], arr[index]];
-          else if (direction === 1 && index < arr.length - 1) [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
-          else return;
+        const draggedCompetencyIndex = ref(null);
+        const dragStartCompetency = (idx) => { draggedCompetencyIndex.value = idx; };
+        const dropCompetency = async (idx) => {
+          if (draggedCompetencyIndex.value === null || draggedCompetencyIndex.value === idx || idx === -1) return;
+          const item = competencies.value.splice(draggedCompetencyIndex.value, 1)[0];
+          competencies.value.splice(idx, 0, item);
+          draggedCompetencyIndex.value = null;
           
-          const orderedIds = arr.map(c => c.id);
+          const orderedIds = competencies.value.map(c => c.id);
           await fetch('/api/competencies/reorder', { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ orderedIds }) });
           await fetchData();
         };
@@ -2347,16 +2441,17 @@
         
         const saveUser = async () => {
           try {
-            const url = isEditingUser.value ? `/api/users/${editingUserId.value}` : '/api/users';
-            const method = isEditingUser.value ? 'PUT' : 'POST';
+            const isUpdate = isEditingUser.value && editingUserId.value;
+            const url = isUpdate ? `/api/users/${editingUserId.value}` : '/api/users';
+            const method = isUpdate ? 'PUT' : 'POST';
             const res = await fetch(url, { method, headers: getHeaders(true), body: JSON.stringify(newUserData.value) });
             if (!res.ok) throw new Error('Failed to save user');
             await fetchData();
-            if (isEditingUser.value) {
+            if (isUpdate) {
               customAlert("User updated successfully.", "Success");
             } else {
-              cancelEditUser();
-              customAlert("User created successfully.", "Success");
+              isEditingUser.value = true;
+              customAlert("User created successfully. You can modify it and save again to create another.", "Success");
             }
           } catch (err) { customAlert(err.message, "Error"); }
         };
@@ -2370,9 +2465,9 @@
               body: JSON.stringify(userToSave)
             });
             if (!res.ok) throw new Error((await res.json()).error || 'Failed to save as new user');
-            cancelEditUser();
+            editingUserId.value = null;
             await fetchData();
-            customAlert("User saved as new.", "Success");
+            customAlert("User saved as new. You can modify it and save again to create another.", "Success");
           } catch (err) { customAlert(err.message, "Error"); }
         };
         
@@ -2695,6 +2790,7 @@
         };
         
         onMounted(async () => {
+          window.addEventListener('keydown', handleKeydown);
           if (token.value) {
             try {
               const secRes = await fetch('/api/public/sections');
@@ -2710,16 +2806,21 @@
           }
         });
 
-        return { username, password, token, user, loginError, users, sortedUsers, displayedUsers, competencies, getProgressStatus, getStatusBadgeClass, getAssessorName, isRenewalDue,
+        onUnmounted(() => {
+          window.removeEventListener('keydown', handleKeydown);
+        });
+
+        return { username, password, token, user, loginError, users, sortedUsers, availableIndividualUsers, displayedUsers, competencies, getProgressStatus, getStatusBadgeClass, getAssessorName, isRenewalDue,
                  login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable,
-                 currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, moveCompetency, availableCategories,
-                 categoryOrder, moveCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
+                 currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, dragStartCompetency, dropCompetency, availableCategories,
+                 categoryOrder, dragStartCategory, dropCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
                  newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory,
-                 compListFilterCat, compListSortCol, compListSortDir, toggleCompListSort, filteredAndSortedCompetencies, 
+                 compListFilterCat, filteredAndSortedCompetencies, 
                  newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort,
                  quizLibrary, activeLibraryQuiz, isEditingQuiz, createNewLibraryQuiz, editLibraryQuiz, cancelEditLibraryQuiz, saveLibraryQuiz, deleteLibraryQuiz, cellQuizzes, takingQuiz, quizData, quizAnswers, loadQuizForTaking, submitQuiz, quizStats,
-                 userGroups, newGroup, moveGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, saveAdminOverrides, adminForceStatus,
+                 userGroups, newGroup, dragStartGroup, dropGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, saveAdminOverrides, adminForceStatus,
                  selectedDb, handleDbChange,
+                 expandedMatrixCategories, toggleMatrixCategory,
                  activeLegends, selectedFilterCompetency, toggleLegend, toggleCompetencyFilter,
                  overviewFilterName, overviewFilterTask, overviewFilterCategory, overviewFilterGroup,
                  statistics, sectionSummaryStats, sectionApplicableUsers, expandedStatCategories, toggleStatCategory, groupedStatCompetencies,
