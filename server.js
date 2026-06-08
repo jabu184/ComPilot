@@ -370,6 +370,41 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.post('/api/switch-db', (req, res) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  const newDbName = req.headers['x-database'] || 'QA';
+
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, SECRET_KEY, async (err, userPayload) => {
+    if (err) return res.sendStatus(403);
+    
+    try {
+      const users = await query(sharedDb, 'SELECT * FROM users WHERE id = ?', [userPayload.id]);
+      if (users.length === 0) return res.status(401).json({ error: 'User not found' });
+      
+      const user = users[0];
+      if (user.is_active === 0) return res.status(403).json({ error: 'Account is archived.' });
+      
+      let activeIn = [];
+      try { activeIn = JSON.parse(user.active_in || '[]'); } catch(e) {}
+      if (!activeIn.includes(newDbName)) {
+        return res.status(403).json({ error: 'Not authorized for this section.' });
+      }
+
+      const newToken = jwt.sign(
+        { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, dbName: newDbName }, 
+        SECRET_KEY, 
+        { expiresIn: '8h' }
+      );
+      res.json({ token: newToken, user });
+    } catch (error) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+});
+
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -404,17 +439,58 @@ const requireSuperuser = (req, res, next) => {
   }
 };
 
-// --- MOCK QATRACK+ ENDPOINT ---
-// We extract this into a function so we can use it internally for evaluations as well as expose it
+const getQATrackConfig = async () => {
+  const settings = await query(sharedDb, "SELECT key, value FROM global_settings WHERE key IN ('qatrack_api_url', 'qatrack_api_token')");
+  let apiUrl = process.env.QATRACK_API_URL || 'http://192.168.68.101:8000/api';
+  let apiToken = process.env.QATRACK_API_TOKEN || '6bf9e19b16c5d82adcee9b565ca2cba4012d8836';
+  settings.forEach(s => {
+    if (s.key === 'qatrack_api_url' && s.value) apiUrl = s.value;
+    if (s.key === 'qatrack_api_token' && s.value) apiToken = s.value;
+  });
+  apiUrl = apiUrl.replace(/\/+$/, '');
+  return { apiUrl, apiToken };
+};
+
+// --- QATRACK+ LIVE ENDPOINT ---
 const fetchQATrackInstances = async (username, test_identifier) => {
-  console.log(`[Mock QATrack+] Fetching instances for user: ${username}, test: ${test_identifier}`);
-  return {
-    count: 5, // Return a fixed count of 5 for testing
-    results: [
-      { id: 101, status: 'Approved', work_completed: '2023-10-01' },
-      { id: 102, status: 'Approved', work_completed: '2023-10-05' }
-    ]
-  };
+  console.log(`[QATrack+] Fetching instances for user: ${username}, test: ${test_identifier}`);
+  try {
+    const { apiUrl, apiToken } = await getQATrackConfig();
+    // Request only completed & reviewed items from the API
+    const url = `${apiUrl}/qc/testlistinstances/?created_by__username=${username}&test_list__slug=${test_identifier}&all_reviewed=true&in_progress=false`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Token ${apiToken}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.error(`[QATrack+] API responded with status: ${response.status} ${response.statusText}`);
+      return { count: 0, results: [] };
+    }
+
+    const data = await response.json();
+      
+      // Fallback filter: DRF might ignore 'all_reviewed' if it's not explicitly registered in QATrack's FilterSet.
+      // We filter the returned results array to ensure they are actually approved/reviewed.
+      const approvedResults = (data.results || []).filter(instance => 
+        instance.all_reviewed === true && instance.in_progress === false
+      );
+
+      // Calculate a safe count
+      // If the API ignored our filter, data.count will include unreviewed items. 
+      let safeCount = data.count;
+      if (data.results && approvedResults.length < data.results.length) {
+        safeCount = approvedResults.length;
+      }
+
+      return { count: safeCount, results: approvedResults };
+  } catch (error) {
+    console.error(`[QATrack+] Connection error:`, error.message);
+    return { count: 0, results: [] };
+  }
 };
 
 // We leave this unauthenticated or mock-authenticated so it acts like an external API
@@ -906,6 +982,76 @@ app.post('/api/competency/:id/submit-quiz', authenticateToken, async (req, res) 
   }
 });
 
+app.get('/api/competency/:id/qatrack-evidence', authenticateToken, async (req, res) => {
+  const competency_id = req.params.id;
+  // Allow passing user_id to view another user's evidence (e.g. for assessors viewing a trainee)
+  const target_user_id = req.query.user_id || req.user.id;
+  
+  try {
+    const compQuery = await query(req.db, `SELECT required_qatrack_count, qatrack_test_identifier FROM competencies WHERE id = ?`, [competency_id]);
+    if (compQuery.length === 0) return res.status(404).json({ error: 'Competency not found' });
+    
+    const comp = compQuery[0];
+    if (!comp.qatrack_test_identifier || comp.required_qatrack_count <= 0) {
+      return res.json({ required: 0, evidence: [] });
+    }
+
+    const userQuery = await query(sharedDb, `SELECT username FROM users WHERE id = ?`, [target_user_id]);
+    if (userQuery.length === 0) return res.status(404).json({ error: 'User not found' });
+    const target_username = userQuery[0].username;
+
+    const qaData = await fetchQATrackInstances(target_username, comp.qatrack_test_identifier);
+    
+    // Sort by most recent work_completed (descending)
+    const sortedResults = (qaData.results || []).sort((a, b) => new Date(b.work_completed) - new Date(a.work_completed));
+    
+    // Take only the required number of entries
+    const recentInstances = sortedResults.slice(0, comp.required_qatrack_count);
+    const recentEvidence = [];
+    
+    for (const instance of recentInstances) {
+      let reviewerName = 'System/Unknown';
+      if (instance.reviewed_by) {
+        // Using a simple global cache for reviewer names to save API calls
+        if (!global.qaReviewerCache) global.qaReviewerCache = {};
+        if (global.qaReviewerCache[instance.reviewed_by]) {
+          reviewerName = global.qaReviewerCache[instance.reviewed_by];
+        } else {
+          try {
+            const { apiToken } = await getQATrackConfig();
+            const rRes = await fetch(instance.reviewed_by, {
+              headers: {
+                'Authorization': `Token ${apiToken}`,
+                'Accept': 'application/json'
+              }
+            });
+            if (rRes.ok) {
+              const rData = await rRes.json();
+              reviewerName = rData.username || rData.first_name + ' ' + rData.last_name || instance.reviewed_by;
+              global.qaReviewerCache[instance.reviewed_by] = reviewerName;
+            }
+          } catch (e) {
+            console.error("[QATrack+] Failed to fetch reviewer:", e.message);
+          }
+        }
+      }
+      recentEvidence.push({
+        date: instance.work_completed,
+        reviewed_by: reviewerName,
+        url: instance.site_url || instance.url
+      });
+    }
+
+    res.json({
+      required: comp.required_qatrack_count,
+      found: qaData.count,
+      evidence: recentEvidence
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // --- MILESTONE TRACKING & AUTOMATION ---
 app.post('/api/competency/milestone', authenticateToken, async (req, res) => {
   const { competency_id, milestone, value, reading_id } = req.body;
@@ -1017,10 +1163,8 @@ app.post('/api/competency/sync', authenticateToken, async (req, res) => {
 
     let count = progress.qatrack_records;
     if (comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
-      if (!progress.qatrack_manual_override) {
-        const qaData = await fetchQATrackInstances(username, comp.qatrack_test_identifier);
-        count = qaData.count;
-      }
+      const qaData = await fetchQATrackInstances(username, comp.qatrack_test_identifier);
+      count = qaData.count;
       if (count == null || count < comp.required_qatrack_count) {
         requirementsMet = false;
         if (!missingReason) missingReason = `QATrack+ missing data: Found ${count || 0} valid tests, requires ${comp.required_qatrack_count}.`;
@@ -1031,7 +1175,7 @@ app.post('/api/competency/sync', authenticateToken, async (req, res) => {
     if (progressQuery.length === 0) {
       await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records) VALUES (?, ?, 't', ?)`, [user_id, competency_id, count]);
       initialized = true;
-    } else if (comp.required_qatrack_count > 0 && comp.qatrack_test_identifier && !progress.qatrack_manual_override) {
+    } else if (comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
       await execute(req.db, `UPDATE staff_competency_progress SET qatrack_records = ? WHERE user_id = ? AND competency_id = ?`, [count, user_id, competency_id]);
     }
       
@@ -1220,18 +1364,18 @@ app.post('/api/progress/admin-force-status', authenticateToken, requireSuperuser
 });
 
 app.post('/api/progress/admin-update', authenticateToken, requireSuperuser, async (req, res) => {
-  const { user_id, competency_id, readings_completed, qatrack_records, qatrack_manual_override } = req.body;
+  const { user_id, competency_id, readings_completed } = req.body;
   const admin_id = req.user.id;
 
   try {
     const rcStr = JSON.stringify(readings_completed || []);
     const check = await query(req.db, `SELECT id FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
     if (check.length === 0) {
-      await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, readings_completed, qatrack_records, qatrack_manual_override) VALUES (?, ?, 't', ?, ?, ?)`, 
-        [user_id, competency_id, rcStr, qatrack_records, qatrack_manual_override ? 1 : 0]);
+      await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, readings_completed) VALUES (?, ?, 't', ?)`, 
+        [user_id, competency_id, rcStr]);
     } else {
-      await execute(req.db, `UPDATE staff_competency_progress SET readings_completed = ?, qatrack_records = ?, qatrack_manual_override = ? WHERE user_id = ? AND competency_id = ?`, 
-        [rcStr, qatrack_records, qatrack_manual_override ? 1 : 0, user_id, competency_id]);
+      await execute(req.db, `UPDATE staff_competency_progress SET readings_completed = ? WHERE user_id = ? AND competency_id = ?`, 
+        [rcStr, user_id, competency_id]);
     }
     await execute(req.db, 
       `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_OVERRIDE', ?, 'Admin updated prerequisites manually')`,
@@ -1444,6 +1588,10 @@ app.get('/api/admin/db-info', authenticateToken, requireSuperuser, async (req, r
     const settingsMap = {};
     settings.forEach(s => settingsMap[s.key] = s.value);
     
+    const { apiUrl, apiToken } = await getQATrackConfig();
+    if (!settingsMap.qatrack_api_url) settingsMap.qatrack_api_url = apiUrl;
+    if (!settingsMap.qatrack_api_token) settingsMap.qatrack_api_token = apiToken;
+
     res.json({ info, settings: settingsMap });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
@@ -1502,10 +1650,16 @@ app.post('/api/admin/upload-frontend', authenticateToken, requireSuperuser, asyn
 });
 
 app.post('/api/admin/settings', authenticateToken, requireSuperuser, async (req, res) => {
-  const { default_renewal_period } = req.body;
+  const { default_renewal_period, qatrack_api_url, qatrack_api_token } = req.body;
   try {
     if (default_renewal_period !== undefined) {
       await execute(sharedDb, "INSERT OR REPLACE INTO global_settings (key, value) VALUES ('default_renewal_period', ?)", [default_renewal_period.toString()]);
+    }
+    if (qatrack_api_url !== undefined) {
+      await execute(sharedDb, "INSERT OR REPLACE INTO global_settings (key, value) VALUES ('qatrack_api_url', ?)", [qatrack_api_url.toString()]);
+    }
+    if (qatrack_api_token !== undefined) {
+      await execute(sharedDb, "INSERT OR REPLACE INTO global_settings (key, value) VALUES ('qatrack_api_token', ?)", [qatrack_api_token.toString()]);
     }
     res.json({ success: true });
   } catch(e) { res.status(500).json({error: e.message}); }
@@ -1548,7 +1702,7 @@ app.delete('/api/admin/sections/:name', authenticateToken, requireSuperuser, asy
 
 app.get('/api/settings', authenticateToken, async (req, res) => {
   try {
-    const settings = await query(sharedDb, "SELECT * FROM global_settings");
+    const settings = await query(sharedDb, "SELECT * FROM global_settings WHERE key != 'qatrack_api_token'");
     const settingsMap = {};
     settings.forEach(s => settingsMap[s.key] = s.value);
     res.json(settingsMap);

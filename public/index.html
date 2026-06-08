@@ -4,12 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Competency Matrix App</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <script>
+    const _warn = console.warn.bind(console);
+    console.warn = (...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')) return;
+      _warn(...args);
+    };
+  </script>
   <!-- Load Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwindcss.js"></script>
   <!-- Load Vue.js -->
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="js/vue.global.prod.js"></script>
   <!-- Load Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="js/chart.js"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans p-8">
   <div id="app" class="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-6">
@@ -373,7 +381,7 @@
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label><textarea v-model="newComp.description" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="Provide additional details about this competency..."></textarea></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Renewal Period (Months)</label><input v-model.number="newComp.renewal_period_months" type="number" min="1" class="block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" :placeholder="`Default: ${globalSettings.default_renewal_period || 36}`"></div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm">
-                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_qatrack" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires QATrack+ Practical Evidence</span></label>
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_qatrack" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires QATrack+ Records</span></label>
                 <div v-if="newComp.requires_qatrack" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
                   <div><label class="block text-sm font-medium text-gray-700 mb-1">Required Count</label><input v-model.number="newComp.required_qatrack_count" type="number" min="1" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"></div>
                   <div><label class="block text-sm font-medium text-gray-700 mb-1">Test Identifier</label><input v-model="newComp.qatrack_test_identifier" type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="e.g. LINAC_MONTHLY_QA"></div>
@@ -894,10 +902,22 @@
 
           <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
             <h3 class="text-lg font-semibold mb-4 text-teal-900">Global Settings</h3>
-            <div class="flex items-center gap-4 bg-white p-3 border border-gray-300 rounded shadow-sm max-w-md">
-              <label class="block text-sm font-medium text-gray-700">Default Renewal Period (Months):</label>
-              <input type="number" v-model.number="globalSettings.default_renewal_period" class="block w-24 rounded-md border-gray-300 shadow-sm border px-3 py-1.5 text-sm focus:ring-teal-500 focus:border-teal-500">
-              <button @click="saveGlobalSettings" class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm">Save</button>
+            <div class="space-y-4 bg-white p-4 border border-gray-300 rounded shadow-sm max-w-2xl">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <label class="block text-sm font-medium text-gray-700 sm:w-1/3">Default Renewal Period (Months):</label>
+                <input type="number" v-model.number="globalSettings.default_renewal_period" class="block w-full sm:w-24 rounded-md border-gray-300 shadow-sm border px-3 py-1.5 text-sm focus:ring-teal-500 focus:border-teal-500">
+              </div>
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <label class="block text-sm font-medium text-gray-700 sm:w-1/3">QATrack+ API URL:</label>
+                <input type="text" v-model="globalSettings.qatrack_api_url" placeholder="e.g. http://192.168.1.100:8000/api" class="block w-full sm:flex-grow rounded-md border-gray-300 shadow-sm border px-3 py-1.5 text-sm focus:ring-teal-500 focus:border-teal-500">
+              </div>
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <label class="block text-sm font-medium text-gray-700 sm:w-1/3">QATrack+ API Token:</label>
+                <input type="password" v-model="globalSettings.qatrack_api_token" placeholder="API Token" class="block w-full sm:flex-grow rounded-md border-gray-300 shadow-sm border px-3 py-1.5 text-sm focus:ring-teal-500 focus:border-teal-500">
+              </div>
+              <div class="pt-2">
+                <button @click="saveGlobalSettings" class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-6 rounded text-sm transition shadow-sm w-full sm:w-auto">Save Settings</button>
+              </div>
             </div>
           </div>
 
@@ -1029,15 +1049,39 @@
               </div>
               
               <template v-if="selectedCell.comp.required_qatrack_count > 0">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2">
-                  <div class="flex flex-col">
-                    <span class="text-gray-800 font-medium text-sm">QATrack+ Practical Evidence: <code class="text-xs bg-gray-100 px-1 rounded">{{ selectedCell.comp.qatrack_test_identifier }}</code></span>
-                    <span v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_manual_override" class="text-xs font-bold text-red-600 mt-0.5">Manual Override Active</span>
+                <div class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="flex flex-col">
+                      <span class="text-gray-800 font-medium text-sm">
+                        QATrack+ Records: <code class="text-xs bg-gray-100 px-1 rounded text-gray-600">{{ selectedCell.comp.qatrack_test_identifier }}</code>
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2 sm:ml-auto">
+                      <button @click="toggleQATrackEvidence(selectedCell.comp.id, selectedCell.user.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                        {{ showQaEvidenceFor === selectedCell.comp.id ? 'Hide Evidence' : 'Evidence' }}
+                      </button>
+                      <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0 }} / {{ selectedCell.comp.required_qatrack_count }}</span>
+                      <span v-if="(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0) >= selectedCell.comp.required_qatrack_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
+                      <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-2 sm:ml-auto">
-                    <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0 }} / {{ selectedCell.comp.required_qatrack_count }}</span>
-                    <span v-if="(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0) >= selectedCell.comp.required_qatrack_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
-                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                  
+                  <!-- The expanding box -->
+                  <div v-if="showQaEvidenceFor === selectedCell.comp.id" class="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm">
+                    <h4 class="font-bold text-gray-700 mb-2">Recent Approved Submissions</h4>
+                    <div v-if="!qaEvidenceCache[selectedCell.comp.id]">Loading evidence...</div>
+                    <div v-else>
+                      <ul v-if="qaEvidenceCache[selectedCell.comp.id].evidence.length > 0" class="space-y-2">
+                        <li v-for="(item, index) in qaEvidenceCache[selectedCell.comp.id].evidence" :key="index" class="flex justify-between items-center border-b pb-1 last:border-0 border-gray-200">
+                          <span>
+                            <strong>Date:</strong> {{ formatDate(item.date) }}<br>
+                            <span class="text-xs text-gray-500">Reviewed By: {{ item.reviewed_by }}</span>
+                          </span>
+                          <a :href="item.url" target="_blank" class="text-blue-500 text-xs hover:underline bg-white px-2 py-1 rounded border shadow-sm transition">View &rarr;</a>
+                        </li>
+                      </ul>
+                      <div v-else class="text-gray-500 italic">No approved test records found.</div>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -1099,7 +1143,7 @@
               <textarea v-model="adminEdit.signoff_comment" placeholder="Optional sign-off comment" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"></textarea>
             </div>
 
-            <div class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
+            <div v-if="selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz" class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
               <template v-if="selectedCell.comp.requires_instructions">
                 <label v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex items-center space-x-2 text-sm text-gray-800">
                   <input type="checkbox" :value="rp.id" v-model="adminEdit.readings_completed" class="rounded text-red-600 focus:ring-red-500">
@@ -1112,15 +1156,8 @@
                   <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
                 </div>
               </div>
-              <div v-if="selectedCell.comp.required_qatrack_count > 0" class="flex flex-col gap-1 mt-1">
-                <label class="text-sm text-gray-800 flex items-center justify-between">
-                  <span>QATrack+ Count:</span>
-                  <input type="number" v-model.number="adminEdit.qatrack_records" class="w-16 rounded border-gray-300 px-2 py-1 text-sm border bg-white">
-                </label>
-                <label class="flex items-center space-x-2 text-sm text-gray-800"><input type="checkbox" v-model="adminEdit.qatrack_manual_override" class="rounded text-red-600 focus:ring-red-500"><span>Disable API Sync (Manual mode)</span></label>
-              </div>
               
-              <button @click="saveAdminOverrides" class="mt-2 bg-gray-800 hover:bg-gray-900 text-white py-1.5 rounded text-sm font-medium transition shadow-sm w-full">Save Overrides</button>
+              <button v-if="selectedCell.comp.requires_instructions && selectedCell.comp.reading_prerequisites && selectedCell.comp.reading_prerequisites.length > 0" @click="saveAdminOverrides" class="mt-2 bg-gray-800 hover:bg-gray-900 text-white py-1.5 rounded text-sm font-medium transition shadow-sm w-full">Save Overrides</button>
             </div>
           </div>
         </div>
@@ -1151,7 +1188,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v1.1
+        James Burnley v1.2
       </div>
     </div>
   </div>
@@ -1463,7 +1500,10 @@
         const editingGroupId = ref(null);
         const editGroupValue = ref('');
         
-        const adminEdit = ref({ readings_completed: [], qatrack_records: null, qatrack_manual_override: false, status: 't', signoff_comment: '', date_override: '' });
+        const adminEdit = ref({ readings_completed: [], status: 't', signoff_comment: '', date_override: '' });
+        
+        const qaEvidenceCache = ref({});
+        const showQaEvidenceFor = ref(null);
         
         const activeLegends = ref([]);
         const selectedFilterCompetency = ref(null);
@@ -1858,6 +1898,8 @@
           isEditingUser.value = false;
           activeLibraryQuiz.value = null;
           isEditingQuiz.value = false;
+          showQaEvidenceFor.value = null;
+          qaEvidenceCache.value = {};
 
           if (!token.value) {
             await fetchPublicSummary();
@@ -1865,11 +1907,19 @@
 
           if (user.value && user.value.username) {
             try {
-              const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Database': selectedDb.value },
-                body: JSON.stringify({ username: user.value.username, password: password.value })
-              });
+              let response;
+              if (token.value) {
+                response = await fetch('/api/switch-db', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token.value}`, 'X-Database': selectedDb.value }
+                });
+              } else {
+                response = await fetch('/api/login', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'X-Database': selectedDb.value },
+                  body: JSON.stringify({ username: user.value.username, password: password.value })
+                });
+              }
               if (response.ok) {
                 const data = await response.json();
                 localStorage.setItem('token', data.token);
@@ -2091,6 +2141,7 @@
           if (setRes.ok) {
             const settingsData = await setRes.json();
             globalSettings.value.default_renewal_period = parseInt(settingsData.default_renewal_period) || 36;
+            if (settingsData.qatrack_api_url) globalSettings.value.qatrack_api_url = settingsData.qatrack_api_url;
             if (settingsData.sections) {
               try { globalSettings.value.sections = JSON.parse(settingsData.sections); } catch(e) {}
             } else {
@@ -2155,12 +2206,11 @@
         const openModal = async (u, comp) => { 
           selectedCell.value = { user: u, comp }; 
           signoffComment.value = '';
+          showQaEvidenceFor.value = null;
           const p = getProgressObj(u.id, comp.id);
           const currentStatus = p ? p.current_status : 't';
           adminEdit.value = {
             readings_completed: p && p.readings_completed ? p.readings_completed : [],
-            qatrack_records: p ? p.qatrack_records : null,
-            qatrack_manual_override: p ? !!p.qatrack_manual_override : false,
             status: currentStatus,
             signoff_comment: p && p.signoff_comment ? p.signoff_comment : '',
             date_override: p && p.date_signed_off ? p.date_signed_off.split('T')[0] : ''
@@ -2172,7 +2222,29 @@
             cellQuizzes.value = [];
           }
         };
-        const closeModal = () => { selectedCell.value = null; takingQuiz.value = false; };
+        const closeModal = () => { selectedCell.value = null; takingQuiz.value = false; showQaEvidenceFor.value = null; };
+
+        const toggleQATrackEvidence = async (competencyId, userId) => {
+          if (showQaEvidenceFor.value === competencyId) {
+            showQaEvidenceFor.value = null;
+            return;
+          }
+          showQaEvidenceFor.value = competencyId;
+          
+          if (!qaEvidenceCache.value[competencyId]) {
+            try {
+              const res = await fetch(`/api/competency/${competencyId}/qatrack-evidence?user_id=${userId}`, { headers: getHeaders() });
+              if (res.ok) {
+                qaEvidenceCache.value[competencyId] = await res.json();
+              }
+            } catch(e) { console.error("Error fetching QATrack evidence:", e); }
+          }
+        };
+
+        const formatDate = (dateString) => {
+          if (!dateString) return "Unknown";
+          return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+        };
 
         const getMilestone = (userId, compId, milestone, itemId) => {
           const p = progress.value.find(p => p.user_id === userId && p.competency_id === compId);
@@ -2634,7 +2706,7 @@
         const dbInfo = ref({ info: {}, settings: {} });
         const backupFile = ref(null);
         const frontendFile = ref(null);
-        const globalSettings = ref({ default_renewal_period: 36, sections: [{name: 'QA', active: true}, {name: 'Planning', active: true}, {name: 'Brachytherapy', active: true}, {name: 'SABR', active: true}] });
+        const globalSettings = ref({ default_renewal_period: 36, sections: [{name: 'QA', active: true}, {name: 'Planning', active: true}, {name: 'Brachytherapy', active: true}, {name: 'SABR', active: true}], qatrack_api_url: '', qatrack_api_token: '' });
         const newSectionName = ref('');
         const activeSections = computed(() => (globalSettings.value.sections || []).filter(s => s.active));
 
@@ -2644,6 +2716,8 @@
             if (res.ok) {
               dbInfo.value = await res.json();
               globalSettings.value.default_renewal_period = parseInt(dbInfo.value.settings.default_renewal_period) || 36;
+              globalSettings.value.qatrack_api_url = dbInfo.value.settings.qatrack_api_url || '';
+              globalSettings.value.qatrack_api_token = dbInfo.value.settings.qatrack_api_token || '';
               if (dbInfo.value.settings.sections) {
                 try { globalSettings.value.sections = JSON.parse(dbInfo.value.settings.sections); } catch(e) {}
               }
@@ -2742,7 +2816,11 @@
             const res = await fetch('/api/admin/settings', {
               method: 'POST',
               headers: getHeaders(true),
-              body: JSON.stringify({ default_renewal_period: globalSettings.value.default_renewal_period })
+              body: JSON.stringify({ 
+                default_renewal_period: globalSettings.value.default_renewal_period,
+                qatrack_api_url: globalSettings.value.qatrack_api_url,
+                qatrack_api_token: globalSettings.value.qatrack_api_token
+              })
             });
             if (!res.ok) throw new Error('Failed to save settings');
             customAlert(`Global settings saved successfully.`, "Success");
@@ -2825,6 +2903,7 @@
                  overviewFilterName, overviewFilterTask, overviewFilterCategory, overviewFilterGroup,
                  statistics, sectionSummaryStats, sectionApplicableUsers, expandedStatCategories, toggleStatCategory, groupedStatCompetencies,
                  getStatSectionDesignationAverage, getStatOverallDesignationAverage, getTimeInPost,
+                 qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate,
                  usersRequiringAssessment, usersObjectivesMet, getUserName, getUser,
                  myRenewalDue, myObjectivesMet, myAwaitingAssessment, activeSections,
                  statUserSortCol, statUserSortDir, toggleStatUserSort,
