@@ -123,7 +123,7 @@
               <span class="font-bold text-gray-700 mr-2">Legend:</span>
               <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-yellow-50 text-yellow-800 ring-yellow-600/20">T : Training</span>
               <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-purple-50 text-purple-700 ring-purple-600/20">M : Meets Requirements</span>
-              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-orange-50 text-orange-800 ring-orange-600/20">A : Assessment Requested</span>
+              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-orange-50 text-orange-800 ring-orange-600/20">A : Assessment Pending</span>
               <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-green-50 text-green-700 ring-green-600/20">C : Competent</span>
               <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset bg-blue-50 text-blue-700 ring-blue-700/10">X : Competent to Train</span>
             </div>
@@ -202,9 +202,9 @@
 
         
         <!-- Action Items (Tasks Due/Ready) -->
-        <div v-if="currentTab === 'individual' && (myRenewalDue.length > 0 || myObjectivesMet.length > 0 || myAwaitingAssessment.length > 0)" class="space-y-4 mb-6">
+        <div v-if="currentTab === 'individual' && (myRenewalDue?.length > 0 || myPreEvalDue?.length > 0 || myPostEvalDue?.length > 0 || myObjectivesMet?.length > 0 || myAwaitingAssessment?.length > 0)" class="space-y-4 mb-6">
           <!-- Renewal Due -->
-          <div v-if="myRenewalDue.length > 0" class="bg-red-50 p-4 rounded-lg shadow-sm border border-red-200">
+          <div v-if="myRenewalDue?.length > 0" class="bg-red-50 p-4 rounded-lg shadow-sm border border-red-200">
             <h3 class="text-lg font-bold mb-3 text-red-800">⚠️ Competencies Due for Renewal</h3>
             <ul class="space-y-2">
               <li v-for="comp in myRenewalDue" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-red-100 cursor-pointer hover:bg-red-50 transition" @click="openModal(user, comp)">
@@ -213,8 +213,28 @@
               </li>
             </ul>
           </div>
+          <!-- Pre Assessment Due -->
+          <div v-if="myPreEvalDue?.length > 0" class="bg-blue-50 p-4 rounded-lg shadow-sm border border-blue-200">
+            <h3 class="text-lg font-bold mb-3 text-blue-800">📝 Pre-Training Evaluation Due</h3>
+            <ul class="space-y-2">
+              <li v-for="comp in myPreEvalDue" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-blue-100 cursor-pointer hover:bg-blue-50 transition" @click="openModal(user, comp)">
+                <span class="font-medium text-gray-800">{{ comp.category }} - {{ comp.task_name }}</span>
+                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded font-semibold text-xs whitespace-nowrap">Evaluate</span>
+              </li>
+            </ul>
+          </div>
+          <!-- Post Assessment Due -->
+          <div v-if="myPostEvalDue?.length > 0" class="bg-indigo-50 p-4 rounded-lg shadow-sm border border-indigo-200">
+            <h3 class="text-lg font-bold mb-3 text-indigo-800">📊 Post-Training Evaluation Due</h3>
+            <ul class="space-y-2">
+              <li v-for="comp in myPostEvalDue" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-indigo-100 cursor-pointer hover:bg-indigo-50 transition" @click="openModal(user, comp)">
+                <span class="font-medium text-gray-800">{{ comp.category }} - {{ comp.task_name }}</span>
+                <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded font-semibold text-xs whitespace-nowrap">Evaluate</span>
+              </li>
+            </ul>
+          </div>
           <!-- Objectives Met -->
-          <div v-if="myObjectivesMet.length > 0" class="bg-purple-50 p-4 rounded-lg shadow-sm border border-purple-200">
+          <div v-if="myObjectivesMet?.length > 0" class="bg-purple-50 p-4 rounded-lg shadow-sm border border-purple-200">
             <h3 class="text-lg font-bold mb-3 text-purple-800">🎓 Objectives Met</h3>
             <ul class="space-y-2">
               <li v-for="comp in myObjectivesMet" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-purple-100 cursor-pointer hover:bg-purple-50 transition" @click="openModal(user, comp)">
@@ -224,8 +244,8 @@
             </ul>
           </div>
           <!-- Awaiting Assessment -->
-          <div v-if="myAwaitingAssessment.length > 0" class="bg-orange-50 p-4 rounded-lg shadow-sm border border-orange-200">
-            <h3 class="text-lg font-bold mb-3 text-orange-800">⏳ Awaiting Assessment</h3>
+          <div v-if="myAwaitingAssessment?.length > 0" class="bg-orange-50 p-4 rounded-lg shadow-sm border border-orange-200">
+            <h3 class="text-lg font-bold mb-3 text-orange-800">⏳ Assessment Pending</h3>
             <ul class="space-y-2">
               <li v-for="comp in myAwaitingAssessment" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm border border-orange-100 cursor-pointer hover:bg-orange-50 transition" @click="openModal(user, comp)">
                 <span class="font-medium text-gray-800">{{ comp.category }} - {{ comp.task_name }}</span>
@@ -305,14 +325,14 @@
         <!-- Legend -->
         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center text-sm mt-4">
           <span class="font-bold text-gray-700 mr-2">Legend / Filters (Click to toggle):</span>
-          <button @click="toggleLegend('t')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('t') || activeLegends.length === 0 ? 'bg-yellow-50 text-yellow-800 ring-yellow-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">T : Training</button>
-          <button @click="toggleLegend('m')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('m') || activeLegends.length === 0 ? 'bg-purple-50 text-purple-700 ring-purple-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">M : Meets Requirements</button>
-          <button @click="toggleLegend('a')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('a') || activeLegends.length === 0 ? 'bg-orange-50 text-orange-800 ring-orange-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">A : Assessment Requested</button>
-          <button @click="toggleLegend('c')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('c') || activeLegends.length === 0 ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">C : Competent</button>
-          <button @click="toggleLegend('x')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('x') || activeLegends.length === 0 ? 'bg-blue-50 text-blue-700 ring-blue-700/10' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">X : Competent to Train</button>
-          <button @click="toggleLegend('renewal')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('renewal') || activeLegends.length === 0 ? 'bg-red-50 text-red-700 ring-red-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">⚠️ : Renewal Due</button>
+          <button @click="toggleLegend('t')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('t') || activeLegends?.length === 0 ? 'bg-yellow-50 text-yellow-800 ring-yellow-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">T : Training</button>
+          <button @click="toggleLegend('m')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('m') || activeLegends?.length === 0 ? 'bg-purple-50 text-purple-700 ring-purple-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">M : Meets Requirements</button>
+          <button @click="toggleLegend('a')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('a') || activeLegends?.length === 0 ? 'bg-orange-50 text-orange-800 ring-orange-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">A : Assessment Pending</button>
+          <button @click="toggleLegend('c')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('c') || activeLegends?.length === 0 ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">C : Competent</button>
+          <button @click="toggleLegend('x')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('x') || activeLegends?.length === 0 ? 'bg-blue-50 text-blue-700 ring-blue-700/10' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">X : Competent to Train</button>
+          <button @click="toggleLegend('renewal')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('renewal') || activeLegends?.length === 0 ? 'bg-red-50 text-red-700 ring-red-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">⚠️ : Renewal Due</button>
           <div class="ml-2 px-2 py-1 text-xs text-gray-500 font-semibold border-l border-gray-300">* : Sign-off comment attached</div>
-          <button @click="activeLegends = []; selectedFilterCompetency = null;" v-if="activeLegends.length > 0 || selectedFilterCompetency" class="text-xs text-blue-600 hover:underline ml-auto font-semibold">Clear Filters</button>
+          <button @click="activeLegends = []; selectedFilterCompetency = null;" v-if="activeLegends?.length > 0 || selectedFilterCompetency" class="text-xs text-blue-600 hover:underline ml-auto font-semibold">Clear Filters</button>
         </div>
       </div>
       
@@ -380,22 +400,48 @@
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Task Name</label><input v-model="newComp.task_name" required type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="e.g. Monthly Output"></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label><textarea v-model="newComp.description" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="Provide additional details about this competency..."></textarea></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Renewal Period (Months)</label><input v-model.number="newComp.renewal_period_months" type="number" min="1" class="block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" :placeholder="`Default: ${globalSettings.default_renewal_period || 36}`"></div>
-              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm">
-                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_qatrack" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires QATrack+ Records</span></label>
-                <div v-if="newComp.requires_qatrack" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
-                  <div><label class="block text-sm font-medium text-gray-700 mb-1">Required Count</label><input v-model.number="newComp.required_qatrack_count" type="number" min="1" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2"></div>
-                  <div><label class="block text-sm font-medium text-gray-700 mb-1">Test Identifier</label><input v-model="newComp.qatrack_test_identifier" type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="e.g. LINAC_MONTHLY_QA"></div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="flex items-center space-x-2 cursor-pointer font-semibold text-gray-700 mb-2">Self-Evaluation Questionnaires</label>
+                <div class="flex flex-col gap-2 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" v-model="newComp.requires_pre_eval" class="h-4 w-4 text-blue-600 rounded">
+                    <span class="text-sm font-medium text-gray-700">Required Pre-Training (must be completed to reach 'M' status)</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" v-model="newComp.requires_post_eval" class="h-4 w-4 text-blue-600 rounded">
+                    <span class="text-sm font-medium text-gray-700">Required Post-Training (must score ≥3 on all dimensions to request assessment)</span>
+                  </label>
                 </div>
               </div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
-                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_instructions" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires Protocol Reading</span></label>
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.allow_file_uploads" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Allow File Uploads as Evidence</span></label>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm">
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_qatrack" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires QATrack+ Records</span></label>
+                <div v-if="newComp.requires_qatrack" class="mt-3 pt-3 border-t border-gray-100">
+                  <div v-for="(req, idx) in newComp.qatrack_requirements" :key="idx" class="flex flex-col sm:flex-row gap-2 mb-2 p-2 border border-gray-200 rounded bg-gray-50 items-start sm:items-end">
+                    <div class="w-full sm:w-1/3">
+                      <label class="block text-xs font-semibold text-gray-600 mb-1">Count</label>
+                      <input v-model.number="req.count" type="number" min="1" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 sm:text-sm border px-3 py-1.5">
+                    </div>
+                    <div class="w-full sm:flex-grow">
+                      <label class="block text-xs font-semibold text-gray-600 mb-1">Test Identifier</label>
+                      <input v-model="req.identifier" type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 sm:text-sm border px-3 py-1.5" placeholder="e.g. LINAC_MONTHLY_QA">
+                    </div>
+                    <button type="button" @click="newComp.qatrack_requirements.splice(idx, 1)" class="bg-red-100 hover:bg-red-200 text-red-600 font-bold px-3 py-1.5 rounded shadow-sm transition mt-2 sm:mt-0">X</button>
+                  </div>
+                  <button type="button" @click="newComp.qatrack_requirements.push({count: 1, identifier: ''})" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded shadow-sm font-semibold transition mt-1">+ Add Requirement</button>
+                </div>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_instructions" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires Prerequisite Tasks</span></label>
                 <div v-if="newComp.requires_instructions" class="mt-3 pt-3 border-t border-gray-100">
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Reading Prerequisites</label>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Prerequisite Tasks</label>
                   <div v-for="(rp, idx) in newComp.reading_prerequisites" :key="idx" class="flex gap-2 mb-2">
                     <input v-model="rp.name" class="block w-full rounded border px-3 py-1 text-sm" placeholder="e.g. Protocol">
                     <button type="button" @click="newComp.reading_prerequisites.splice(idx, 1)" class="bg-red-100 hover:bg-red-200 text-red-600 font-bold px-3 py-1 rounded shadow-sm transition">X</button>
                   </div>
-                  <button type="button" @click="newComp.reading_prerequisites.push({id: Date.now().toString() + Math.random().toString(), name: ''})" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded shadow-sm font-semibold transition">+ Add Reading Prerequisite</button>
+                  <button type="button" @click="newComp.reading_prerequisites.push({id: Date.now().toString() + Math.random().toString(), name: ''})" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded shadow-sm font-semibold transition">+ Add Prerequisite Task</button>
                 </div>
               </div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
@@ -410,7 +456,7 @@
                         <span class="font-medium">{{c.task_name}}</span>
                       </label>
                     </template>
-                    <div v-if="orderedCompetenciesByGroup.length === 0" class="text-xs text-gray-500 italic p-1">No other competencies available.</div>
+                    <div v-if="orderedCompetenciesByGroup?.length === 0" class="text-xs text-gray-500 italic p-1">No other competencies available.</div>
                   </div>
                 </div>
               </div>
@@ -423,7 +469,7 @@
                           <input type="checkbox" :value="q.id" v-model="newComp.quiz_ids" class="h-4 w-4 text-blue-600 rounded">
                           <span>{{ q.name }}</span>
                       </label>
-                      <div v-if="quizLibrary.length === 0" class="text-xs text-gray-500 italic p-1">No quizzes in library. Create them in the 'Quizzes' tab.</div>
+                  <div v-if="quizLibrary?.length === 0" class="text-xs text-gray-500 italic p-1">No quizzes in library. Create them in the 'Quizzes' tab.</div>
                   </div>
                 </div>
               </div>
@@ -443,7 +489,7 @@
                     <input type="checkbox" :value="u.id" v-model="newComp.target_users" class="h-4 w-4 text-blue-600 rounded">
                     <span class="font-medium">{{ u.full_name }} <span class="text-xs text-gray-500 font-normal">({{ u.designation }})</span></span>
                   </label>
-                  <div v-if="availableIndividualUsers.length === 0" class="text-xs text-gray-500 italic p-1">No additional users available.</div>
+                  <div v-if="availableIndividualUsers?.length === 0" class="text-xs text-gray-500 italic p-1">No additional users available.</div>
                 </div>
               </div>
               <div class="sm:col-span-2 flex gap-2 mt-2">
@@ -478,12 +524,12 @@
                 <span class="font-medium text-gray-700 w-1/4 truncate pr-2" :title="c.category">{{ c.category }}</span>
                 <span class="flex-grow truncate pr-2" :title="c.task_name">{{ c.task_name }}</span>
               </div>
-              <div class="flex justify-end gap-3 items-center mt-2 sm:mt-0 w-full sm:w-24">
-                <button @click="editComp(c)" class="text-blue-600 hover:text-blue-800 font-semibold">Edit</button>
-                <button @click="deleteComp(c.id)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+              <div class="flex justify-end gap-2 items-center mt-2 sm:mt-0 w-full sm:w-32">
+                <button @click="editComp(c)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                <button @click="deleteComp(c.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
               </div>
             </div>
-            <div v-if="filteredAndSortedCompetencies.length === 0" class="px-3 py-4 text-center text-gray-500 italic border border-gray-200 rounded bg-gray-50">No competencies match filter.</div>
+            <div v-if="filteredAndSortedCompetencies?.length === 0" class="px-3 py-4 text-center text-gray-500 italic border border-gray-200 rounded bg-gray-50">No competencies match filter.</div>
           </div>
         </div>
         
@@ -547,12 +593,14 @@
                           <span v-if="quizStats[q.id]?.inUse" class="text-green-600 font-bold">✓</span>
                           <span v-else class="text-red-600 font-bold">✗</span>
                         </td>
-                        <td class="px-3 py-2 text-sm text-right flex justify-end items-center gap-3">
-                          <button @click="editLibraryQuiz(q.id)" class="text-blue-600 hover:text-blue-800">Edit</button>
-                          <button @click="deleteLibraryQuiz(q.id)" class="text-red-600 hover:text-red-800">Delete</button>
+                    <td class="px-3 py-2 text-sm text-right">
+                      <div class="flex justify-end items-center gap-2">
+                        <button @click="editLibraryQuiz(q.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                        <button @click="deleteLibraryQuiz(q.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
+                      </div>
                         </td>
                       </tr>
-                      <tr v-if="quizLibrary.length === 0"><td colspan="3" class="px-3 py-4 text-center text-gray-500 italic">No quizzes in the library.</td></tr>
+                      <tr v-if="quizLibrary?.length === 0"><td colspan="3" class="px-3 py-4 text-center text-gray-500 italic">No quizzes in the library.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -628,7 +676,12 @@
                     {{ u.is_active !== 0 ? 'Active' : 'Archived' }}
                   </button>
                 </td>
-                <td class="px-3 py-2 text-sm text-right flex justify-end gap-3"><button @click="editUser(u)" class="text-blue-600 hover:text-blue-800">Edit</button><button @click="deleteUser(u.id)" class="text-red-600 hover:text-red-800">Delete</button></td>
+                <td class="px-3 py-2 text-sm text-right">
+                  <div class="flex justify-end items-center gap-2">
+                    <button @click="editUser(u)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                    <button @click="deleteUser(u.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -658,10 +711,10 @@
                   <span v-if="editingGroupId !== g.id" class="flex-grow">{{ g.name }}</span>
                   <input v-else v-model="editGroupValue" @keyup.enter="updateGroup(g.id)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
                 </div>
-                <div class="flex gap-2 items-center w-32 justify-end">
-                  <button v-if="editingGroupId !== g.id" @click="startEditGroup(g)" class="text-blue-600 hover:text-blue-800 font-semibold">Edit</button>
-                  <button v-else @click="updateGroup(g.id)" class="text-green-600 hover:text-green-800 font-semibold">Save</button>
-                  <button @click="deleteGroup(g.id)" class="text-red-600 hover:text-red-800 font-semibold ml-2">Delete</button>
+                <div class="flex gap-2 items-center justify-end">
+                  <button v-if="editingGroupId !== g.id" @click="startEditGroup(g)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                  <button v-else @click="updateGroup(g.id)" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Save</button>
+                  <button @click="deleteGroup(g.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
                 </div>
               </div>
             </div>
@@ -693,9 +746,9 @@
                     <input v-else v-model="editCategoryValue" @keyup.enter="updateCategory(cat.category)" class="border border-gray-300 px-2 py-1 rounded text-sm w-full max-w-sm focus:ring-blue-500 focus:border-blue-500">
                   </div>
                   <div class="flex gap-2 items-center">
-                    <button v-if="editingCategoryName !== cat.category" @click="startEditCategory(cat)" class="text-blue-600 hover:text-blue-800 ml-3 font-semibold">Edit</button>
-                    <button v-else @click="updateCategory(cat.category)" class="text-green-600 hover:text-green-800 ml-3 font-semibold">Save</button>
-                    <button @click="deleteCategory(cat.category)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+                    <button v-if="editingCategoryName !== cat.category" @click="startEditCategory(cat)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                    <button v-else @click="updateCategory(cat.category)" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Save</button>
+                    <button @click="deleteCategory(cat.category)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
                   </div>
                 </div>
               </div>
@@ -737,6 +790,30 @@
                 </div>
               </div>
               
+              <!-- Self Evaluation Stats -->
+              <div class="flex justify-end mb-2">
+                <select v-model="statEvalDateRange" class="border border-gray-300 rounded px-3 py-1 text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+                  <option value="all">All Time</option>
+                  <option value="12">Last 12 Months</option>
+                  <option value="6">Last 6 Months</option>
+                  <option value="3">Last 3 Months</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-white p-4 rounded border border-gray-200 shadow-sm">
+                  <h4 class="font-bold text-gray-800 mb-2 text-center">Section Self-Evaluation Average</h4>
+                  <div class="relative h-64 w-full">
+                    <canvas id="statChart-eval-section"></canvas>
+                  </div>
+                </div>
+                <div class="bg-white p-4 rounded border border-gray-200 shadow-sm">
+                  <h4 class="font-bold text-gray-800 mb-2 text-center">Global Self-Evaluation Average</h4>
+                  <div class="relative h-64 w-full">
+                    <canvas id="statChart-eval-global"></canvas>
+                  </div>
+                </div>
+              </div>
+
               <!-- Users Table -->
               <div class="bg-white rounded border border-gray-200 shadow-sm overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-300">
@@ -751,7 +828,9 @@
                   </thead>
                   <tbody class="divide-y divide-gray-200">
                     <tr v-for="u in sectionApplicableUsers" :key="u.id" class="hover:bg-gray-50">
-                      <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ u.full_name }}</td>
+                      <td class="px-4 py-2 text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 hover:underline" @click="openStatUserModal(u)">
+                        {{ u.full_name }}
+                      </td>
                       <td class="px-4 py-2 text-sm text-gray-500">{{ u.designation }}</td>
                       <td class="px-4 py-2 text-sm text-gray-500">{{ getTimeInPost(u.date_in_post) }}</td>
                       <td class="px-4 py-2 text-sm align-middle">
@@ -793,6 +872,7 @@
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('c')">Competent (C) <span v-if="statCompSortCol === 'c'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('x')">Assessor (X) <span v-if="statCompSortCol === 'x'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                       <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('total')">Total Applicable Staff <span v-if="statCompSortCol === 'total'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
+                      <th class="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-gray-200 select-none" @click="toggleStatCompSort('avgTimeDays')">Avg. Time to Achieve <span v-if="statCompSortCol === 'avgTimeDays'" class="text-xs">{{ statCompSortDir === 1 ? '▲' : '▼' }}</span></th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-200">
@@ -822,6 +902,9 @@
                         <td class="px-4 py-2 text-sm text-center font-semibold text-gray-600">
                           {{ group.total }}
                         </td>
+                        <td class="px-4 py-2 text-sm text-center font-semibold text-gray-600">
+                          {{ group.avgTimeDays !== null ? group.avgTimeDays + ' days' : '-' }}
+                        </td>
                       </tr>
                       <!-- Nested Task Rows -->
                       <tr v-if="expandedStatCategories.includes(group.category)" v-for="c in group.items" :key="c.id" class="hover:bg-gray-50 bg-white">
@@ -833,6 +916,7 @@
                         <td class="px-4 py-2 text-sm text-center font-bold text-green-700">{{ c.c }}</td>
                         <td class="px-4 py-2 text-sm text-center font-bold text-blue-700">{{ c.x }}</td>
                         <td class="px-4 py-2 text-sm text-center text-gray-500">{{ c.total }}</td>
+                        <td class="px-4 py-2 text-sm text-center text-gray-500">{{ c.avgTimeDays !== null ? c.avgTimeDays + ' days' : '-' }}</td>
                       </tr>
                     </template>
                   </tbody>
@@ -865,10 +949,12 @@
                     <td class="px-3 py-2 text-sm">{{ info.size }}</td>
                     <td class="px-3 py-2 text-sm">{{ info.entries }}</td>
                   <td class="px-3 py-2 text-sm">{{ [dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0] ? new Date([dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0]).toLocaleString() : 'Never' }}</td>
-                    <td class="px-3 py-2 text-sm text-right flex justify-end gap-2">
+                  <td class="px-3 py-2 text-sm text-right">
+                    <div class="flex justify-end items-center gap-2">
                       <button @click="backupDatabase(name)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-semibold py-1 px-2 rounded text-xs transition shadow-sm">Backup</button>
                       <button @click="triggerRestore(name)" class="bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold py-1 px-2 rounded text-xs transition shadow-sm">Restore</button>
-                    </td>
+                    </div>
+                  </td>
                   </tr>
                 </tbody>
               </table>
@@ -889,6 +975,32 @@
                 </div>
               </div>
             </div>
+
+              <div class="border border-gray-300 p-4 rounded bg-white shadow-sm mt-6">
+                <h4 class="font-bold text-gray-800 mb-2">File Uploads Management</h4>
+                <p class="text-xs text-gray-500 mb-4">Monitor disk usage of file uploads per section, delete all files, or download a ZIP backup.</p>
+                <table class="min-w-full divide-y divide-gray-200 mb-4">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Section</th>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Disk Usage</th>
+                      <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <tr v-for="stat in uploadStats" :key="stat.section">
+                      <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{{ stat.section }}</td>
+                      <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{{ formatBytes(stat.bytes) }}</td>
+                      <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 text-right">
+                        <div class="flex justify-end items-center gap-2">
+                          <button @click="downloadUploadsBackup(stat.section)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm" :disabled="stat.bytes === 0" :class="{'opacity-50 cursor-not-allowed': stat.bytes === 0}">Backup (ZIP)</button>
+                          <button @click="deleteSectionUploads(stat.section)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm" :disabled="stat.bytes === 0" :class="{'opacity-50 cursor-not-allowed': stat.bytes === 0}">Delete All</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
           </div>
 
           <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
@@ -915,8 +1027,9 @@
                 <label class="block text-sm font-medium text-gray-700 sm:w-1/3">QATrack+ API Token:</label>
                 <input type="password" v-model="globalSettings.qatrack_api_token" placeholder="API Token" class="block w-full sm:flex-grow rounded-md border-gray-300 shadow-sm border px-3 py-1.5 text-sm focus:ring-teal-500 focus:border-teal-500">
               </div>
-              <div class="pt-2">
+              <div class="pt-2 flex flex-col sm:flex-row gap-2">
                 <button @click="saveGlobalSettings" class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-6 rounded text-sm transition shadow-sm w-full sm:w-auto">Save Settings</button>
+                <button @click="testQATrackConnection" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded text-sm transition shadow-sm w-full sm:w-auto">Test Connection</button>
               </div>
             </div>
           </div>
@@ -937,8 +1050,10 @@
                   <td class="px-3 py-2 text-sm text-center">
                     <button @click="toggleSectionActive(idx)" :class="['px-2 py-1 rounded text-xs font-bold transition shadow-sm', section.active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600']">{{ section.active ? 'Active' : 'Inactive' }}</button>
                   </td>
-                  <td class="px-3 py-2 text-sm text-right flex justify-end gap-2">
-                    <button @click="deleteSection(section.name)" class="text-red-600 hover:text-red-800 font-semibold">Delete</button>
+                  <td class="px-3 py-2 text-sm text-right">
+                    <div class="flex justify-end items-center gap-2">
+                      <button @click="deleteSection(section.name)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -970,7 +1085,7 @@
             <div class="flex items-center gap-2 mb-2">
               <span class="text-sm font-semibold">Current Status:</span>
               <span :class="getStatusBadgeClass(selectedCell.user.id, selectedCell.comp.id)">
-                {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Requested', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(selectedCell.user.id, selectedCell.comp.id)] || 'Not Started' }}
+                {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(selectedCell.user.id, selectedCell.comp.id)] || 'Not Started' }}
               </span>
             </div>
             <div class="text-xs text-gray-500 font-medium">Date Started: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
@@ -984,38 +1099,85 @@
           <div class="mb-4">
             <h4 class="font-semibold text-gray-800 mb-3">Training Milestones</h4>
             <div class="flex flex-col gap-3">
-              <template v-if="selectedCell.comp.requires_prerequisite_competencies && selectedCell.comp.prerequisite_competencies?.length > 0">
-                <div v-for="pc in getOrderedPrereqs(selectedCell.comp.prerequisite_competencies)" :key="pc.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
-                  <span class="text-gray-800 font-medium text-sm">Prerequisite: {{ pc.category }} - {{ pc.task_name }}</span>
+              <template v-if="selectedCell.comp.requires_pre_eval">
+                <div class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
+                  <span class="text-gray-800 font-medium text-sm">Pre-Training Evaluation</span>
                   <div class="flex items-center gap-2">
-                    <span v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, pc.id))" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded">✓ Met</span>
-                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded">✗ Pending</span>
+                    <button v-if="selectedCell.user.id === user.id && !latestPreEvaluation" 
+                            @click="takingEval = 'pre'" 
+                            class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                      Start
+                    </button>
+                    <span v-if="latestPreEvaluation" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Completed</span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                  </div>
+                </div>
+                
+                <div v-if="takingEval === 'pre'" class="mt-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                  <h4 class="font-bold text-gray-800 mb-3 border-b pb-2">Pre-Training Questionnaire</h4>
+                  
+                  <div class="mb-4 bg-white p-3 border rounded">
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">A: Practical Execution</label>
+                    <p class="text-xs text-gray-600 mb-2">How would you rate your current ability to safely and independently execute the practical steps of this task?</p>
+                    <input type="range" min="1" max="5" v-model.number="evaluationScores.a" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                    <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.a }} -</span> {{ evalTexts.a[evaluationScores.a] }}</div>
+                  </div>
+
+                  <div class="mb-4 bg-white p-3 border rounded">
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">B: Theoretical & Protocol Knowledge</label>
+                    <p class="text-xs text-gray-600 mb-2">How confident are you in your understanding of the underlying theory, physics principles, and local IR(ME)R protocols governing this task?</p>
+                    <input type="range" min="1" max="5" v-model.number="evaluationScores.b" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                    <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.b }} -</span> {{ evalTexts.b[evaluationScores.b] }}</div>
+                  </div>
+
+                  <div class="mb-4 bg-white p-3 border rounded">
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">C: Independent Troubleshooting</label>
+                    <p class="text-xs text-gray-600 mb-2">How confident are you in your ability to independently troubleshoot unexpected issues, equipment faults, or measurement tolerances during this task?</p>
+                    <input type="range" min="1" max="5" v-model.number="evaluationScores.c" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                    <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.c }} -</span> {{ evalTexts.c[evaluationScores.c] }}</div>
+                  </div>
+
+                  <div class="flex gap-2">
+                    <button @click="submitEvaluation" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded transition shadow-sm">Submit Answers</button>
+                    <button @click="takingEval = null" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold py-2 px-4 rounded transition shadow-sm">Cancel</button>
                   </div>
                 </div>
               </template>
 
-              <template v-if="selectedCell.comp.requires_instructions">
-                <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
-                  <span class="text-gray-800 font-medium text-sm">{{ rp.name }}</span>
+              <div v-if="selectedCell.comp.requires_prerequisite_competencies && selectedCell.comp.prerequisite_competencies?.length > 0" class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2">
+                <span class="text-gray-800 font-medium text-sm border-b pb-1">Prerequisite Competencies</span>
+                <div v-for="pc in getOrderedPrereqs(selectedCell.comp.prerequisite_competencies)" :key="pc.id" class="flex items-center justify-between">
+                  <span class="text-gray-700 text-sm">{{ pc.category }} - {{ pc.task_name }}</span>
+                  <div class="flex items-center gap-2">
+                    <span v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, pc.id))" class="text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded">✓ Met</span>
+                    <span v-else class="text-yellow-600 font-bold text-xs bg-yellow-50 px-2 py-1 rounded">✗ Pending</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="selectedCell.comp.requires_instructions && selectedCell.comp.reading_prerequisites?.length > 0" class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2">
+                <span class="text-gray-800 font-medium text-sm border-b pb-1">Prerequisite Tasks</span>
+                <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex items-center justify-between">
+                  <span class="text-gray-700 text-sm">{{ rp.name }}</span>
                   <div class="flex items-center gap-2">
                     <label v-if="selectedCell.user.id === user.id && !getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="cursor-pointer bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
                       <input type="checkbox" class="hidden" @change="updateMilestone('reading', $event.target.checked, rp.id)">
-                      Mark as Read
+                      Mark as Done
                     </label>
                     <label v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="cursor-pointer text-xs text-gray-500 hover:underline whitespace-nowrap">
                       <input type="checkbox" class="hidden" @change="updateMilestone('reading', false, rp.id)">
-                      Unmark
+                      Undo
                     </label>
 
-                    <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded">✓ Read</span>
-                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded">✗ Unread</span>
+                    <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" class="text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded">✓ Done</span>
+                    <span v-else class="text-yellow-600 font-bold text-xs bg-yellow-50 px-2 py-1 rounded">✗ Not Done</span>
                   </div>
                 </div>
-              </template>
+              </div>
               
-              <template v-if="selectedCell.comp.requires_quiz && cellQuizzes.length > 0">
+              <template v-if="selectedCell.comp.requires_quiz && cellQuizzes?.length > 0">
                 <div v-for="qz in cellQuizzes" :key="qz.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
-                  <span class="text-gray-800 font-medium text-sm">Pass Quiz: {{ qz.name }}</span>
+                  <span class="text-gray-800 font-medium text-sm">Quiz: {{ qz.name }}</span>
                   <div class="flex items-center gap-2">
                     <button v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="loadQuizForTaking(qz.id)" class="text-xs text-blue-600 hover:underline whitespace-nowrap">Retake</button>
                     <button v-else-if="selectedCell.user.id === user.id" @click="loadQuizForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">Take Quiz</button>
@@ -1048,31 +1210,39 @@
                 <div class="flex gap-2"><button @click="submitQuiz" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded">Submit Answers</button><button @click="takingQuiz = false" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold px-4 py-2 rounded">Cancel</button></div>
               </div>
               
-              <template v-if="selectedCell.comp.required_qatrack_count > 0">
-                <div class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2">
+              <div v-if="selectedCell.comp.qatrack_requirements && selectedCell.comp.qatrack_requirements?.length > 0" class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-3">
+                <div class="flex justify-between items-center border-b pb-1">
+                  <span class="text-gray-800 font-medium text-sm">QATrack+ Records</span>
+                  <button v-if="selectedCell.user.id === user.id" @click="syncSelectedCompetency" :disabled="isSyncing" class="text-xs text-blue-600 hover:text-blue-800 font-semibold disabled:opacity-50 transition">{{ isSyncing ? 'Syncing...' : '↻ Sync Now' }}</button>
+                </div>
+                <div v-for="(req, idx) in selectedCell.comp.qatrack_requirements" :key="idx" class="flex flex-col gap-2">
                   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div class="flex flex-col">
-                      <span class="text-gray-800 font-medium text-sm">
-                        QATrack+ Records: <code class="text-xs bg-gray-100 px-1 rounded text-gray-600">{{ selectedCell.comp.qatrack_test_identifier }}</code>
-                      </span>
+                      <code class="text-xs bg-gray-100 px-1 rounded text-gray-600 font-semibold">{{ req.identifier }}</code>
                     </div>
                     <div class="flex items-center gap-2 sm:ml-auto">
-                      <button @click="toggleQATrackEvidence(selectedCell.comp.id, selectedCell.user.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
-                        {{ showQaEvidenceFor === selectedCell.comp.id ? 'Hide Evidence' : 'Evidence' }}
+                      <button @click="toggleQATrackEvidence(selectedCell.comp.id, selectedCell.user.id, req.identifier)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                        {{ showQaEvidenceFor === selectedCell.comp.id + '-' + req.identifier ? 'Hide Evidence' : 'Evidence' }}
                       </button>
-                      <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0 }} / {{ selectedCell.comp.required_qatrack_count }}</span>
-                      <span v-if="(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records ?? 0) >= selectedCell.comp.required_qatrack_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
+                      <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records_detail?.[req.identifier] ?? 0 }} / {{ req.count }}</span>
+                      <span v-if="(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.qatrack_records_detail?.[req.identifier] ?? 0) >= req.count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
                       <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
                     </div>
                   </div>
                   
-                  <!-- The expanding box -->
-                  <div v-if="showQaEvidenceFor === selectedCell.comp.id" class="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm">
-                    <h4 class="font-bold text-gray-700 mb-2">Recent Approved Submissions</h4>
+                  <div v-if="showQaEvidenceFor === selectedCell.comp.id + '-' + req.identifier" class="mt-1 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm">
                     <div v-if="!qaEvidenceCache[selectedCell.comp.id]">Loading evidence...</div>
+                    <div v-else-if="!qaEvidenceCache[selectedCell.comp.id].find(e => e.identifier === req.identifier)">Loading...</div>
                     <div v-else>
-                      <ul v-if="qaEvidenceCache[selectedCell.comp.id].evidence.length > 0" class="space-y-2">
-                        <li v-for="(item, index) in qaEvidenceCache[selectedCell.comp.id].evidence" :key="index" class="flex justify-between items-center border-b pb-1 last:border-0 border-gray-200">
+                      <div class="mb-4 bg-white p-2 rounded border border-gray-200 shadow-sm" v-show="qaEvidenceCache[selectedCell.comp.id].find(e => e.identifier === req.identifier)?.all_dates?.length > 0">
+                        <h5 class="font-semibold text-gray-700 mb-1 text-xs text-center">Historical Timeline</h5>
+                        <div class="relative w-full h-12">
+                          <canvas :id="'qatrack-chart-' + selectedCell.comp.id + '-' + req.identifier"></canvas>
+                        </div>
+                      </div>
+                      <h5 class="font-semibold text-gray-700 mb-2 text-xs">Recent Approved Submissions:</h5>
+                      <ul v-if="qaEvidenceCache[selectedCell.comp.id].find(e => e.identifier === req.identifier)?.evidence?.length > 0" class="space-y-2">
+                        <li v-for="(item, index) in qaEvidenceCache[selectedCell.comp.id].find(e => e.identifier === req.identifier).evidence" :key="index" class="flex justify-between items-center border-b pb-1 last:border-0 border-gray-200">
                           <span>
                             <strong>Date:</strong> {{ formatDate(item.date) }}<br>
                             <span class="text-xs text-gray-500">Reviewed By: {{ item.reviewed_by }}</span>
@@ -1084,11 +1254,83 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <template v-if="selectedCell.comp.allow_file_uploads">
+                <div class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-3 mt-1">
+                  <span class="text-gray-800 font-medium text-sm border-b pb-1">File Evidence</span>
+                  
+                  <div v-if="selectedCell.user.id === user.id" class="flex items-center gap-2">
+                    <input type="file" id="compFileUploadInput" @change="onFileSelected" class="text-sm block w-full text-slate-500 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-300 rounded p-1">
+                    <button @click="uploadFile" :disabled="!selectedFile || isUploading" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded font-bold shadow-sm transition disabled:opacity-50 whitespace-nowrap">{{ isUploading ? 'Uploading...' : 'Upload' }}</button>
+                  </div>
+
+                  <div v-if="!cellFiles || cellFiles?.length === 0" class="text-xs text-gray-500 italic">No files uploaded.</div>
+                  <ul v-else class="space-y-2 mt-1">
+                    <li v-for="file in cellFiles" :key="file.id" class="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200 text-sm">
+                      <div class="flex items-center gap-2 overflow-hidden">
+                        <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clip-rule="evenodd"></path></svg>
+                        <a :href="file.file_path" target="_blank" class="text-blue-600 hover:underline truncate">{{ file.file_name }}</a>
+                        <span class="text-xs text-gray-400 whitespace-nowrap">{{ new Date(file.upload_date).toLocaleDateString() }}</span>
+                      </div>
+                      <button v-if="selectedCell.user.id === user.id || user.is_superuser" @click="deleteFile(file.id)" class="text-red-500 hover:text-red-700 text-xs font-semibold ml-2">Delete</button>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+
+              <template v-if="selectedCell.comp.requires_post_eval">
+                <div class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
+                  <span class="text-gray-800 font-medium text-sm">Post-Training Evaluation</span>
+                  <div class="flex items-center gap-2">
+                    <button v-if="selectedCell.user.id === user.id && (!latestPostEvaluation || (latestPostEvaluation.score_a < 3 || latestPostEvaluation.score_b < 3 || latestPostEvaluation.score_c < 3))" 
+                            @click="takingEval = 'post'" 
+                            :disabled="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== 'm'"
+                            :class="['text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap', getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 cursor-pointer' : 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-70']"
+                            :title="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== 'm' ? 'You must complete all other prerequisites before taking this evaluation.' : ''">
+                      {{ latestPostEvaluation ? 'Retake' : 'Start' }}
+                    </button>
+                    <span v-if="latestPostEvaluation && latestPostEvaluation.score_a >= 3 && latestPostEvaluation.score_b >= 3 && latestPostEvaluation.score_c >= 3" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed</span>
+                    <span v-else-if="latestPostEvaluation && (latestPostEvaluation.score_a < 3 || latestPostEvaluation.score_b < 3 || latestPostEvaluation.score_c < 3)" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed</span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                  </div>
+                </div>
+
+                <div v-if="takingEval === 'post'" class="mt-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                  <h4 class="font-bold text-gray-800 mb-3 border-b pb-2">Post-Training Questionnaire</h4>
+                  
+                  <div class="mb-4 bg-white p-3 border rounded">
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">A: Practical Execution</label>
+                    <p class="text-xs text-gray-600 mb-2">How would you rate your current ability to safely and independently execute the practical steps of this task?</p>
+                    <input type="range" min="1" max="5" v-model.number="evaluationScores.a" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                    <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.a }} -</span> {{ evalTexts.a[evaluationScores.a] }}</div>
+                  </div>
+
+                  <div class="mb-4 bg-white p-3 border rounded">
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">B: Theoretical & Protocol Knowledge</label>
+                    <p class="text-xs text-gray-600 mb-2">How confident are you in your understanding of the underlying theory, physics principles, and local IR(ME)R protocols governing this task?</p>
+                    <input type="range" min="1" max="5" v-model.number="evaluationScores.b" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                    <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.b }} -</span> {{ evalTexts.b[evaluationScores.b] }}</div>
+                  </div>
+
+                  <div class="mb-4 bg-white p-3 border rounded">
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">C: Independent Troubleshooting</label>
+                    <p class="text-xs text-gray-600 mb-2">How confident are you in your ability to independently troubleshoot unexpected issues, equipment faults, or measurement tolerances during this task?</p>
+                    <input type="range" min="1" max="5" v-model.number="evaluationScores.c" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                    <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.c }} -</span> {{ evalTexts.c[evaluationScores.c] }}</div>
+                  </div>
+
+                  <div class="flex gap-2">
+                    <button @click="submitEvaluation" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded transition shadow-sm">Submit Answers</button>
+                    <button @click="takingEval = null" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold py-2 px-4 rounded transition shadow-sm">Cancel</button>
+                  </div>
+                </div>
               </template>
 
               <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm'" class="mt-2 bg-purple-50 border border-purple-200 p-3 rounded flex flex-col gap-2">
                 <p class="text-sm font-semibold text-purple-800">You have met all prerequisites. Are you ready for an assessment?</p>
-                <button @click="requestAssessment" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">Request Assessment</button>
+                <button v-if="!selectedCell.comp.requires_post_eval || (latestPostEvaluation && latestPostEvaluation.score_a >= 3 && latestPostEvaluation.score_b >= 3 && latestPostEvaluation.score_c >= 3)" @click="requestAssessment" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">Request Assessment</button>
+                <p v-else class="text-xs text-red-600 font-bold">You must complete and pass the Post-Training Evaluation to automatically request an assessment.</p>
               </div>
               
               <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'a'" class="mt-2 bg-orange-50 border border-orange-200 p-3 rounded flex flex-col gap-2">
@@ -1119,6 +1361,14 @@
               <button @click="requestReassessment" class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm">Request Re-assessment</button>
             </div>
           </div>
+
+          <!-- Assessor Radar Chart -->
+          <div v-if="(isAssessorForSelected || selectedCell.user.id === user.id) && (latestPreEvaluation || latestPostEvaluation)" class="mt-4 pt-4 border-t">
+            <h4 class="font-semibold text-gray-800 mb-2">Self-Evaluation Analysis</h4>
+            <div class="relative h-64 w-full bg-gray-50 rounded border p-2">
+              <canvas ref="radarChartCanvas"></canvas>
+            </div>
+          </div>
           
           <!-- Admin Controls -->
           <div v-if="user.is_superuser" class="mt-4 pt-4 border-t border-red-200">
@@ -1129,7 +1379,7 @@
               <select v-model="adminEdit.status" class="rounded border-gray-300 px-2 py-1 text-sm border bg-white flex-grow">
                 <option value="t">T - Training</option>
                 <option value="m">M - Meets Requirements</option>
-                <option value="a">A - Assessment Requested</option>
+                <option value="a">A - Assessment Pending</option>
                 <option value="c">C - Competent</option>
                 <option value="x">X - Competent to Train</option>
               </select>
@@ -1143,21 +1393,29 @@
               <textarea v-model="adminEdit.signoff_comment" placeholder="Optional sign-off comment" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"></textarea>
             </div>
 
-            <div v-if="selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz" class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
-              <template v-if="selectedCell.comp.requires_instructions">
-                <label v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex items-center space-x-2 text-sm text-gray-800">
-                  <input type="checkbox" :value="rp.id" v-model="adminEdit.readings_completed" class="rounded text-red-600 focus:ring-red-500">
-                  <span>Read: {{ rp.name }} (Manual Override)</span>
-                </label>
-              </template>
+            <div v-if="selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz || selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
+              <div v-if="selectedCell.comp.requires_instructions" class="flex flex-col gap-2 text-sm text-gray-800">
+                <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex justify-between items-center border-b border-red-200 pb-1">
+                  <span>Task: {{ rp.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id) ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id) ? 'Done' : 'Not Done' }}</strong></span>
+                  <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" @click="adminResetReading(rp.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Redo</button>
+                </div>
+              </div>
               <div v-if="selectedCell.comp.requires_quiz" class="flex flex-col gap-2 text-sm text-gray-800">
                 <div v-for="qz in cellQuizzes" :key="qz.id" class="flex justify-between items-center border-b border-red-200 pb-1">
                   <span>Quiz: {{ qz.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'Passed' : 'Pending/Failed' }}</strong></span>
                   <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
                 </div>
               </div>
-              
-              <button v-if="selectedCell.comp.requires_instructions && selectedCell.comp.reading_prerequisites && selectedCell.comp.reading_prerequisites.length > 0" @click="saveAdminOverrides" class="mt-2 bg-gray-800 hover:bg-gray-900 text-white py-1.5 rounded text-sm font-medium transition shadow-sm w-full">Save Overrides</button>
+              <div v-if="selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="flex flex-col gap-2 text-sm text-gray-800">
+                <div v-if="selectedCell.comp.requires_pre_eval" class="flex justify-between items-center border-b border-red-200 pb-1">
+                  <span>Pre-Training Eval: <strong :class="latestPreEvaluation ? 'text-green-600' : 'text-gray-500'">{{ latestPreEvaluation ? 'Completed' : 'Pending' }}</strong></span>
+                  <button v-if="latestPreEvaluation" @click="adminResetEval('pre')" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                </div>
+                <div v-if="selectedCell.comp.requires_post_eval" class="flex justify-between items-center border-b border-red-200 pb-1">
+                  <span>Post-Training Eval: <strong :class="latestPostEvaluation ? 'text-green-600' : 'text-gray-500'">{{ latestPostEvaluation ? 'Completed' : 'Pending' }}</strong></span>
+                  <button v-if="latestPostEvaluation" @click="adminResetEval('post')" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1181,6 +1439,40 @@
       </div>
     </div>
 
+    <!-- Stat User Modal -->
+    <div v-if="statUserModal.isOpen" @click.self="statUserModal.isOpen = false" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-[60] p-4">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-start mb-4">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+            <h3 class="text-xl font-bold text-gray-900">{{ statUserModal.user.full_name }} - Self-Evaluation Analysis</h3>
+            <select v-model="userStatEvalDateRange" class="border border-gray-300 rounded px-3 py-1 text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+              <option value="all">All Time</option>
+              <option value="12">Last 12 Months</option>
+              <option value="6">Last 6 Months</option>
+              <option value="3">Last 3 Months</option>
+            </select>
+          </div>
+          <button @click="statUserModal.isOpen = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-gray-50 border border-gray-200 p-3 rounded">
+            <h4 class="font-semibold text-center mb-2 text-gray-800">Section Average</h4>
+            <div class="relative h-64 w-full">
+              <canvas id="statChart-user-eval-section"></canvas>
+            </div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 p-3 rounded">
+            <h4 class="font-semibold text-center mb-2 text-gray-800">Global Average</h4>
+            <div class="relative h-64 w-full">
+              <canvas id="statChart-user-eval-global"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Footer Version and Author -->
     <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
       <div class="flex-1"></div>
@@ -1188,7 +1480,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v1.2
+        James Burnley v1.3
       </div>
     </div>
   </div>
@@ -1301,15 +1593,24 @@
         const currentTab = ref('individual');
         const signoffComment = ref('');
         const trueOverallProgress = ref({});
+        const myEvaluations = ref([]);
+
+        const fetchMyEvaluations = async () => {
+          if (!user.value) return;
+          try {
+            const res = await fetch('/api/my-evaluations', { headers: getHeaders() });
+            if (res.ok) myEvaluations.value = await res.json();
+          } catch(e) {}
+        };
 
         const overviewFilterName = ref('');
         const overviewFilterTask = ref('');
         const overviewFilterCategory = ref('');
         const overviewFilterGroup = ref('');
         
-        const adminSubTab = ref('competencies');
+        const adminSubTab = ref('users');
         const isEditingComp = ref(false);
-        const newComp = ref({ category: '', task_name: '', description: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36 });
+        const newComp = ref({ category: '', task_name: '', description: '', requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false });
         
         const categoryOrder = ref([]);
 
@@ -1397,13 +1698,23 @@
           return publicAllUsersProgress.value[u.id].categories[cat];
         };
 
+        const hasNoPrerequisites = (c) => {
+          if (!c) return false;
+          if (c.requires_instructions && c.reading_prerequisites?.length > 0) return false;
+          if (c.requires_quiz && c.quiz_ids?.length > 0) return false;
+          if (c.requires_prerequisite_competencies && c.prerequisite_competencies?.length > 0) return false;
+          if (c.requires_pre_eval) return false;
+          if (c.qatrack_requirements?.length > 0) return false;
+          return true;
+        };
+
         const getPublicProgressStatus = (userId, compId) => {
           const p = publicSummaryData.value.progress.find(p => p.user_id === userId && p.competency_id === compId);
           if (p) return p.current_status;
           
           const u = publicSummaryData.value.users.find(user => user.id === userId);
           const c = publicSummaryData.value.competencies.find(comp => comp.id === compId);
-          if (u && c && isPublicApplicable(u, c)) return 't';
+          if (u && c && isPublicApplicable(u, c)) return hasNoPrerequisites(c) ? 'm' : 't';
           
           return '';
         };
@@ -1494,6 +1805,34 @@
         const cellQuizzes = ref([]);
         const takingQuiz = ref(false);
         const quizData = ref(null);
+        const cellEvaluations = ref([]);
+        const evaluationScores = ref({ a: 1, b: 1, c: 1 });
+        const takingEval = ref(null);
+        const radarChartCanvas = ref(null);
+        const evalTexts = {
+          a: {
+            1: "Novice: I have little to no practical experience. I require full, constant, direct supervision.",
+            2: "Advanced Beginner: I can perform parts of the task but still need direct oversight to ensure clinical safety.",
+            3: "Competent: I can execute the procedure safely and independently under routine conditions.",
+            4: "Proficient: I am highly proficient, efficient, and capable of managing non-routine variations smoothly.",
+            5: "Expert / Assessor: I have mastered this practically and feel completely ready to train or assess others."
+          },
+          b: {
+            1: "Novice: I am entirely unfamiliar with the specific local protocols or theoretical background.",
+            2: "Advanced Beginner: I understand basic theory but need to reference local protocols step-by-step.",
+            3: "Competent: I have a solid working knowledge of local guidelines and understand 'why' steps are performed.",
+            4: "Proficient: I have an advanced understanding and can confidently identify subtle protocol deviations.",
+            5: "Expert / Assessor: I possess comprehensive mastery and can confidently defend local protocols during external audits."
+          },
+          c: {
+            1: "Novice: I cannot troubleshoot issues alone; any error requires me to seek help immediately.",
+            2: "Advanced Beginner: I can identify when a deviation occurs but need direct guidance to resolve it safely.",
+            3: "Competent: I can troubleshoot standard, routine issues independently using our documentation.",
+            4: "Proficient: I can systematically diagnose complex, multi-variable faults and implement safe actions.",
+            5: "Expert / Assessor: I am an expert troubleshooter and design localized corrective workflows or action criteria."
+          }
+        };
+
         const quizAnswers = ref({});
         
         const newGroup = ref('');
@@ -1516,6 +1855,20 @@
             expandedMatrixCategories.value.push(cat);
           }
         };
+
+        const latestPreEvaluation = computed(() => {
+          const evals = cellEvaluations.value.filter(e => e.evaluation_type === 'pre');
+          return evals.length > 0 ? evals[0] : null;
+        });
+        const latestPostEvaluation = computed(() => {
+          const evals = cellEvaluations.value.filter(e => e.evaluation_type === 'post');
+          return evals.length > 0 ? evals[0] : null;
+        });
+
+        const isAssessorForSelected = computed(() => {
+          if (!user.value || !selectedCell.value) return false;
+          return getProgressStatus(user.value.id, selectedCell.value.comp.id) === 'x' || user.value.is_admin || user.value.is_superuser;
+        });
 
         const myAssessorCompetencies = computed(() => {
           if (!user.value) return [];
@@ -1561,9 +1914,42 @@
           return competencies.value.filter(c => isApplicable(user.value, c) && isRenewalDue(user.value.id, c.id));
         });
         
+        const myPreEvalDue = computed(() => {
+          if (!user.value) return [];
+          return competencies.value.filter(c => {
+             if (!isApplicable(user.value, c) || getProgressStatus(user.value.id, c.id) !== 't' || !c.requires_pre_eval) return false;
+             const hasPre = myEvaluations.value.some(e => e.competency_id === c.id && e.evaluation_type === 'pre');
+             return !hasPre;
+          });
+        });
+
+        const myPostEvalDue = computed(() => {
+          if (!user.value) return [];
+          return competencies.value.filter(c => {
+             if (!isApplicable(user.value, c) || getProgressStatus(user.value.id, c.id) !== 'm' || !c.requires_post_eval) return false;
+             const postEvals = myEvaluations.value
+                .filter(e => e.competency_id === c.id && e.evaluation_type === 'post')
+                .sort((a, b) => new Date(b.submission_date) - new Date(a.submission_date));
+             if (postEvals.length === 0) return true;
+             const latest = postEvals[0];
+             return latest.score_a < 3 || latest.score_b < 3 || latest.score_c < 3;
+          });
+        });
+
         const myObjectivesMet = computed(() => {
           if (!user.value) return [];
-          return competencies.value.filter(c => isApplicable(user.value, c) && getProgressStatus(user.value.id, c.id) === 'm' && !isRenewalDue(user.value.id, c.id));
+          return competencies.value.filter(c => {
+            if (!isApplicable(user.value, c) || getProgressStatus(user.value.id, c.id) !== 'm' || isRenewalDue(user.value.id, c.id)) return false;
+            if (c.requires_post_eval) {
+               const postEvals = myEvaluations.value
+                  .filter(e => e.competency_id === c.id && e.evaluation_type === 'post')
+                  .sort((a, b) => new Date(b.submission_date) - new Date(a.submission_date));
+               if (postEvals.length === 0) return false;
+               const latest = postEvals[0];
+               if (latest.score_a < 3 || latest.score_b < 3 || latest.score_c < 3) return false;
+            }
+            return true;
+          });
         });
         
         const myAwaitingAssessment = computed(() => {
@@ -1741,16 +2127,31 @@
           let comps = competencies.value.map(c => {
             const applicableUsers = activeUsers.value.filter(u => isApplicable(u, c));
             const stats = { t: 0, m: 0, a: 0, c: 0, x: 0 };
+            let totalTimeMs = 0;
+            let timeCount = 0;
+            
             applicableUsers.forEach(u => {
               const p = progress.value.find(pr => pr.user_id === u.id && pr.competency_id === c.id);
-              const status = p ? p.current_status : 't';
+              const status = p ? p.current_status : (hasNoPrerequisites(c) ? 'm' : 't');
               if (status === 'x') stats.x++;
               else if (status === 'c') stats.c++;
               else if (status === 'a') stats.a++;
               else if (status === 'm') stats.m++;
               else stats.t++;
+              
+              if (p && ['c', 'x'].includes(p.current_status) && p.date_started && p.date_signed_off) {
+                const t1 = new Date(p.date_started).getTime();
+                const t2 = new Date(p.date_signed_off).getTime();
+                if (!isNaN(t1) && !isNaN(t2) && t2 > t1) {
+                   totalTimeMs += (t2 - t1);
+                   timeCount++;
+                }
+              }
             });
-            return { ...c, t: stats.t, m: stats.m, a: stats.a, c: stats.c, x: stats.x, total: applicableUsers.length };
+            
+            const avgTimeDays = timeCount > 0 ? Math.round(totalTimeMs / (1000 * 3600 * 24)) : null;
+            
+            return { ...c, t: stats.t, m: stats.m, a: stats.a, c: stats.c, x: stats.x, total: applicableUsers.length, avgTimeDays, totalTimeMs, timeCount };
           });
 
           return comps.sort((a, b) => {
@@ -1766,7 +2167,7 @@
           const groups = {};
           statCompetencies.value.forEach(c => {
             if (!groups[c.category]) {
-              groups[c.category] = { category: c.category, t: 0, m: 0, a: 0, c: 0, x: 0, total: 0, items: [] };
+              groups[c.category] = { category: c.category, t: 0, m: 0, a: 0, c: 0, x: 0, total: 0, items: [], totalTimeMs: 0, timeCount: 0, avgTimeDays: null };
             }
             groups[c.category].items.push(c);
           });
@@ -1778,6 +2179,9 @@
             const userStatuses = {}; 
             
             catComps.forEach(c => {
+              catGroup.totalTimeMs += c.totalTimeMs || 0;
+              catGroup.timeCount += c.timeCount || 0;
+              
               const applicableUsers = activeUsers.value.filter(u => isApplicable(u, c));
               applicableUsers.forEach(u => {
                 if (!userStatuses[u.id]) userStatuses[u.id] = [];
@@ -1786,6 +2190,10 @@
                 userStatuses[u.id].push(status);
               });
             });
+            
+            if (catGroup.timeCount > 0) {
+               catGroup.avgTimeDays = Math.round(catGroup.totalTimeMs / (1000 * 3600 * 24 * catGroup.timeCount));
+            }
             
             catGroup.total = Object.keys(userStatuses).length;
             
@@ -1852,6 +2260,72 @@
           return stats;
         });
 
+        const statUserModal = ref({ isOpen: false, user: null });
+        const statEvalDateRange = ref('all');
+        const userStatEvalDateRange = ref('all');
+
+        const aggregateEvals = (evalsArray, months) => {
+            const result = { pre: { a: 0, b: 0, c: 0, count: 0 }, post: { a: 0, b: 0, c: 0, count: 0 } };
+            const cutoff = months === 'all' ? 0 : Date.now() - (parseInt(months, 10) * 30 * 24 * 60 * 60 * 1000);
+            for (const ev of evalsArray) {
+                if (new Date(ev.submission_date).getTime() >= cutoff) {
+                    const t = ev.evaluation_type;
+                    result[t].a += ev.score_a;
+                    result[t].b += ev.score_b;
+                    result[t].c += ev.score_c;
+                    result[t].count++;
+                }
+            }
+            return result;
+        };
+        
+        watch(statEvalDateRange, () => {
+            if (statistics.value && statistics.value.evalStats) {
+                renderEvalChart('statChart-eval-section', aggregateEvals(statistics.value.evalStats.section, statEvalDateRange.value));
+                renderEvalChart('statChart-eval-global', aggregateEvals(statistics.value.evalStats.overall, statEvalDateRange.value));
+            }
+        });
+        
+        watch(userStatEvalDateRange, () => {
+            if (statUserModal.value.isOpen && statUserModal.value.user) {
+                renderEvalChart('statChart-user-eval-section', aggregateEvals(statUserModal.value.user.evaluations.section, userStatEvalDateRange.value));
+                renderEvalChart('statChart-user-eval-global', aggregateEvals(statUserModal.value.user.evaluations.overall, userStatEvalDateRange.value));
+            }
+        });
+        
+        const renderEvalChart = (ctxId, data, title) => {
+          const ctx = document.getElementById(ctxId);
+          if (!ctx) return;
+          if (chartInstances[ctxId]) chartInstances[ctxId].destroy();
+          
+          const preCount = data.pre.count;
+          const postCount = data.post.count;
+          
+          const preData = preCount > 0 ? [data.pre.a / preCount, data.pre.b / preCount, data.pre.c / preCount] : [0, 0, 0];
+          const postData = postCount > 0 ? [data.post.a / postCount, data.post.b / postCount, data.post.c / postCount] : [0, 0, 0];
+          
+          chartInstances[ctxId] = new Chart(ctx, {
+            type: 'radar',
+            data: {
+              labels: ['A: Practical', 'B: Theory', 'C: Troubleshooting'],
+              datasets: [
+                { label: `Pre-Training (n=${preCount})`, data: preData, backgroundColor: 'rgba(255, 99, 132, 0.2)', borderColor: 'rgb(255, 99, 132)', borderWidth: 1.5, pointBackgroundColor: 'rgb(255, 99, 132)' },
+                { label: `Post-Training (n=${postCount})`, data: postData, backgroundColor: 'rgba(54, 162, 235, 0.2)', borderColor: 'rgb(54, 162, 235)', borderWidth: 1.5, pointBackgroundColor: 'rgb(54, 162, 235)' }
+              ]
+            },
+            options: { maintainAspectRatio: false, scales: { r: { angleLines: { display: true }, suggestedMin: 0, suggestedMax: 5, ticks: { stepSize: 1, backdropColor: 'transparent' } } }, plugins: { legend: { position: 'bottom' }, title: { display: !!title, text: title } } }
+          });
+        };
+
+        const openStatUserModal = (u) => {
+          statUserModal.value = { isOpen: true, user: u };
+          userStatEvalDateRange.value = 'all';
+          nextTick(() => {
+            renderEvalChart('statChart-user-eval-section', aggregateEvals(u.evaluations.section, userStatEvalDateRange.value));
+            renderEvalChart('statChart-user-eval-global', aggregateEvals(u.evaluations.overall, userStatEvalDateRange.value));
+          });
+        };
+
         const renderOverallChart = () => {
           if (!statistics.value) return;
           
@@ -1884,6 +2358,11 @@
               }
             }
           });
+          
+          if (statistics.value.evalStats) {
+            renderEvalChart('statChart-eval-section', aggregateEvals(statistics.value.evalStats.section, statEvalDateRange.value));
+            renderEvalChart('statChart-eval-global', aggregateEvals(statistics.value.evalStats.overall, statEvalDateRange.value));
+          }
         };
 
         const selectedDb = ref(localStorage.getItem('selectedDb') || 'QA');
@@ -2153,6 +2632,7 @@
           }
           
           await fetchQuizLibrary();
+          await fetchMyEvaluations();
         };
 
         const isApplicable = (u, comp) => {
@@ -2169,7 +2649,7 @@
           
           const u = users.value.find(user => user.id === userId);
           const c = competencies.value.find(comp => comp.id === compId);
-          if (u && c && isApplicable(u, c)) return 't';
+          if (u && c && isApplicable(u, c)) return hasNoPrerequisites(c) ? 'm' : 't';
           
           return '';
         };
@@ -2208,7 +2688,7 @@
           signoffComment.value = '';
           showQaEvidenceFor.value = null;
           const p = getProgressObj(u.id, comp.id);
-          const currentStatus = p ? p.current_status : 't';
+          const currentStatus = p ? p.current_status : (hasNoPrerequisites(comp) ? 'm' : 't');
           adminEdit.value = {
             readings_completed: p && p.readings_completed ? p.readings_completed : [],
             status: currentStatus,
@@ -2220,16 +2700,265 @@
             cellQuizzes.value = await res.json();
           } else {
             cellQuizzes.value = [];
+          }await fetchEvaluations(u, comp);
+          if (comp.allow_file_uploads) await fetchFiles(u.id, comp.id);
+          takingEval.value = null;
+          nextTick(() => {
+            renderRadarChart();
+          });
+        };
+        const closeModal = () => { 
+          selectedCell.value = null; 
+          takingQuiz.value = false; 
+          showQaEvidenceFor.value = null; 
+          if (radarChartInstance) {
+            radarChartInstance.destroy();
+            radarChartInstance = null;
           }
         };
-        const closeModal = () => { selectedCell.value = null; takingQuiz.value = false; showQaEvidenceFor.value = null; };
 
-        const toggleQATrackEvidence = async (competencyId, userId) => {
-          if (showQaEvidenceFor.value === competencyId) {
+        let radarChartInstance = null;
+        const renderRadarChart = () => {
+            if (radarChartInstance) {
+                radarChartInstance.destroy();
+                radarChartInstance = null;
+            }
+
+            if (!radarChartCanvas.value || !(isAssessorForSelected.value || selectedCell.value.user.id === user.value.id)) return;
+
+            const datasets = [];
+            if (latestPreEvaluation.value) {
+                datasets.push({
+                    label: 'Pre-Training',
+                    data: [latestPreEvaluation.value.score_a, latestPreEvaluation.value.score_b, latestPreEvaluation.value.score_c],
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    borderColor: 'rgb(255, 99, 132)',
+                    borderWidth: 1.5,
+                    pointBackgroundColor: 'rgb(255, 99, 132)'
+                });
+            }
+            if (latestPostEvaluation.value) {
+                datasets.push({
+                    label: 'Post-Training',
+                    data: [latestPostEvaluation.value.score_a, latestPostEvaluation.value.score_b, latestPostEvaluation.value.score_c],
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    borderWidth: 1.5,
+                    pointBackgroundColor: 'rgb(54, 162, 235)'
+                });
+            }
+
+            if (datasets.length === 0) return;
+
+            const ctx = radarChartCanvas.value.getContext('2d');
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['A: Practical', 'B: Theory', 'C: Troubleshooting'],
+                    datasets: datasets
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: { r: { angleLines: { display: true }, suggestedMin: 0, suggestedMax: 5, pointLabels: { font: { size: 11, weight: 'bold' } }, ticks: { stepSize: 1, backdropColor: 'rgba(255, 255, 255, 0.75)', backdropPadding: 2 } } },
+                    plugins: { tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw}` } }, legend: { position: 'bottom' } }
+                }
+            });
+        };
+        
+        watch([latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, selectedCell], () => {
+          if (selectedCell.value && (isAssessorForSelected.value || selectedCell.value.user.id === user.value.id)) {
+            nextTick(() => {
+              renderRadarChart();
+            });
+          }
+        });
+
+        const renderQaTrackChart = (competencyId, identifier) => {
+          const cacheData = qaEvidenceCache.value[competencyId]?.find(e => e.identifier === identifier);
+          if (!cacheData || !cacheData.all_dates || cacheData.all_dates.length === 0) return;
+
+          const ctxId = `qatrack-chart-${competencyId}-${identifier}`;
+          const ctx = document.getElementById(ctxId);
+          if (!ctx) return;
+
+          if (chartInstances[ctxId]) chartInstances[ctxId].destroy();
+
+          let minDate = new Date();
+          const today = new Date();
+          const todayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+          cacheData.all_dates.forEach(dStr => {
+            const d = new Date(dStr);
+            if (!isNaN(d.getTime()) && d < minDate) {
+              minDate = d;
+            }
+          });
+
+          minDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+          if (todayMonth.getTime() - minDate.getTime() < 1000 * 60 * 60 * 24 * 180) {
+             minDate.setMonth(minDate.getMonth() - 5);
+          }
+
+          const months = [];
+          const labels = [];
+          const monthCounts = {};
+          
+          let current = new Date(minDate);
+          while (current <= todayMonth) {
+            const monthKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-01`;
+            months.push(monthKey);
+            labels.push(current.toLocaleString('default', { month: 'short', year: '2-digit' }));
+            monthCounts[monthKey] = 0;
+            current.setMonth(current.getMonth() + 1);
+          }
+
+          cacheData.all_dates.forEach(dStr => {
+            const d = new Date(dStr);
+            if (isNaN(d.getTime())) return;
+            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+            if (monthCounts[monthKey] !== undefined) {
+              monthCounts[monthKey]++;
+            }
+          });
+
+          const data = months.map(m => monthCounts[m]);
+          const cutoff36 = new Date(today.getFullYear(), today.getMonth() - 36, 1);
+
+          const backgroundColors = months.map(mStr => {
+            const d = new Date(mStr);
+            return d >= cutoff36 ? '#0EA5E9' : '#94A3B8';
+          });
+          
+          const safetyWindowPlugin = {
+            id: 'safetyWindow',
+            beforeDraw(chart) {
+              const { ctx, chartArea: { top, bottom, left, right }, scales: { x } } = chart;
+              
+              let cutoffX = left;
+              const cutoffIndex = months.findIndex(mStr => new Date(mStr) >= cutoff36);
+              
+              if (cutoffIndex !== -1) {
+                const barWidth = x.getPixelForValue(1) - x.getPixelForValue(0);
+                cutoffX = x.getPixelForValue(cutoffIndex) - (barWidth / 2);
+              }
+              
+              if (cutoffX < left || isNaN(cutoffX)) cutoffX = left;
+              
+              ctx.save();
+              
+              ctx.fillStyle = 'rgba(14, 165, 233, 0.1)';
+              ctx.fillRect(cutoffX, top, right - cutoffX, bottom - top);
+              
+              ctx.beginPath();
+              ctx.setLineDash([5, 5]);
+              ctx.moveTo(right, top);
+              ctx.lineTo(right, bottom);
+              ctx.lineWidth = 2;
+              ctx.strokeStyle = '#334155';
+              ctx.stroke();
+              
+              ctx.restore();
+            }
+          };
+
+          const badgesPlugin = {
+            id: 'badges',
+            afterDraw(chart) {
+              const { ctx } = chart;
+              ctx.save();
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'bottom';
+              ctx.font = 'bold 10px sans-serif';
+              
+              chart.getDatasetMeta(0).data.forEach((bar, index) => {
+                const count = chart.data.datasets[0].data[index];
+                if (count > 0) {
+                  ctx.fillStyle = backgroundColors[index];
+                  ctx.fillText(count, bar.x, bar.y - 2);
+                }
+              });
+              ctx.restore();
+            }
+          };
+
+          chartInstances[ctxId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'Tests',
+                data: data,
+                backgroundColor: backgroundColors,
+                borderWidth: 0,
+                borderRadius: 2,
+                barPercentage: 0.8,
+                categoryPercentage: 0.9
+              }]
+            },
+            options: {
+              maintainAspectRatio: false,
+              layout: {
+                padding: {
+                  top: 12,
+                  right: 5
+                }
+              },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    title: (context) => {
+                      const idx = context[0].dataIndex;
+                      const d = new Date(months[idx]);
+                      return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                    },
+                    label: (context) => {
+                      const count = context.raw;
+                      const idx = context.dataIndex;
+                      const d = new Date(months[idx]);
+                      
+                      const monthDiff = (todayMonth.getFullYear() - d.getFullYear()) * 12 + (todayMonth.getMonth() - d.getMonth());
+                      
+                      let timeAgo = '';
+                      if (monthDiff === 0) timeAgo = 'Logged this month';
+                      else if (monthDiff === 1) timeAgo = 'Logged 1 month ago';
+                      else timeAgo = `Logged ${monthDiff} months ago`;
+                      
+                      if (monthDiff > 36) {
+                        timeAgo = `Expired: ${timeAgo}`;
+                      }
+                      
+                      return [`Count: ${count}`, timeAgo];
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: {
+                  display: false,
+                  min: 0,
+                  max: Math.max(...data) > 0 ? Math.max(...data) : 1,
+                  ticks: { stepSize: 1 }
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: {
+                    display: false
+                  }
+                }
+              }
+            },
+            plugins: [safetyWindowPlugin, badgesPlugin]
+          });
+        };
+
+        const toggleQATrackEvidence = async (competencyId, userId, identifier) => {
+          const target = competencyId + '-' + identifier;
+          if (showQaEvidenceFor.value === target) {
             showQaEvidenceFor.value = null;
             return;
           }
-          showQaEvidenceFor.value = competencyId;
+          showQaEvidenceFor.value = target;
           
           if (!qaEvidenceCache.value[competencyId]) {
             try {
@@ -2239,11 +2968,98 @@
               }
             } catch(e) { console.error("Error fetching QATrack evidence:", e); }
           }
+          
+          nextTick(() => {
+             renderQaTrackChart(competencyId, identifier);
+          });
         };
 
         const formatDate = (dateString) => {
           if (!dateString) return "Unknown";
           return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+        };
+
+        const fetchEvaluations = async (u, comp) => {
+          const res = await fetch(`/api/competency/${comp.id}/evaluations?user_id=${u.id}&t=${Date.now()}`, { headers: getHeaders() });
+          if (res.ok) {
+              cellEvaluations.value = await res.json();
+          }
+        };
+        
+        const isSyncing = ref(false);
+        const syncSelectedCompetency = async () => {
+          if (!selectedCell.value) return;
+          isSyncing.value = true;
+          try {
+            const compId = selectedCell.value.comp.id;
+            const userId = selectedCell.value.user.id;
+            await syncProgress(compId);
+            await fetchData();
+            
+            if (qaEvidenceCache.value[compId]) {
+              const res = await fetch(`/api/competency/${compId}/qatrack-evidence?user_id=${userId}`, { headers: getHeaders() });
+              if (res.ok) {
+                qaEvidenceCache.value[compId] = await res.json();
+                if (showQaEvidenceFor.value && showQaEvidenceFor.value.startsWith(compId + '-')) {
+                   const identifier = showQaEvidenceFor.value.substring(String(compId).length + 1);
+                   nextTick(() => {
+                      renderQaTrackChart(compId, identifier);
+                   });
+                }
+              }
+            }
+          } catch(e) {
+            console.error(e);
+          } finally {
+            isSyncing.value = false;
+          }
+        };
+        
+        const selectedFile = ref(null);
+        const cellFiles = ref([]);
+        const isUploading = ref(false);
+        const onFileSelected = (e) => { selectedFile.value = e.target.files[0]; };
+        
+        const uploadFile = async () => {
+          if (!selectedFile.value || !selectedCell.value) return;
+          isUploading.value = true;
+          try {
+            const reader = new FileReader();
+            reader.readAsDataURL(selectedFile.value);
+            reader.onload = async () => {
+              const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/upload`, {
+                method: 'POST', headers: getHeaders(true),
+                body: JSON.stringify({ file_name: selectedFile.value.name, file_data: reader.result })
+              });
+              if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || 'Upload failed');
+              selectedFile.value = null;
+              const input = document.getElementById('compFileUploadInput');
+              if (input) input.value = '';
+              await fetchFiles(selectedCell.value.user.id, selectedCell.value.comp.id);
+              customAlert('File uploaded successfully.', 'Success');
+              isUploading.value = false;
+            };
+            reader.onerror = () => { throw new Error('Failed to read file'); };
+          } catch (e) {
+            customAlert(e.message, 'Error');
+            isUploading.value = false;
+          }
+        };
+
+        const fetchFiles = async (userId, compId) => {
+          try {
+            const res = await fetch(`/api/competency/${compId}/files?user_id=${userId}`, { headers: getHeaders() });
+            if (res.ok) cellFiles.value = await res.json();
+          } catch(e) { console.error("Error fetching files:", e); }
+        };
+
+        const deleteFile = async (fileId) => {
+          if (!(await customConfirm("Are you sure you want to delete this file?", "Delete File"))) return;
+          try {
+            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/files/${fileId}?user_id=${selectedCell.value.user.id}`, { method: 'DELETE', headers: getHeaders() });
+            if (!res.ok) throw new Error('Failed to delete file');
+            await fetchFiles(selectedCell.value.user.id, selectedCell.value.comp.id);
+          } catch(e) { customAlert(e.message, 'Error'); }
         };
 
         const getMilestone = (userId, compId, milestone, itemId) => {
@@ -2270,6 +3086,51 @@
           await fetchData();
         };
 
+        const submitEvaluation = async () => {
+          const type = takingEval.value;
+          if (!type) return;
+          if (!(await customConfirm("Please note that these tests can only be completed once per attempt and your score will be recorded. Are you sure you are ready to submit?", "Submit Evaluation"))) return;
+          try {
+            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/evaluations`, {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ 
+                evaluation_type: type, 
+                score_a: parseInt(evaluationScores.value.a, 10) || 1,
+                score_b: parseInt(evaluationScores.value.b, 10) || 1,
+                score_c: parseInt(evaluationScores.value.c, 10) || 1
+              })
+            });
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || 'Failed to submit evaluation.');
+            }
+            const resultData = await res.json();
+            
+            takingEval.value = null;
+            evaluationScores.value = { a: 1, b: 1, c: 1 };
+            
+            let shouldRefresh = false;
+            
+            if (type === 'pre') {
+              shouldRefresh = await syncProgress(selectedCell.value.comp.id);
+            } else if (type === 'post' && resultData.promotedToA) {
+              shouldRefresh = true;
+            }
+            
+            await fetchMyEvaluations();
+            if (shouldRefresh) await fetchData();
+            const currentUser = selectedCell.value.user;
+            const currentComp = competencies.value.find(c => c.id === selectedCell.value.comp.id) || selectedCell.value.comp;
+            await fetchEvaluations(currentUser, currentComp);
+            if (shouldRefresh) {
+              openModal(currentUser, currentComp);
+            }
+            customAlert("Self-evaluation submitted successfully.", "Success");
+          } catch (err) {
+            customAlert(err.message, "Error");
+          }
+        };
         const syncProgress = async (compId) => {
           const res = await fetch('/api/competency/sync', {
             method: 'POST',
@@ -2283,15 +3144,18 @@
         const syncAllProgress = async () => {
           if (!user.value) return;
           const myCompetencies = competencies.value.filter(c => isApplicable(user.value, c));
-          let changed = false;
-          for (const c of myCompetencies) {
-             const status = getProgressStatus(user.value.id, c.id);
-             if (status === 't' || status === 'm' || status === 'a' || status === '') {
-                 const stateChanged = await syncProgress(c.id);
-                 if (stateChanged) changed = true;
-             }
-          }
-          if (changed) await fetchData();
+          
+          let ranSync = false;
+          const syncPromises = myCompetencies.map(async (c) => {
+            const status = getProgressStatus(user.value.id, c.id);
+            if (status === 't' || status === 'm' || status === 'a' || status === '') {
+              ranSync = true;
+              return await syncProgress(c.id);
+            }
+            return false;
+          });
+          await Promise.all(syncPromises);
+          if (ranSync) await fetchData();
         };
 
         const requestAssessment = async () => {
@@ -2385,6 +3249,33 @@
           } catch (err) { customAlert(err.message, "Error"); }
         };
         
+        const adminResetReading = async (readingId) => {
+          if (!(await customConfirm("Reset this user's reading progress? They will need to read it again.", "Reset Reading"))) return;
+          try {
+            const p = getProgressObj(selectedCell.value.user.id, selectedCell.value.comp.id);
+            let rc = p && p.readings_completed ? [...p.readings_completed] : [];
+            rc = rc.filter(id => id !== readingId);
+            
+            const res1 = await fetch('/api/progress/admin-update', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, readings_completed: rc })
+            });
+            if (!res1.ok) throw new Error((await res1.json()).error || 'Failed to update reading progress');
+            
+            if (p && ['m', 'a', 'c', 'x'].includes(p.current_status)) {
+               await fetch('/api/progress/admin-force-status', {
+                 method: 'POST',
+                 headers: getHeaders(true),
+                 body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, status: 't' })
+               });
+            }
+            
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
         const adminResetQuiz = async (quizId) => {
           if (!(await customConfirm("Reset this user's quiz progress? They will need to retake it.", "Reset Quiz"))) return;
           try {
@@ -2398,6 +3289,20 @@
           } catch (err) { customAlert(err.message, "Error"); }
         };
         
+        const adminResetEval = async (evalType) => {
+          const typeName = evalType === 'pre' ? 'Pre-Training' : 'Post-Training';
+          if (!(await customConfirm(`Reset this user's ${typeName} Evaluation? They will need to retake it.${evalType === 'pre' ? ' This will also reset their Post-Training evaluation.' : ''}`, "Reset Evaluation"))) return;
+          try {
+            const res = await fetch('/api/progress/admin-reset-eval', {
+              method: 'POST', headers: getHeaders(true),
+              body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, eval_type: evalType })
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
         const saveAdminOverrides = async () => {
           try {
             const res = await fetch('/api/progress/admin-update', {
@@ -2416,8 +3321,7 @@
         const saveCompetency = async () => {
           try {
             if (!newComp.value.requires_qatrack) {
-              newComp.value.required_qatrack_count = 0;
-              newComp.value.qatrack_test_identifier = '';
+              newComp.value.qatrack_requirements = [];
             }
             const url = isEditingComp.value ? `/api/competencies/${newComp.value.id}` : '/api/competencies';
             const method = isEditingComp.value ? 'PUT' : 'POST';
@@ -2439,8 +3343,7 @@
         const saveAsNewComp = async () => {
           try {
             if (!newComp.value.requires_qatrack) {
-              newComp.value.required_qatrack_count = 0;
-              newComp.value.qatrack_test_identifier = '';
+              newComp.value.qatrack_requirements = [];
             }
             const compToSave = { ...newComp.value };
             delete compToSave.id;
@@ -2457,8 +3360,25 @@
           } catch (err) { customAlert(err.message, "Error"); }
         };
         
-        const editComp = (c) => { newComp.value = JSON.parse(JSON.stringify(c)); newComp.value.requires_qatrack = newComp.value.required_qatrack_count > 0; newComp.value.requires_prerequisite_competencies = !!c.requires_prerequisite_competencies; newComp.value.prerequisite_competencies = Array.isArray(c.prerequisite_competencies) ? c.prerequisite_competencies : []; newComp.value.quiz_ids = Array.isArray(c.quiz_ids) ? c.quiz_ids : []; if (!newComp.value.target_groups) newComp.value.target_groups = []; if (!newComp.value.target_users) newComp.value.target_users = []; if (!Array.isArray(newComp.value.reading_prerequisites)) newComp.value.reading_prerequisites = []; if (newComp.value.renewal_period_months === undefined) newComp.value.renewal_period_months = globalSettings.value.default_renewal_period || 36; isEditingComp.value = true; };
-        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_qatrack: false, required_qatrack_count: 0, qatrack_test_identifier: '', requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36 }; isEditingComp.value = false; };
+        const editComp = (c) => { 
+          newComp.value = JSON.parse(JSON.stringify(c)); 
+          newComp.value.requires_qatrack = newComp.value.qatrack_requirements && newComp.value.qatrack_requirements.length > 0; 
+          if (!newComp.value.qatrack_requirements) newComp.value.qatrack_requirements = []; 
+          newComp.value.requires_instructions = !!c.requires_instructions;
+          newComp.value.requires_quiz = !!c.requires_quiz;
+          newComp.value.requires_prerequisite_competencies = !!c.requires_prerequisite_competencies; 
+          newComp.value.prerequisite_competencies = Array.isArray(c.prerequisite_competencies) ? c.prerequisite_competencies : []; 
+          newComp.value.quiz_ids = Array.isArray(c.quiz_ids) ? c.quiz_ids : []; 
+          if (!newComp.value.target_groups) newComp.value.target_groups = []; 
+          if (!newComp.value.target_users) newComp.value.target_users = []; 
+          if (!Array.isArray(newComp.value.reading_prerequisites)) newComp.value.reading_prerequisites = []; 
+          if (newComp.value.renewal_period_months === undefined) newComp.value.renewal_period_months = globalSettings.value.default_renewal_period || 36; 
+          newComp.value.requires_pre_eval = !!c.requires_pre_eval; 
+          newComp.value.requires_post_eval = !!c.requires_post_eval; 
+          newComp.value.allow_file_uploads = !!c.allow_file_uploads; 
+          isEditingComp.value = true; 
+        };
+        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false }; isEditingComp.value = false; };
         
         const deleteComp = async (id) => {
           if (!(await customConfirm('Are you sure you want to delete this competency?', "Delete Competency"))) return;
@@ -2664,6 +3584,7 @@
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
             
+            currentTab.value = 'individual';
             await fetchData();
             await syncAllProgress();
           } catch (err) {
@@ -2676,6 +3597,7 @@
           user.value = null;
           username.value = '';
           password.value = '';
+          currentTab.value = 'individual';
           localStorage.removeItem('token');
           localStorage.removeItem('user');
         };
@@ -2700,9 +3622,51 @@
           }
           if (newTab === 'superadmin') {
             fetchDbInfo();
+            fetchUploadStats();
           }
         });
         
+        const uploadStats = ref([]);
+        const fetchUploadStats = async () => {
+          try {
+            const res = await fetch('/api/admin/uploads/stats', { headers: getHeaders() });
+            if (res.ok) uploadStats.value = await res.json();
+          } catch(e) { console.error(e); }
+        };
+        
+        const formatBytes = (bytes) => {
+          if (bytes === 0) return '0 Bytes';
+          const k = 1024;
+          const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+        
+        const downloadUploadsBackup = async (section) => {
+          try {
+            const res = await fetch(`/api/admin/uploads/${section}/backup`, { headers: getHeaders() });
+            if (!res.ok) throw new Error((await res.json()).error || 'Backup failed');
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `uploads_backup_${section}_${new Date().toISOString().split('T')[0]}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          } catch (e) { customAlert(e.message, 'Error'); }
+        };
+        
+        const deleteSectionUploads = async (section) => {
+          if (!(await customConfirm(`Are you sure you want to delete ALL uploaded files for section "${section}"? This cannot be undone!`, 'Delete Uploads'))) return;
+          try {
+            const res = await fetch(`/api/admin/uploads/${section}`, { method: 'DELETE', headers: getHeaders() });
+            if (!res.ok) throw new Error('Deletion failed');
+            customAlert(`All uploaded files for ${section} have been deleted.`, 'Success');
+            await fetchUploadStats();
+          } catch(e) { customAlert(e.message, 'Error'); }
+        };
+
         const dbInfo = ref({ info: {}, settings: {} });
         const backupFile = ref(null);
         const frontendFile = ref(null);
@@ -2828,6 +3792,21 @@
           } catch(e) { customAlert(e.message, "Error"); }
         };
         
+        const testQATrackConnection = async () => {
+          try {
+            const res = await fetch('/api/admin/test-qatrack', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ 
+                qatrack_api_url: globalSettings.value.qatrack_api_url,
+                qatrack_api_token: globalSettings.value.qatrack_api_token
+              })
+            });
+            if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || `HTTP Error ${res.status}`);
+            customAlert(`Connection successful!`, "Success");
+          } catch(e) { customAlert(e.message, "Connection Failed"); }
+        };
+
         const toggleSectionActive = async (idx) => {
           globalSettings.value.sections[idx].active = !globalSettings.value.sections[idx].active;
           await saveSections();
@@ -2892,31 +3871,25 @@
                  login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable,
                  currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, dragStartCompetency, dropCompetency, availableCategories,
                  categoryOrder, dragStartCategory, dropCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
-                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory,
+                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, radarChartCanvas,
                  compListFilterCat, filteredAndSortedCompetencies, 
                  newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort,
                  quizLibrary, activeLibraryQuiz, isEditingQuiz, createNewLibraryQuiz, editLibraryQuiz, cancelEditLibraryQuiz, saveLibraryQuiz, deleteLibraryQuiz, cellQuizzes, takingQuiz, quizData, quizAnswers, loadQuizForTaking, submitQuiz, quizStats,
-                 userGroups, newGroup, dragStartGroup, dropGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, saveAdminOverrides, adminForceStatus,
+                 userGroups, newGroup, dragStartGroup, dropGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, adminResetEval, saveAdminOverrides, adminForceStatus,
+                 adminResetReading, myRenewalDue, myPreEvalDue, myPostEvalDue, myObjectivesMet, myAwaitingAssessment, usersRequiringAssessment, usersObjectivesMet, getUserName, getUser,
                  selectedDb, handleDbChange,
                  expandedMatrixCategories, toggleMatrixCategory,
                  activeLegends, selectedFilterCompetency, toggleLegend, toggleCompetencyFilter,
                  overviewFilterName, overviewFilterTask, overviewFilterCategory, overviewFilterGroup,
-                 statistics, sectionSummaryStats, sectionApplicableUsers, expandedStatCategories, toggleStatCategory, groupedStatCompetencies,
-                 getStatSectionDesignationAverage, getStatOverallDesignationAverage, getTimeInPost,
-                 qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate,
-                 usersRequiringAssessment, usersObjectivesMet, getUserName, getUser,
-                 myRenewalDue, myObjectivesMet, myAwaitingAssessment, activeSections,
-                 statUserSortCol, statUserSortDir, toggleStatUserSort,
-                 statCompSortCol, statCompSortDir, toggleStatCompSort,
-                 statCompetencies,
-                 topScroll, bottomScroll, matrixTable, tableWidth, syncScroll, signoffComment, trueOverallProgress, publicSummaryData,
-                 publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
-                 publicDisplayedUsers, publicGroupedCompetencies, isPublicApplicable, getPublicStatusBadgeClass, getPublicProgressStatus, getPublicUserCategoryProgress, publicAllUsersProgress,
-                 customDialog, closeDialog,
-                 dbInfo, backupFile, frontendFile, globalSettings,
-                 onBackupFileSelected, onFrontendFileSelected, backupDatabase, restoreDatabase, uploadFrontend, saveGlobalSettings, individualRestoreInput, triggerRestore, onIndividualRestoreFileSelected,
-                 newSectionName, addSection, deleteSection, toggleSectionActive
-               };
+                 statistics, sectionSummaryStats, statCompetencies, groupedStatCompetencies, statCompSortCol, statCompSortDir, toggleStatCompSort, expandedStatCategories, toggleStatCategory,
+                 sectionApplicableUsers, statUserSortCol, statUserSortDir, toggleStatUserSort, getTimeInPost, getStatSectionDesignationAverage, getStatOverallDesignationAverage, statUserModal, openStatUserModal, statEvalDateRange, userStatEvalDateRange,
+                 dbInfo, backupFile, frontendFile, globalSettings, newSectionName, activeSections, fetchDbInfo, onBackupFileSelected, onFrontendFileSelected, backupDatabase, restoreDatabase, uploadFrontend, saveGlobalSettings, testQATrackConnection, toggleSectionActive, addSection, deleteSection, individualRestoreInput, restoreScope, triggerRestore, onIndividualRestoreFileSelected,
+                 publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass,
+                 customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
+                 qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing,
+                 selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
+                 uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads
+        };
       }
     }).mount('#app');
   </script>

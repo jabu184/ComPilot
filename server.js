@@ -97,7 +97,7 @@ const dbs = {};
 const initDb = (db) => {
   db.serialize(() => {
     // CREATE BASE TABLES IF THEY DO NOT EXIST (Needed for dynamically created databases)
-    db.run(`CREATE TABLE IF NOT EXISTS competencies (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, task_name TEXT, required_qatrack_count INTEGER DEFAULT 0, qatrack_test_identifier TEXT, requires_instructions INTEGER DEFAULT 1, requires_quiz INTEGER DEFAULT 0, requires_prerequisite_competencies INTEGER DEFAULT 0, prerequisite_competencies TEXT DEFAULT '[]', display_order INTEGER DEFAULT 0, reading_prerequisites TEXT DEFAULT '[]', renewal_period_months INTEGER DEFAULT 36)`, () => {
+    db.run(`CREATE TABLE IF NOT EXISTS competencies (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, task_name TEXT, required_qatrack_count INTEGER DEFAULT 0, qatrack_test_identifier TEXT, requires_instructions INTEGER DEFAULT 1, requires_quiz INTEGER DEFAULT 0, requires_prerequisite_competencies INTEGER DEFAULT 0, prerequisite_competencies TEXT DEFAULT '[]', display_order INTEGER DEFAULT 0, reading_prerequisites TEXT DEFAULT '[]', renewal_period_months INTEGER DEFAULT 36, requires_pre_eval INTEGER DEFAULT 0, requires_post_eval INTEGER DEFAULT 0, qatrack_requirements TEXT DEFAULT '[]', allow_file_uploads INTEGER DEFAULT 0)`, () => {
       db.get("SELECT count(*) as count FROM competencies", (err, row) => {
         if (row && row.count === 0) {
           db.run(`INSERT INTO competencies (id, category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months) VALUES 
@@ -108,7 +108,7 @@ const initDb = (db) => {
       });
     });
 
-    db.run(`CREATE TABLE IF NOT EXISTS staff_competency_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, competency_id INTEGER, current_status TEXT DEFAULT 't', instructions_read INTEGER DEFAULT 0, quiz_passed INTEGER DEFAULT 0, date_started TEXT DEFAULT CURRENT_DATE, date_signed_off TEXT, assessor_id INTEGER, date_reviewed TEXT, reviewer_id INTEGER, quiz_score INTEGER, qatrack_records INTEGER, qatrack_manual_override INTEGER DEFAULT 0, readings_completed TEXT DEFAULT '[]', quizzes_completed TEXT DEFAULT '{}', UNIQUE(user_id, competency_id))`, () => {
+    db.run(`CREATE TABLE IF NOT EXISTS staff_competency_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, competency_id INTEGER, current_status TEXT DEFAULT 't', instructions_read INTEGER DEFAULT 0, quiz_passed INTEGER DEFAULT 0, date_started TEXT DEFAULT CURRENT_DATE, date_signed_off TEXT, assessor_id INTEGER, date_reviewed TEXT, reviewer_id INTEGER, quiz_score INTEGER, qatrack_records INTEGER, qatrack_records_detail TEXT DEFAULT '{}', qatrack_manual_override INTEGER DEFAULT 0, readings_completed TEXT DEFAULT '[]', quizzes_completed TEXT DEFAULT '{}', UNIQUE(user_id, competency_id))`, () => {
       db.get("SELECT count(*) as count FROM staff_competency_progress", (err, row) => {
         if (row && row.count === 0) {
           db.run(`INSERT INTO staff_competency_progress (user_id, competency_id, current_status, readings_completed) VALUES 
@@ -143,6 +143,23 @@ const initDb = (db) => {
       db.get("SELECT count(*) as count FROM category_order", (err, row) => {
         if (row && row.count === 0) {
           db.run(`INSERT INTO category_order (category, display_order) SELECT DISTINCT category, 0 FROM competencies`, (err) => { if(err) console.warn('InitDB Seed Category Order:', err.message); });
+        }
+      });
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS self_evaluations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      evaluation_type TEXT NOT NULL, -- 'pre' or 'post'
+      score_a INTEGER NOT NULL,
+      score_b INTEGER NOT NULL,
+      score_c INTEGER NOT NULL,
+      submission_date TEXT DEFAULT CURRENT_TIMESTAMP
+    )`, () => {
+      db.get("SELECT count(*) as count FROM self_evaluations", (err, row) => {
+        if (row && row.count === 0) {
+          db.run(`INSERT INTO self_evaluations (user_id, competency_id, evaluation_type, score_a, score_b, score_c, submission_date) SELECT user_id, competency_id, evaluation_type, score_a, score_b, score_c, submission_date FROM self_evaluation_submissions`, (err) => { if(err) console.warn("Self eval migration skip:", err.message); });
         }
       });
     });
@@ -238,6 +255,31 @@ const initDb = (db) => {
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN description TEXT", () => {});
+    db.run("ALTER TABLE competencies ADD COLUMN requires_pre_eval INTEGER DEFAULT 0", () => {
+        db.run("UPDATE competencies SET requires_pre_eval = 1 WHERE self_evaluation_timing = 'pre' OR self_evaluation_timing = 'any'", (err) => {});
+    });
+    db.run("ALTER TABLE competencies ADD COLUMN requires_post_eval INTEGER DEFAULT 0", () => {
+        db.run("UPDATE competencies SET requires_post_eval = 1 WHERE self_evaluation_timing = 'post' OR self_evaluation_timing = 'any'", (err) => {});
+    });
+    db.run("ALTER TABLE competencies ADD COLUMN qatrack_requirements TEXT DEFAULT '[]'", () => {
+        db.all("SELECT id, required_qatrack_count, qatrack_test_identifier FROM competencies WHERE required_qatrack_count > 0 AND qatrack_test_identifier IS NOT NULL", (err, rows) => {
+            if (rows) {
+                rows.forEach(row => {
+                    db.run("UPDATE competencies SET qatrack_requirements = ? WHERE id = ?", [JSON.stringify([{count: row.required_qatrack_count, identifier: row.qatrack_test_identifier}]), row.id]);
+                });
+            }
+        });
+    });
+    db.run("ALTER TABLE staff_competency_progress ADD COLUMN qatrack_records_detail TEXT DEFAULT '{}'", () => {});
+    db.run("ALTER TABLE competencies ADD COLUMN allow_file_uploads INTEGER DEFAULT 0", () => {});
+    db.run(`CREATE TABLE IF NOT EXISTS file_uploads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      file_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      upload_date TEXT DEFAULT CURRENT_TIMESTAMP
+    )`, () => {});
   });
 };
 
@@ -288,11 +330,28 @@ const getSections = async () => {
   return [{name: 'QA', active: true}, {name: 'Planning', active: true}, {name: 'Brachytherapy', active: true}, {name: 'SABR', active: true}];
 };
 
+function getFolderSize(dirPath) {
+  let size = 0;
+  if (fs.existsSync(dirPath)) {
+    const files = fs.readdirSync(dirPath);
+    files.forEach(file => {
+      const filePath = path.join(dirPath, file);
+      const stats = fs.statSync(filePath);
+      if (stats.isDirectory()) {
+        size += getFolderSize(filePath);
+      } else {
+        size += stats.size;
+      }
+    });
+  }
+  return size;
+}
+
 app.get('/api/public/summary', async (req, res) => {
   try {
     const dbName = req.headers['x-database'] || 'QA';
     const dbInstance = getDb(dbName);
-    const users = await query(sharedDb, 'SELECT id, full_name, designation, active_in FROM users WHERE is_active = 1');
+    const users = await query(sharedDb, 'SELECT id, username, full_name, designation, active_in FROM users WHERE is_active = 1');
     const competencies = await query(dbInstance, 'SELECT id, category, task_name, display_order, target_users, description FROM competencies ORDER BY display_order ASC, id ASC');
     const competencyGroups = await query(dbInstance, 'SELECT * FROM competency_groups');
     const progress = await query(dbInstance, 'SELECT user_id, competency_id, current_status, date_signed_off, date_reviewed FROM staff_competency_progress');
@@ -575,7 +634,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
 
 app.get('/api/competencies', authenticateToken, async (req, res) => {
   try {
-    const competencies = await query(req.db, 'SELECT * FROM competencies ORDER BY display_order ASC, id ASC');
+    const competencies = await query(req.db, 'SELECT *, renewal_period_months, requires_pre_eval, requires_post_eval FROM competencies ORDER BY display_order ASC, id ASC');
     const competencyGroups = await query(req.db, 'SELECT * FROM competency_groups');
     
     const groupsByComp = {};
@@ -610,6 +669,17 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
         while(typeof tu === 'string') tu = JSON.parse(tu);
         c.target_users = Array.isArray(tu) ? tu : [];
       } catch(e) { c.target_users = []; }
+      
+      try {
+        let qr = JSON.parse(c.qatrack_requirements || '[]');
+        while(typeof qr === 'string') qr = JSON.parse(qr);
+        c.qatrack_requirements = Array.isArray(qr) ? qr : [];
+      } catch(e) { c.qatrack_requirements = []; }
+      
+      // Migration fallback for frontend if missing
+      if (!c.qatrack_requirements.length && c.required_qatrack_count > 0 && c.qatrack_test_identifier) {
+        c.qatrack_requirements = [{count: c.required_qatrack_count, identifier: c.qatrack_test_identifier}];
+      }
     });
     
     res.json(competencies);
@@ -619,14 +689,15 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/competencies', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description } = req.body;
+  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
     const tuStr = JSON.stringify(target_users || []);
+    const qaStr = JSON.stringify(qatrack_requirements || []);
     await execute(req.db, 
-      `INSERT INTO competencies (category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [category, task_name, required_qatrack_count || 0, qatrack_test_identifier || null, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null]
+      `INSERT INTO competencies (category, task_name, qatrack_requirements, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description, requires_pre_eval, requires_post_eval, allow_file_uploads) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0]
     );
     const result = await query(req.db, `SELECT last_insert_rowid() AS id`);
     const comp_id = result[0].id;
@@ -659,14 +730,15 @@ app.put('/api/competencies/reorder', authenticateToken, requireAdmin, async (req
 });
 
 app.put('/api/competencies/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description } = req.body;
+  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
     const tuStr = JSON.stringify(target_users || []);
+    const qaStr = JSON.stringify(qatrack_requirements || []);
     await execute(req.db, 
-      `UPDATE competencies SET category = ?, task_name = ?, required_qatrack_count = ?, qatrack_test_identifier = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ? WHERE id = ?`,
-      [category, task_name, required_qatrack_count || 0, qatrack_test_identifier || null, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, req.params.id]
+      `UPDATE competencies SET category = ?, task_name = ?, qatrack_requirements = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ?, requires_pre_eval = ?, requires_post_eval = ?, allow_file_uploads = ? WHERE id = ?`,
+      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, req.params.id]
     );
     await execute(req.db, `DELETE FROM competency_groups WHERE competency_id = ?`, [req.params.id]);
     if (target_groups && target_groups.length > 0) {
@@ -779,6 +851,15 @@ app.get('/api/progress/overall', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/my-evaluations', authenticateToken, async (req, res) => {
+  try {
+    const evals = await query(req.db, `SELECT * FROM self_evaluations WHERE user_id = ?`, [req.user.id]);
+    res.json(evals);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/category_order', authenticateToken, async (req, res) => {
   try {
     const cats = await query(req.db, 'SELECT category, display_order FROM category_order ORDER BY display_order ASC');
@@ -846,6 +927,11 @@ app.get('/api/progress', authenticateToken, async (req, res) => {
         while(typeof qc === 'string') qc = JSON.parse(qc);
         p.quizzes_completed = (qc && typeof qc === 'object' && !Array.isArray(qc)) ? qc : {}; 
       } catch(e) { p.quizzes_completed = {}; }
+      try { 
+        let qd = JSON.parse(p.qatrack_records_detail || '{}'); 
+        while(typeof qd === 'string') qd = JSON.parse(qd);
+        p.qatrack_records_detail = (qd && typeof qd === 'object' && !Array.isArray(qd)) ? qd : {}; 
+      } catch(e) { p.qatrack_records_detail = {}; }
     });
     res.json(progress);
   } catch (error) {
@@ -983,73 +1069,167 @@ app.post('/api/competency/:id/submit-quiz', authenticateToken, async (req, res) 
 });
 
 app.get('/api/competency/:id/qatrack-evidence', authenticateToken, async (req, res) => {
-  const competency_id = req.params.id;
-  // Allow passing user_id to view another user's evidence (e.g. for assessors viewing a trainee)
-  const target_user_id = req.query.user_id || req.user.id;
+  const competency_id = parseInt(req.params.id, 10);
+  const target_user_id = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
   
   try {
-    const compQuery = await query(req.db, `SELECT required_qatrack_count, qatrack_test_identifier FROM competencies WHERE id = ?`, [competency_id]);
+    const compQuery = await query(req.db, `SELECT required_qatrack_count, qatrack_test_identifier, qatrack_requirements FROM competencies WHERE id = ?`, [competency_id]);
     if (compQuery.length === 0) return res.status(404).json({ error: 'Competency not found' });
     
     const comp = compQuery[0];
-    if (!comp.qatrack_test_identifier || comp.required_qatrack_count <= 0) {
-      return res.json({ required: 0, evidence: [] });
+    let reqs = [];
+    try { reqs = JSON.parse(comp.qatrack_requirements || '[]'); } catch(e) {}
+    
+    if (reqs.length === 0 && comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
+      reqs = [{ count: comp.required_qatrack_count, identifier: comp.qatrack_test_identifier }];
+    }
+
+    if (reqs.length === 0) {
+      return res.json([]);
     }
 
     const userQuery = await query(sharedDb, `SELECT username FROM users WHERE id = ?`, [target_user_id]);
     if (userQuery.length === 0) return res.status(404).json({ error: 'User not found' });
     const target_username = userQuery[0].username;
 
-    const qaData = await fetchQATrackInstances(target_username, comp.qatrack_test_identifier);
-    
-    // Sort by most recent work_completed (descending)
-    const sortedResults = (qaData.results || []).sort((a, b) => new Date(b.work_completed) - new Date(a.work_completed));
-    
-    // Take only the required number of entries
-    const recentInstances = sortedResults.slice(0, comp.required_qatrack_count);
-    const recentEvidence = [];
-    
-    for (const instance of recentInstances) {
-      let reviewerName = 'System/Unknown';
-      if (instance.reviewed_by) {
-        // Using a simple global cache for reviewer names to save API calls
-        if (!global.qaReviewerCache) global.qaReviewerCache = {};
-        if (global.qaReviewerCache[instance.reviewed_by]) {
-          reviewerName = global.qaReviewerCache[instance.reviewed_by];
-        } else {
-          try {
-            const { apiToken } = await getQATrackConfig();
-            const rRes = await fetch(instance.reviewed_by, {
-              headers: {
-                'Authorization': `Token ${apiToken}`,
-                'Accept': 'application/json'
+    const allEvidence = [];
+
+    for (const req of reqs) {
+      const qaData = await fetchQATrackInstances(target_username, req.identifier);
+      
+      const sortedResults = (qaData.results || []).sort((a, b) => new Date(b.work_completed) - new Date(a.work_completed));
+      const recentInstances = sortedResults.slice(0, req.count);
+      const recentEvidence = [];
+      const allDates = sortedResults.map(r => r.work_completed);
+      
+      for (const instance of recentInstances) {
+        let reviewerName = 'System/Unknown';
+        if (instance.reviewed_by) {
+          if (!global.qaReviewerCache) global.qaReviewerCache = {};
+          if (global.qaReviewerCache[instance.reviewed_by]) {
+            reviewerName = global.qaReviewerCache[instance.reviewed_by];
+          } else {
+            try {
+              const { apiToken } = await getQATrackConfig();
+              const rRes = await fetch(instance.reviewed_by, {
+                headers: {
+                  'Authorization': `Token ${apiToken}`,
+                  'Accept': 'application/json'
+                }
+              });
+              if (rRes.ok) {
+                const rData = await rRes.json();
+                reviewerName = rData.username || rData.first_name + ' ' + rData.last_name || instance.reviewed_by;
+                global.qaReviewerCache[instance.reviewed_by] = reviewerName;
               }
-            });
-            if (rRes.ok) {
-              const rData = await rRes.json();
-              reviewerName = rData.username || rData.first_name + ' ' + rData.last_name || instance.reviewed_by;
-              global.qaReviewerCache[instance.reviewed_by] = reviewerName;
-            }
-          } catch (e) {
-            console.error("[QATrack+] Failed to fetch reviewer:", e.message);
+            } catch (e) {}
           }
         }
+        recentEvidence.push({
+          date: instance.work_completed,
+          reviewed_by: reviewerName,
+          url: instance.site_url || instance.url
+        });
       }
-      recentEvidence.push({
-        date: instance.work_completed,
-        reviewed_by: reviewerName,
-        url: instance.site_url || instance.url
+
+      allEvidence.push({
+        identifier: req.identifier,
+        required: req.count,
+        found: qaData.count,
+        evidence: recentEvidence,
+        all_dates: allDates
       });
     }
 
-    res.json({
-      required: comp.required_qatrack_count,
-      found: qaData.count,
-      evidence: recentEvidence
-    });
+    res.json(allEvidence);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
+});
+
+app.get('/api/competency/:id/evaluations', authenticateToken, async (req, res) => {
+  const competency_id = parseInt(req.params.id, 10);
+  const user_id = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
+  try {
+    const evaluations = await query(req.db, `SELECT * FROM self_evaluations WHERE user_id = ? AND competency_id = ? ORDER BY submission_date DESC`, [user_id, competency_id]);
+    res.json(evaluations);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/competency/:id/evaluations', authenticateToken, async (req, res) => {
+  const competency_id = parseInt(req.params.id, 10);
+  const user_id = parseInt(req.user.id, 10);
+  const { evaluation_type, score_a, score_b, score_c } = req.body;
+
+  const sA = parseInt(score_a, 10);
+  const sB = parseInt(score_b, 10);
+  const sC = parseInt(score_c, 10);
+
+  if (!['pre', 'post'].includes(evaluation_type) || ![1,2,3,4,5].includes(sA) || ![1,2,3,4,5].includes(sB) || ![1,2,3,4,5].includes(sC)) {
+    return res.status(400).json({ error: 'Invalid evaluation data provided.' });
+  }
+  try {
+    await execute(req.db, `INSERT INTO self_evaluations (user_id, competency_id, evaluation_type, score_a, score_b, score_c) VALUES (?, ?, ?, ?, ?, ?)`, [user_id, competency_id, evaluation_type, sA, sB, sC]);
+    
+    let promotedToA = false;
+    if (evaluation_type === 'post' && sA >= 3 && sB >= 3 && sC >= 3) {
+      const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+      if (progressCheck.length > 0 && progressCheck[0].current_status === 'm') {
+        await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'a' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+        await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REQUESTED_ASSESSMENT', ?, 'm', 'a', 'User automatically requested assessment by passing post-training evaluation')`, [user_id, competency_id, user_id]);
+        promotedToA = true;
+      }
+    }
+
+    res.json({ success: true, promotedToA });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/competency/:id/upload', authenticateToken, async (req, res) => {
+  const competency_id = parseInt(req.params.id, 10);
+  const user_id = req.user.id;
+  const dbName = req.headers['x-database'] || 'QA';
+  const { file_name, file_data } = req.body;
+  if (!file_name || !file_data) return res.status(400).json({error: 'Missing file'});
+  try {
+    const uploadDir = path.join(__dirname, 'public', 'uploads', dbName, `competency_${competency_id}`, `user_${user_id}`);
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const base64Data = file_data.replace(/^data:.*,/, '');
+    const filePath = path.join(uploadDir, file_name);
+    fs.writeFileSync(filePath, base64Data, 'base64');
+    const webPath = `/uploads/${encodeURIComponent(dbName)}/competency_${competency_id}/user_${user_id}/${encodeURIComponent(file_name)}`;
+    await execute(req.db, `DELETE FROM file_uploads WHERE user_id = ? AND competency_id = ? AND file_name = ?`, [user_id, competency_id, file_name]);
+    await execute(req.db, `INSERT INTO file_uploads (user_id, competency_id, file_name, file_path) VALUES (?, ?, ?, ?)`, [user_id, competency_id, file_name, webPath]);
+    res.json({success: true});
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.get('/api/competency/:id/files', authenticateToken, async (req, res) => {
+  const competency_id = parseInt(req.params.id, 10);
+  const target_user_id = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
+  try {
+    const files = await query(req.db, `SELECT * FROM file_uploads WHERE user_id = ? AND competency_id = ? ORDER BY upload_date DESC`, [target_user_id, competency_id]);
+    res.json(files);
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.delete('/api/competency/:comp_id/files/:file_id', authenticateToken, async (req, res) => {
+  const comp_id = parseInt(req.params.comp_id, 10);
+  const file_id = parseInt(req.params.file_id, 10);
+  const user_id = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
+  try {
+    const files = await query(req.db, `SELECT * FROM file_uploads WHERE id = ? AND competency_id = ? AND user_id = ?`, [file_id, comp_id, user_id]);
+    if (files.length > 0) {
+      const absolutePath = path.join(__dirname, 'public', decodeURIComponent(files[0].file_path));
+      if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+      await execute(req.db, `DELETE FROM file_uploads WHERE id = ?`, [file_id]);
+    }
+    res.json({success: true});
+  } catch(e) { res.status(500).json({error: e.message}); }
 });
 
 // --- MILESTONE TRACKING & AUTOMATION ---
@@ -1161,22 +1341,44 @@ app.post('/api/competency/sync', authenticateToken, async (req, res) => {
       }
     }
 
-    let count = progress.qatrack_records;
-    if (comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
-      const qaData = await fetchQATrackInstances(username, comp.qatrack_test_identifier);
-      count = qaData.count;
-      if (count == null || count < comp.required_qatrack_count) {
-        requirementsMet = false;
-        if (!missingReason) missingReason = `QATrack+ missing data: Found ${count || 0} valid tests, requires ${comp.required_qatrack_count}.`;
+    if (requirementsMet && comp.requires_pre_eval) {
+      const evaluations = await query(req.db, `SELECT * FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = 'pre'`, [user_id, competency_id]);
+      if (evaluations.length === 0) {
+          requirementsMet = false;
+          missingReason = 'Pre-training self-evaluation not completed.';
+      }
+    }
+
+    let qatrack_records_detail = {};
+    try { qatrack_records_detail = JSON.parse(progress.qatrack_records_detail || '{}'); } catch(e) {}
+
+    let reqs = [];
+    try { reqs = JSON.parse(comp.qatrack_requirements || '[]'); } catch(e) {}
+    if (reqs.length === 0 && comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
+      reqs = [{ count: comp.required_qatrack_count, identifier: comp.qatrack_test_identifier }];
+    }
+
+    let hasQATrackChecks = reqs.length > 0;
+    
+    if (hasQATrackChecks) {
+      for (const req of reqs) {
+        const qaData = await fetchQATrackInstances(username, req.identifier);
+        const count = qaData.count;
+        qatrack_records_detail[req.identifier] = count;
+        if (count == null || count < req.count) {
+          requirementsMet = false;
+          if (!missingReason) missingReason = `QATrack+ missing data for ${req.identifier}: Found ${count || 0}, requires ${req.count}.`;
+        }
       }
     }
 
     let initialized = false;
+    const detailStr = JSON.stringify(qatrack_records_detail);
     if (progressQuery.length === 0) {
-      await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records) VALUES (?, ?, 't', ?)`, [user_id, competency_id, count]);
+      await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail) VALUES (?, ?, 't', ?)`, [user_id, competency_id, detailStr]);
       initialized = true;
-    } else if (comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
-      await execute(req.db, `UPDATE staff_competency_progress SET qatrack_records = ? WHERE user_id = ? AND competency_id = ?`, [count, user_id, competency_id]);
+    } else if (hasQATrackChecks) {
+      await execute(req.db, `UPDATE staff_competency_progress SET qatrack_records_detail = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, user_id, competency_id]);
     }
       
     if (progress.current_status === 't' && requirementsMet) {
@@ -1201,6 +1403,14 @@ app.post('/api/competency/request-assessment', authenticateToken, async (req, re
   try {
     const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
     if (progressCheck.length > 0 && progressCheck[0].current_status === 'm') {
+      const compQuery = await query(req.db, `SELECT requires_post_eval FROM competencies WHERE id = ?`, [competency_id]);
+      if (compQuery.length > 0 && compQuery[0].requires_post_eval) {
+        const evaluations = await query(req.db, `SELECT * FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = 'post' ORDER BY submission_date DESC LIMIT 1`, [user_id, competency_id]);
+        if (evaluations.length === 0 || evaluations[0].score_a < 3 || evaluations[0].score_b < 3 || evaluations[0].score_c < 3) {
+          return res.status(400).json({ error: 'You must pass the Post-Training Self-Evaluation (score 3+ on all dimensions) before requesting assessment.' });
+        }
+      }
+
       await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'a' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
       await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REQUESTED_ASSESSMENT', ?, 'm', 'a', 'User requested assessment')`, [user_id, competency_id, user_id]);
       res.json({ success: true });
@@ -1421,6 +1631,46 @@ app.post('/api/progress/admin-reset-quiz', authenticateToken, requireSuperuser, 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/progress/admin-reset-eval', authenticateToken, requireSuperuser, async (req, res) => {
+  const { user_id, competency_id, eval_type } = req.body;
+  const admin_id = req.user.id;
+  try {
+    const check = await query(req.db, `SELECT id, current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+    
+    if (eval_type === 'pre') {
+      await execute(req.db, `DELETE FROM self_evaluations WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+    } else {
+      await execute(req.db, `DELETE FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = 'post'`, [user_id, competency_id]);
+    }
+    
+    if (check.length > 0) {
+      let current_status = check[0].current_status;
+      let new_status = current_status;
+      
+      if (eval_type === 'pre') {
+        if (['m', 'a', 'c', 'x'].includes(current_status)) new_status = 't';
+      } else if (eval_type === 'post') {
+        if (['a', 'c', 'x'].includes(current_status)) new_status = 'm';
+      }
+      
+      if (new_status !== current_status) {
+        let q = `UPDATE staff_competency_progress SET current_status = ?`;
+        if (new_status === 't' || new_status === 'm' || new_status === 'a') {
+          q += `, date_signed_off = NULL, assessor_id = NULL, signoff_comment = NULL, date_reviewed = NULL, reviewer_id = NULL`;
+        }
+        q += ` WHERE user_id = ? AND competency_id = ?`;
+        await execute(req.db, q, [new_status, user_id, competency_id]);
+      }
+    }
+
+    await execute(req.db, 
+      `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_EVAL_RESET', ?, ?)`,
+      [user_id, competency_id, admin_id, `Admin reset ${eval_type}-training evaluation`]
+    );
+    res.json({ success: true, message: "Evaluation reset." });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- STATISTICS ---
 app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -1442,12 +1692,20 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
         section_percent: 0,
         overall_totalApplicable: 0,
         overall_completed: 0,
-        overall_percent: 0
+        overall_percent: 0,
+        evaluations: {
+          section: [],
+          overall: []
+        }
       };
     });
 
     const categoryStats = {};
     const timeStats = { overall: [], byCategory: {} };
+    const evalStats = {
+      section: [],
+      overall: []
+    };
 
     for (const dbName of allDbNames) {
       const dbInstance = getDb(dbName);
@@ -1461,6 +1719,48 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
       competencyGroups.forEach(cg => {
         if (!compTargetGroups[cg.competency_id]) compTargetGroups[cg.competency_id] = [];
         compTargetGroups[cg.competency_id].push(cg.group_name);
+      });
+      
+      const evaluations = await query(dbInstance, 'SELECT * FROM self_evaluations');
+      const latestEvals = {};
+
+      const competencyQuizzes = await query(dbInstance, 'SELECT * FROM competency_quizzes');
+      const quizzesByComp = {};
+      competencyQuizzes.forEach(cq => {
+        if (!quizzesByComp[cq.competency_id]) quizzesByComp[cq.competency_id] = [];
+        quizzesByComp[cq.competency_id].push(cq.quiz_id);
+      });
+
+      const computeHasNoPrerequisites = (c) => {
+        if (c.requires_instructions) { try { let rp = JSON.parse(c.reading_prerequisites || '[]'); if (rp.length > 0) return false; } catch(e) {} }
+        if (c.requires_quiz && quizzesByComp[c.id] && quizzesByComp[c.id].length > 0) return false;
+        if (c.requires_prerequisite_competencies) { try { let pc = JSON.parse(c.prerequisite_competencies || '[]'); if (pc.length > 0) return false; } catch(e) {} }
+        if (c.requires_pre_eval) return false;
+        let reqs = [];
+        try { reqs = JSON.parse(c.qatrack_requirements || '[]'); } catch(e) {}
+        if (reqs.length === 0 && c.required_qatrack_count > 0 && c.qatrack_test_identifier) reqs = [{ count: c.required_qatrack_count, identifier: c.qatrack_test_identifier }];
+        if (reqs.length > 0) return false;
+        return true;
+      };
+
+      evaluations.forEach(ev => {
+        const key = `${ev.user_id}-${ev.competency_id}-${ev.evaluation_type}`;
+        if (!latestEvals[key] || new Date(ev.submission_date) > new Date(latestEvals[key].submission_date)) {
+          latestEvals[key] = ev;
+        }
+      });
+      
+      Object.values(latestEvals).forEach(ev => {
+        if (!userStatsMap[ev.user_id]) return;
+        const uStat = userStatsMap[ev.user_id];
+        
+        uStat.evaluations.overall.push(ev);
+        evalStats.overall.push(ev);
+        
+        if (isCurrentSection) {
+          uStat.evaluations.section.push(ev);
+          evalStats.section.push(ev);
+        }
       });
 
       // Compute progress per user
@@ -1499,7 +1799,7 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
           });
           applicableUsers.forEach(u => {
             const p = progress.find(pr => pr.user_id === u.id && pr.competency_id === c.id);
-            const status = p ? p.current_status : 't';
+            const status = p ? p.current_status : (computeHasNoPrerequisites(c) ? 'm' : 't');
             if (categoryStats[c.category][status] !== undefined) {
               categoryStats[c.category][status]++;
             }
@@ -1551,7 +1851,8 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
     res.json({
       userStats: finalUserStats,
       categoryStats,
-      timeStats
+      timeStats,
+      evalStats
     });
   } catch (error) {
     console.error(error);
@@ -1665,6 +1966,33 @@ app.post('/api/admin/settings', authenticateToken, requireSuperuser, async (req,
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
+app.post('/api/admin/test-qatrack', authenticateToken, requireSuperuser, async (req, res) => {
+  let { qatrack_api_url, qatrack_api_token } = req.body;
+  if (!qatrack_api_url || !qatrack_api_token) {
+    return res.status(400).json({ error: 'Both API URL and Token are required to test the connection.' });
+  }
+  try {
+    qatrack_api_url = qatrack_api_url.replace(/\/+$/, '');
+    const url = `${qatrack_api_url}/qc/testlistinstances/`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Token ${qatrack_api_token}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `QATrack+ API returned status ${response.status}: ${response.statusText}` });
+    }
+
+    await response.json();
+    res.json({ success: true });
+  } catch(e) { 
+    res.status(500).json({ error: e.message }); 
+  }
+});
+
 app.post('/api/admin/sections', authenticateToken, requireSuperuser, async (req, res) => {
   const { sections } = req.body;
   try {
@@ -1698,6 +2026,44 @@ app.delete('/api/admin/sections/:name', authenticateToken, requireSuperuser, asy
     }
     res.json({ success: true });
   } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.get('/api/admin/uploads/stats', authenticateToken, requireSuperuser, async (req, res) => {
+  try {
+    const sections = await getSections();
+    const stats = [];
+    for (const section of sections) {
+      const uploadDir = path.join(__dirname, 'public', 'uploads', section.name);
+      const bytes = getFolderSize(uploadDir);
+      stats.push({ section: section.name, bytes });
+    }
+    res.json(stats);
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.delete('/api/admin/uploads/:section', authenticateToken, requireSuperuser, async (req, res) => {
+  try {
+    const section = req.params.section;
+    const uploadDir = path.join(__dirname, 'public', 'uploads', section);
+    if (fs.existsSync(uploadDir)) fs.rmSync(uploadDir, { recursive: true, force: true });
+    const dbInstance = getDb(section);
+    await execute(dbInstance, `DELETE FROM file_uploads`);
+    res.json({success: true});
+  } catch(e) { res.status(500).json({error: e.message}); }
+});
+
+app.get('/api/admin/uploads/:section/backup', authenticateToken, requireSuperuser, async (req, res) => {
+  const section = req.params.section;
+  const uploadDir = path.join(__dirname, 'public', 'uploads', section);
+  if (!fs.existsSync(uploadDir)) return res.status(404).json({error: 'No uploads found for this section.'});
+  try {
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    zip.addLocalFolder(uploadDir);
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename=uploads_backup_${section}.zip`);
+    res.send(zip.toBuffer());
+  } catch(e) { res.status(500).json({error: e.code === 'MODULE_NOT_FOUND' ? 'The adm-zip module is not installed. Please run "npm install adm-zip" on the server.' : e.message}); }
 });
 
 app.get('/api/settings', authenticateToken, async (req, res) => {

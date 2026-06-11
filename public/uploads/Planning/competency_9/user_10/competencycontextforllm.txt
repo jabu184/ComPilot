@@ -39,30 +39,12 @@ Progression from **`t`** to **`a`** is not manual. Clicking a competency cell op
 
 ---
 
-## 3.1. Self-Evaluation Questionnaire
-
-As a configurable milestone, a three-part self-evaluation questionnaire can be attached to any competency. This is designed to capture a user's self-assessed confidence across key professional dimensions.
-
-1.  **Configuration:** During competency setup, an administrator can enforce two evaluation types via checkboxes:
-    *   **Required Pre-Training**: The user must submit a pre-training evaluation before they can achieve 'M' (Meets Requirements) status.
-    *   **Required Post-Training**: The user must complete a post-training evaluation and score ≥3 across all dimensions to become eligible to request a final assessment.
-2.  **Dimensions & Scoring:** The questionnaire consists of three fixed questions, each rated on a 1-5 scale:
-    *   **Dimension A: Practical Execution** (1: Novice, 5: Expert)
-    *   **Dimension B: Theoretical & Protocol Knowledge** (1: Novice, 5: Expert)
-    *   **Dimension C: Independent Troubleshooting** (1: Novice, 5: Expert)
-3.  **Assessment Gating:** If a competency requires a "Post-Training" evaluation, once a user submits the questionnaire and scores a **minimum of 3 (Competent) on all three dimensions**, their status will automatically be promoted to 'A' (Assessment Requested). If they fail, their score is still recorded, but they must retake it until they pass.
-4.  **Immutability:** Once a self-evaluation (either 'pre' or 'post') is submitted, it is permanently recorded and cannot be edited by the user, providing a clear audit trail of their self-assessed confidence at that point in time.
-
-This feature integrates directly into the milestone-driven workflow, adding a layer of reflective practice and providing valuable data for both the trainee and the assessor.
-
----
-
 ## 4. Administrative & Management Controls
 
 A centralized, web-based administrative command center allows authorized users (with system administrator or global `x+` permissions) to manage the matrix dynamically without editing any underlying application code:
 
 * **Competency Manager:** Create, update, or deprecate categories and specific scope-of-practice tasks. Assign which professional designations require tracking for each task.
-* **Prerequisite Builder:** Configure the exact rules for a task's milestones (e.g., enable self-evaluations, link protocol files, specify QATrack+ test identifiers, and set required log counts).
+* **Prerequisite Builder:** Configure the exact rules for a task's milestones (e.g., upload or link the local protocol file, specify the exact QATrack+ string filter to pull from, and set the target number of required practical executions).
 * **Quiz Designer:** Create custom multiple-choice question banks per competency, input multiple distractors, identify correct answers, and establish the required passing percentage.
 
 ---
@@ -94,9 +76,7 @@ CREATE TABLE competencies (
     category VARCHAR(50) NOT NULL,        -- e.g., 'Electron Treatments'
     task_name VARCHAR(100) NOT NULL,      -- e.g., 'Advice at Markup'
     required_qatrack_count INT DEFAULT 0,  -- Target number of tests needed
-    qatrack_test_identifier VARCHAR(100),  -- Text filter or list ID for API matching
-    requires_pre_eval BOOLEAN DEFAULT 0,
-    requires_post_eval BOOLEAN DEFAULT 0
+    qatrack_test_identifier VARCHAR(100)   -- Text filter or list ID for API matching
 );
 
 CREATE TABLE staff_competency_progress (
@@ -149,18 +129,6 @@ CREATE TABLE competency_audit_log (
     new_status VARCHAR(5),
     notes TEXT
 );
-
-CREATE TABLE self_evaluations (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id) ON DELETE CASCADE,
-    competency_id INT REFERENCES competencies(id) ON DELETE CASCADE,
-    evaluation_type VARCHAR(4) NOT NULL, -- 'pre' or 'post'
-    score_a INT NOT NULL,
-    score_b INT NOT NULL,
-    score_c INT NOT NULL,
-    submission_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 
 ```
 
