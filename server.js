@@ -140,7 +140,14 @@ const initDb = (db) => {
       status TEXT DEFAULT 'Assessor_Pending',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT
-    )`, () => {});
+    )`, () => {
+      db.all("PRAGMA table_info(viva_evaluations)", (err, cols) => {
+        if (cols && cols.length > 0) {
+          const hasStatus = cols.some(c => c.name === 'status');
+          if (!hasStatus) db.run("ALTER TABLE viva_evaluations ADD COLUMN status TEXT DEFAULT 'Assessor_Pending'");
+        }
+      });
+    });
 
     db.run(`CREATE TABLE IF NOT EXISTS quiz_questions (id INTEGER PRIMARY KEY AUTOINCREMENT, quiz_id INTEGER, question_text TEXT, question_type TEXT DEFAULT 'multiple_choice', option_a TEXT, option_b TEXT, option_c TEXT, option_d TEXT, correct_option TEXT)`, () => {
       db.get("SELECT count(*) as count FROM quiz_questions", (err, row) => {
@@ -489,6 +496,27 @@ app.get('/api/public/summary', async (req, res) => {
     const categoryOrder = await query(dbInstance, 'SELECT category, display_order FROM category_order ORDER BY display_order ASC');
     const userGroups = await query(sharedDb, 'SELECT * FROM user_groups ORDER BY display_order ASC, id ASC');
     
+    const vivas = await query(dbInstance, `SELECT competency_id, trainee_answers, assessor_answers FROM viva_evaluations WHERE status = 'Completed'`);
+    const compStats = {};
+    vivas.forEach(v => {
+      let tAnswers = {};
+      let aAnswers = {};
+      try { tAnswers = JSON.parse(v.trainee_answers || '{}'); } catch(e){}
+      try { aAnswers = JSON.parse(v.assessor_answers || '{}'); } catch(e){}
+      let totalDelta = 0; let count = 0;
+      for (const qId in aAnswers) {
+        if (tAnswers[qId] !== undefined) {
+          totalDelta += ((parseInt(aAnswers[qId], 10) || 0) - (parseInt(tAnswers[qId], 10) || 0));
+          count++;
+        }
+      }
+      if (count > 0) {
+        if (!compStats[v.competency_id]) compStats[v.competency_id] = { sumDelta: 0, count: 0 };
+        compStats[v.competency_id].sumDelta += totalDelta;
+        compStats[v.competency_id].count += count;
+      }
+    });
+
     const compTargetGroups = {};
     competencyGroups.forEach(cg => {
       if (!compTargetGroups[cg.competency_id]) compTargetGroups[cg.competency_id] = [];
@@ -502,6 +530,11 @@ app.get('/api/public/summary', async (req, res) => {
         while(typeof tu === 'string') tu = JSON.parse(tu);
         c.target_users = Array.isArray(tu) ? tu : [];
       } catch(e) { c.target_users = []; }
+      if (compStats[c.id] && compStats[c.id].count > 0) {
+        c.avg_delta = compStats[c.id].sumDelta / compStats[c.id].count;
+      } else {
+        c.avg_delta = null;
+      }
     });
 
     const activeUsers = [];
@@ -716,7 +749,12 @@ app.delete('/api/groups/:id', authenticateToken, requireSuperuser, async (req, r
   try {
     const group = await query(sharedDb, 'SELECT name FROM user_groups WHERE id = ?', [req.params.id]);
     if (group.length > 0) {
-      await execute(req.db, 'DELETE FROM competency_groups WHERE group_name = ?', [group[0].name]);
+      const groupName = group[0].name;
+      const sections = await getSections();
+      for (const section of sections) {
+        const dbInstance = getDb(section.name);
+        await execute(dbInstance, 'DELETE FROM competency_groups WHERE group_name = ?', [groupName]);
+      }
     }
     await execute(sharedDb, 'DELETE FROM user_groups WHERE id = ?', [req.params.id]);
     res.json({ success: true });
@@ -742,8 +780,13 @@ app.put('/api/groups/:id', authenticateToken, requireSuperuser, async (req, res)
   try {
     const oldGroup = await query(sharedDb, 'SELECT name FROM user_groups WHERE id = ?', [req.params.id]);
     if (oldGroup.length > 0) {
-      await execute(req.db, 'UPDATE competency_groups SET group_name = ? WHERE group_name = ?', [name, oldGroup[0].name]);
-      await execute(sharedDb, 'UPDATE users SET designation = ? WHERE designation = ?', [name, oldGroup[0].name]);
+      const oldName = oldGroup[0].name;
+      const sections = await getSections();
+      for (const section of sections) {
+        const dbInstance = getDb(section.name);
+        await execute(dbInstance, 'UPDATE competency_groups SET group_name = ? WHERE group_name = ?', [name, oldName]);
+      }
+      await execute(sharedDb, 'UPDATE users SET designation = ? WHERE designation = ?', [name, oldName]);
     }
     await execute(sharedDb, 'UPDATE user_groups SET name = ? WHERE id = ?', [name, req.params.id]);
     res.json({ success: true });
@@ -774,16 +817,40 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
       groupsByComp[cg.competency_id].push(cg.group_name);
     });
     
-    const competencyQuizzes = await query(req.db, 'SELECT * FROM competency_quizzes');
+    const competencyQuizzes = await query(req.db, 'SELECT cq.competency_id, cq.quiz_id, q.is_viva FROM competency_quizzes cq JOIN quizzes q ON cq.quiz_id = q.id');
     const quizzesByComp = {};
+    const hasVivaByComp = {};
     competencyQuizzes.forEach(cq => {
         if (!quizzesByComp[cq.competency_id]) quizzesByComp[cq.competency_id] = [];
         quizzesByComp[cq.competency_id].push(cq.quiz_id);
+        if (cq.is_viva) hasVivaByComp[cq.competency_id] = true;
+    });
+
+    const vivas = await query(req.db, `SELECT competency_id, trainee_answers, assessor_answers FROM viva_evaluations WHERE status = 'Completed'`);
+    const compStats = {};
+    vivas.forEach(v => {
+      let tAnswers = {};
+      let aAnswers = {};
+      try { tAnswers = JSON.parse(v.trainee_answers || '{}'); } catch(e){}
+      try { aAnswers = JSON.parse(v.assessor_answers || '{}'); } catch(e){}
+      let totalDelta = 0; let count = 0;
+      for (const qId in aAnswers) {
+        if (tAnswers[qId] !== undefined) {
+          totalDelta += ((parseInt(aAnswers[qId], 10) || 0) - (parseInt(tAnswers[qId], 10) || 0));
+          count++;
+        }
+      }
+      if (count > 0) {
+        if (!compStats[v.competency_id]) compStats[v.competency_id] = { sumDelta: 0, count: 0 };
+        compStats[v.competency_id].sumDelta += totalDelta;
+        compStats[v.competency_id].count += count;
+      }
     });
 
     competencies.forEach(c => {
       c.target_groups = groupsByComp[c.id] || [];
       c.quiz_ids = quizzesByComp[c.id] || [];
+      c.has_viva = hasVivaByComp[c.id] || false;
       try { 
         let rp = JSON.parse(c.reading_prerequisites || '[]'); 
         while(typeof rp === 'string') rp = JSON.parse(rp);
@@ -810,6 +877,11 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
       // Migration fallback for frontend if missing
       if (!c.qatrack_requirements.length && c.required_qatrack_count > 0 && c.qatrack_test_identifier) {
         c.qatrack_requirements = [{count: c.required_qatrack_count, identifier: c.qatrack_test_identifier}];
+      }
+      if (compStats[c.id] && compStats[c.id].count > 0) {
+        c.avg_delta = compStats[c.id].sumDelta / compStats[c.id].count;
+      } else {
+        c.avg_delta = null;
       }
     });
     
@@ -892,11 +964,28 @@ app.put('/api/competencies/:id', authenticateToken, requireAdmin, async (req, re
 });
 
 app.delete('/api/competencies/:id', authenticateToken, requireAdmin, async (req, res) => {
+  const compId = req.params.id;
   try {
-    await execute(req.db, `DELETE FROM competencies WHERE id = ?`, [req.params.id]);
-    await execute(req.db, `DELETE FROM competency_groups WHERE competency_id = ?`, [req.params.id]);
-    await execute(req.db, `DELETE FROM staff_competency_progress WHERE competency_id = ?`, [req.params.id]);
-    await execute(req.db, `DELETE FROM competency_quizzes WHERE competency_id = ?`, [req.params.id]);
+    const fileUploads = await query(req.db, `SELECT file_path FROM file_uploads WHERE competency_id = ?`, [compId]);
+    for (const file of fileUploads) {
+      try {
+        const absolutePath = path.join(__dirname, 'public', decodeURIComponent(file.file_path));
+        if (fs.existsSync(absolutePath)) {
+          fs.unlinkSync(absolutePath);
+        }
+      } catch (e) {
+        console.warn(`Could not delete file ${file.file_path}:`, e.message);
+      }
+    }
+    await execute(req.db, `DELETE FROM competencies WHERE id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM competency_groups WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM staff_competency_progress WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM competency_quizzes WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM viva_evaluations WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM self_evaluations WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM patient_plan_logs WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM competency_audit_log WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM file_uploads WHERE competency_id = ?`, [compId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -926,7 +1015,27 @@ app.put('/api/users/:id', authenticateToken, requireSuperuser, async (req, res) 
 
 app.delete('/api/users/:id', authenticateToken, requireSuperuser, async (req, res) => {
   try {
-    await execute(sharedDb, `DELETE FROM users WHERE id=?`, [req.params.id]);
+    const userId = req.params.id;
+    const sections = await getSections();
+    for (const section of sections) {
+      const dbInstance = getDb(section.name);
+      const userUploads = await query(dbInstance, `SELECT * FROM file_uploads WHERE user_id = ?`, [userId]);
+      for (const file of userUploads) {
+        try {
+          const absolutePath = path.join(__dirname, 'public', decodeURIComponent(file.file_path));
+          if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+        } catch (e) {
+          console.warn(`Could not delete file ${file.file_path}:`, e.message);
+        }
+      }
+      await execute(dbInstance, `DELETE FROM file_uploads WHERE user_id = ?`, [userId]);
+      await execute(dbInstance, `DELETE FROM staff_competency_progress WHERE user_id = ?`, [userId]);
+      await execute(dbInstance, `DELETE FROM viva_evaluations WHERE trainee_id = ?`, [userId]);
+      await execute(dbInstance, `DELETE FROM self_evaluations WHERE user_id = ?`, [userId]);
+      await execute(dbInstance, `DELETE FROM patient_plan_logs WHERE trainee_id = ?`, [userId]);
+      await execute(dbInstance, `DELETE FROM competency_audit_log WHERE target_user_id = ?`, [userId]);
+    }
+    await execute(sharedDb, `DELETE FROM users WHERE id=?`, [userId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1076,6 +1185,45 @@ app.get('/api/progress', authenticateToken, async (req, res) => {
 app.get('/api/quizzes/library', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const quizzes = await query(req.db, `SELECT * FROM quizzes ORDER BY name`);
+    const vivas = await query(req.db, `SELECT quiz_id, trainee_answers, assessor_answers FROM viva_evaluations WHERE status = 'Completed'`);
+    const quizStatsMap = {};
+    vivas.forEach(v => {
+      let tAnswers = {}, aAnswers = {};
+      try { tAnswers = JSON.parse(v.trainee_answers || '{}'); } catch(e){}
+      try { aAnswers = JSON.parse(v.assessor_answers || '{}'); } catch(e){}
+      let totalDelta = 0, totalTrainee = 0, totalAssessor = 0, count = 0;
+      for (const qId in aAnswers) {
+        if (tAnswers[qId] !== undefined) {
+          const tScore = parseInt(tAnswers[qId], 10) || 0;
+          const aScore = parseInt(aAnswers[qId], 10) || 0;
+          totalDelta += (aScore - tScore);
+          totalTrainee += tScore;
+          totalAssessor += aScore;
+          count++;
+        }
+      }
+      if (count > 0) {
+        if (!quizStatsMap[v.quiz_id]) quizStatsMap[v.quiz_id] = { sumDelta: 0, sumTrainee: 0, sumAssessor: 0, count: 0, evals: 0 };
+        quizStatsMap[v.quiz_id].sumDelta += totalDelta;
+        quizStatsMap[v.quiz_id].sumTrainee += totalTrainee;
+        quizStatsMap[v.quiz_id].sumAssessor += totalAssessor;
+        quizStatsMap[v.quiz_id].count += count;
+        quizStatsMap[v.quiz_id].evals += 1;
+      }
+    });
+    quizzes.forEach(q => {
+      if (quizStatsMap[q.id] && quizStatsMap[q.id].count > 0) {
+        q.avg_trainee = quizStatsMap[q.id].sumTrainee / quizStatsMap[q.id].count;
+        q.avg_assessor = quizStatsMap[q.id].sumAssessor / quizStatsMap[q.id].count;
+        q.avg_delta = quizStatsMap[q.id].sumDelta / quizStatsMap[q.id].count;
+        q.evals_count = quizStatsMap[q.id].evals;
+      } else {
+        q.avg_trainee = null;
+        q.avg_assessor = null;
+        q.avg_delta = null;
+        q.evals_count = 0;
+      }
+    });
     res.json(quizzes);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -1130,11 +1278,12 @@ app.put('/api/quizzes/library/:id', authenticateToken, requireAdmin, async (req,
 });
 
 app.delete('/api/quizzes/library/:id', authenticateToken, requireAdmin, async (req, res) => {
-    const quiz_id = req.params.id;
+    const quiz_id = parseInt(req.params.id, 10);
     try {
         await execute(req.db, `DELETE FROM quizzes WHERE id = ?`, [quiz_id]);
         await execute(req.db, `DELETE FROM quiz_questions WHERE quiz_id = ?`, [quiz_id]);
         await execute(req.db, `DELETE FROM competency_quizzes WHERE quiz_id = ?`, [quiz_id]);
+        await execute(req.db, `DELETE FROM viva_evaluations WHERE quiz_id = ?`, [quiz_id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1372,7 +1521,7 @@ app.get('/api/competencies/:id/eligible-assessors', authenticateToken, async (re
     if (progress.length === 0) return res.json([]);
     const userIds = progress.map(p => p.user_id);
     const placeholders = userIds.map(() => '?').join(',');
-    const users = await query(sharedDb, `SELECT id, full_name, designation FROM users WHERE is_active = 1 AND id IN (${placeholders})`, userIds);
+    const users = await query(sharedDb, `SELECT id, full_name, designation, is_admin, is_superuser FROM users WHERE is_active = 1 AND id IN (${placeholders})`, userIds);
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1485,6 +1634,11 @@ app.post('/api/viva/submit-self', authenticateToken, async (req, res) => {
     const check = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [assigned_assessor_id, competency_id]);
     if (check.length === 0 || !['x', 'x+'].includes(check[0].current_status)) return res.status(400).json({ error: "Selected assessor is not eligible." });
     
+    const adminCheck = await query(sharedDb, `SELECT is_admin, is_superuser FROM users WHERE id = ?`, [assigned_assessor_id]);
+    if (adminCheck.length === 0 || (!adminCheck[0].is_admin && !adminCheck[0].is_superuser)) {
+        return res.status(400).json({ error: "Selected user is not an Assessor." });
+    }
+
     await execute(req.db, `INSERT INTO viva_evaluations (trainee_id, competency_id, quiz_id, assigned_assessor_id, trainee_answers) VALUES (?, ?, ?, ?, ?)`, 
       [trainee_id, competency_id, quiz_id, assigned_assessor_id, JSON.stringify(trainee_answers)]);
       

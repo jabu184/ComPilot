@@ -82,7 +82,7 @@
                       <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-200 border-r-2 border-gray-300">{{ cat }}</td>
                       <td v-for="u in publicDisplayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 bg-gray-50 align-top">
                         <div v-if="getPublicUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
-                          <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getPublicUserCategoryProgress(u, cat).percent }}%</span>
+                          <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getPublicUserCategoryProgress(u, cat).complete }} / {{ getPublicUserCategoryProgress(u, cat).total }}</span>
                           <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
                             <div class="bg-green-500 h-1.5 rounded-full transition-all" :style="`width: ${getPublicUserCategoryProgress(u, cat).percent}%`"></div>
                           </div>
@@ -91,7 +91,18 @@
                     </tr>
                     <tr v-for="comp in group" :key="comp.id" class="hover:bg-gray-50 group">
                       <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300">
-                        {{ comp.task_name }}
+                        <div class="flex items-center gap-2">
+                          <span>{{ comp.task_name }}</span>
+                          <span v-if="comp.avg_delta !== null && comp.avg_delta !== undefined" 
+                                :class="['px-2 py-0.5 rounded text-[10px] font-bold shadow-sm', 
+                                         comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                         comp.avg_delta > 0.5 ? 'bg-slate-100 text-slate-700 border border-slate-300' :
+                                         'bg-amber-100 text-amber-800 border border-amber-300']"
+                                :title="'Mean Delta: ' + comp.avg_delta.toFixed(2)">
+                            {{ comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'Balanced Alignment' :
+                               comp.avg_delta > 0.5 ? 'Confidence Gap' : 'Expectation Mismatch' }}
+                          </span>
+                        </div>
                       </td>
                       <td v-for="u in publicDisplayedUsers" :key="u.id" 
                           :class="['whitespace-nowrap px-3 py-4 text-sm text-center border-l transition relative',
@@ -175,6 +186,19 @@
           </div>
         </div>
         
+        <!-- Gamified Milestone Rewards -->
+        <div v-if="currentTab === 'individual' && isGamificationEnabled" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-4 text-gray-800">Your Achievements</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+            <div v-for="badge in myBadges" :key="badge.tier" 
+                 :title="badge.unlocked ? badge.name + ':\n' + badge.description : 'Locked'"
+                 :class="['flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-300', badge.unlocked ? 'border-gray-200 bg-gray-50 shadow-sm hover:scale-105 hover:shadow-md cursor-help' : 'border-gray-100 bg-gray-50 opacity-25 grayscale cursor-not-allowed']">
+              <svg viewBox="0 0 24 24" class="w-14 h-14 mb-2 drop-shadow-sm transition-transform" :class="[badge.iconColor, badge.unlocked ? 'hover:animate-pulse' : '']" fill="currentColor" v-html="badge.svg"></svg>
+              <span class="text-xs font-bold text-center text-gray-800 leading-tight">{{ badge.name }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Overview Filters -->
         <div v-if="currentTab === 'overview'" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-end">
           <div class="flex flex-col">
@@ -282,7 +306,7 @@
                 </td>
                 <td v-for="u in displayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 align-top" :class="currentTab === 'individual' ? 'bg-gray-50 group-hover/cat:bg-gray-100' : 'bg-gray-50'">
                   <div v-if="getUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
-                    <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getUserCategoryProgress(u, cat).percent }}%</span>
+                    <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getUserCategoryProgress(u, cat).complete }} / {{ getUserCategoryProgress(u, cat).total }}</span>
                     <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
                       <div class="bg-green-500 h-1.5 rounded-full transition-all" :style="`width: ${getUserCategoryProgress(u, cat).percent}%`"></div>
                     </div>
@@ -292,7 +316,18 @@
               <tr v-for="comp in group" :key="comp.id" v-show="currentTab === 'overview' || expandedMatrixCategories.includes(cat)" class="hover:bg-gray-50 group">
                 <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 cursor-pointer bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300" @click="currentTab === 'individual' ? (isApplicable(user, comp) ? openModal(user, comp) : null) : toggleCompetencyFilter(comp.id)">
                   <div class="flex items-center justify-between">
-                    <span>{{ comp.task_name }}</span>
+                    <div class="flex items-center gap-2">
+                      <span>{{ comp.task_name }}</span>
+                      <span v-if="comp.avg_delta !== null && comp.avg_delta !== undefined" 
+                            :class="['px-2 py-0.5 rounded text-[10px] font-bold shadow-sm', 
+                                     comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                     comp.avg_delta > 0.5 ? 'bg-slate-100 text-slate-700 border border-slate-300' :
+                                     'bg-amber-100 text-amber-800 border border-amber-300']"
+                            :title="'Mean Delta: ' + comp.avg_delta.toFixed(2)">
+                        {{ comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'Balanced Alignment' :
+                           comp.avg_delta > 0.5 ? 'Confidence Gap' : 'Expectation Mismatch' }}
+                      </span>
+                    </div>
                     <span v-if="selectedFilterCompetency === comp.id" class="text-blue-600 ml-2" title="Filter Active">🔍</span>
                   </div>
                 </td>
@@ -421,6 +456,23 @@
 
       <!-- Assessor Tab -->
       <div v-else-if="currentTab === 'assessor' && (user.is_admin || user.is_superuser)" class="space-y-6">
+
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-3 text-purple-800">Self Assessment Review Queue</h3>
+          <div v-if="Object.keys(groupedVivaQueue).length === 0" class="text-sm text-gray-500 italic">No pending self assessments to review.</div>
+          <div v-else class="space-y-4">
+            <div v-for="(vivas, traineeName) in groupedVivaQueue" :key="'viva-'+traineeName" class="border border-gray-200 rounded p-3 bg-gray-50">
+              <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ traineeName }}</h4>
+              <ul class="space-y-1">
+                <li v-for="viva in vivas" :key="viva.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
+                  <span>{{ viva.category }} - {{ viva.task_name }} <span class="text-gray-500 italic ml-1">({{ viva.quiz_name }})</span></span>
+                  <button @click="activeVivaReview = viva" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm">Score</button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <h3 class="text-lg font-bold mb-3 text-orange-800">Requires Assessment (A)</h3>
           <div v-if="Object.keys(usersRequiringAssessment).length === 0" class="text-sm text-gray-500 italic">
@@ -471,22 +523,6 @@
                 <li v-for="log in logs" :key="log.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
                   <span>{{ log.category }} - {{ log.task_name }} <span class="text-gray-500 italic ml-1">({{ log.patient_reference }}<template v-if="log.log_date">, {{ new Date(log.log_date).toLocaleDateString() }}</template>)</span></span>
                   <button @click="activeLogReview = log" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm">Comment & Score</button>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-        
-        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mt-6">
-          <h3 class="text-lg font-bold mb-3 text-purple-800">Self Assessment Review Queue</h3>
-          <div v-if="Object.keys(groupedVivaQueue).length === 0" class="text-sm text-gray-500 italic">No pending self assessments to review.</div>
-          <div v-else class="space-y-4">
-            <div v-for="(vivas, traineeName) in groupedVivaQueue" :key="'viva-'+traineeName" class="border border-gray-200 rounded p-3 bg-gray-50">
-              <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ traineeName }}</h4>
-              <ul class="space-y-1">
-                <li v-for="viva in vivas" :key="viva.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
-                  <span>{{ viva.category }} - {{ viva.task_name }} <span class="text-gray-500 italic ml-1">({{ viva.quiz_name }})</span></span>
-                  <button @click="activeVivaReview = viva" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm">Score</button>
                 </li>
               </ul>
             </div>
@@ -761,13 +797,22 @@
                       <thead class="bg-gray-50"><tr>
                         <th class="px-3 py-2 text-left text-sm font-semibold">Assessment Name</th>
                         <th class="px-3 py-2 text-center text-sm font-semibold">Taken By</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">Avg Trainee Score</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">Avg Assessor Score</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">Avg Delta</th>
                         <th class="px-3 py-2 text-center text-sm font-semibold">In Use</th>
                         <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
                       </tr></thead>
                       <tbody class="bg-white divide-y divide-gray-200">
                         <tr v-for="q in selfAssessments" :key="q.id">
                           <td class="px-3 py-2 text-sm font-medium">{{ q.name }}</td>
-                          <td class="px-3 py-2 text-sm text-center">{{ quizStats[q.id]?.count || 0 }}</td>
+                          <td class="px-3 py-2 text-sm text-center">{{ q.evals_count || 0 }}</td>
+                          <td class="px-3 py-2 text-sm text-center font-semibold text-blue-600">{{ q.avg_trainee !== null && q.avg_trainee !== undefined ? q.avg_trainee.toFixed(2) : '-' }}</td>
+                          <td class="px-3 py-2 text-sm text-center font-semibold text-purple-600">{{ q.avg_assessor !== null && q.avg_assessor !== undefined ? q.avg_assessor.toFixed(2) : '-' }}</td>
+                          <td class="px-3 py-2 text-sm text-center font-bold"
+                              :class="q.avg_delta !== null && q.avg_delta > 0.5 ? 'text-slate-500' : (q.avg_delta !== null && q.avg_delta < -0.5 ? 'text-amber-600' : 'text-emerald-600')">
+                            {{ q.avg_delta !== null && q.avg_delta !== undefined ? (q.avg_delta > 0 ? '+' : '') + q.avg_delta.toFixed(2) : '-' }}
+                          </td>
                           <td class="px-3 py-2 text-sm text-center">
                             <span v-if="quizStats[q.id]?.inUse" class="text-green-600 font-bold">✓</span>
                             <span v-else class="text-red-600 font-bold">✗</span>
@@ -779,7 +824,7 @@
                             </div>
                           </td>
                         </tr>
-                        <tr v-if="selfAssessments.length === 0"><td colspan="4" class="px-3 py-4 text-center text-gray-500 italic">No self assessments in the library.</td></tr>
+                        <tr v-if="selfAssessments.length === 0"><td colspan="7" class="px-3 py-4 text-center text-gray-500 italic">No self assessments in the library.</td></tr>
                       </tbody>
                   </table>
                 </div>
@@ -1254,6 +1299,7 @@
                 <tr>
                   <th class="px-3 py-2 text-left text-sm font-semibold">Section Name</th>
                   <th class="px-3 py-2 text-center text-sm font-semibold">Status</th>
+                  <th class="px-3 py-2 text-center text-sm font-semibold">Achievements</th>
                   <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -1262,6 +1308,9 @@
                   <td class="px-3 py-2 text-sm font-medium">{{ section.name }}</td>
                   <td class="px-3 py-2 text-sm text-center">
                     <button @click="toggleSectionActive(idx)" :class="['px-2 py-1 rounded text-xs font-bold transition shadow-sm', section.active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600']">{{ section.active ? 'Active' : 'Inactive' }}</button>
+                  </td>
+                  <td class="px-3 py-2 text-sm text-center">
+                    <button @click="toggleSectionGamification(idx)" :class="['px-2 py-1 rounded text-xs font-bold transition shadow-sm', section.gamification ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-600']">{{ section.gamification ? 'Enabled' : 'Disabled' }}</button>
                   </td>
                   <td class="px-3 py-2 text-sm text-right">
                     <div class="flex justify-end items-center gap-2">
@@ -1450,9 +1499,9 @@
                       <label class="block text-sm font-medium text-gray-700 mb-1">Select Assessor for Review</label>
                       <select v-model="vivaAssessorId" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500">
                           <option disabled value="">Select an Assessor...</option>
-                          <option v-for="a in eligibleAssessors" :key="a.id" :value="a.id">{{ a.full_name }} ({{ a.designation }})</option>
+                          <option v-for="a in eligibleAssessors.filter(x => x.is_admin || x.is_superuser)" :key="a.id" :value="a.id">{{ a.full_name }} ({{ a.designation }})</option>
                       </select>
-                      <div v-if="eligibleAssessors.length === 0" class="text-xs text-red-600 mt-1 font-bold">No eligible assessors found for this competency.</div>
+                      <div v-if="eligibleAssessors.filter(x => x.is_admin || x.is_superuser).length === 0" class="text-xs text-red-600 mt-1 font-bold">No eligible assessors found for this competency.</div>
                   </div>
                   
                   <div class="flex gap-2">
@@ -1787,7 +1836,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v2.01
+        James Burnley v2.03
       </div>
     </div>
 
@@ -2100,11 +2149,7 @@
             if (p.user_id !== user.value.id || p.current_status !== 'x') return false;
             const c = competencies.value.find(comp => comp.id === p.competency_id);
             if (!c) return false;
-            const hasViva = c.quiz_ids && c.quiz_ids.some(qId => {
-              const quiz = quizLibrary.value.find(q => q.id === qId);
-              return quiz && quiz.is_viva;
-            });
-            return c.required_plan_count > 0 || hasViva;
+            return c.required_plan_count > 0;
           });
         });
 
@@ -2120,15 +2165,20 @@
           try {
              const res = await fetch('/api/assessor/viva-queue', { headers: getHeaders() });
              if (res.ok) {
-                 vivaQueue.value = await res.json();
-                 vivaQueue.value.forEach(v => {
-                     if (!v.assessor_answers) v.assessor_answers = {};
-                     v.questions.forEach(q => {
-                         if (!v.assessor_answers[q.id]) v.assessor_answers[q.id] = 1;
-                     });
+                 const data = await res.json();
+                 data.forEach(v => {
+                     let parsed = {};
+                     try { parsed = JSON.parse(v.assessor_answers || '{}'); } catch(e){}
+                     v.assessor_answers = parsed;
+                     if (v.questions) {
+                         v.questions.forEach(q => {
+                             if (!v.assessor_answers[q.id]) v.assessor_answers[q.id] = 1;
+                         });
+                     }
                  });
+                 vivaQueue.value = data;
              }
-          } catch(e) {}
+          } catch(e) { console.error("Error loading Viva queue:", e); }
         };
         
         const fetchVivaSummaries = async (userId, compId) => {
@@ -2246,7 +2296,7 @@
         });
 
         const getPublicUserCategoryProgress = (u, cat) => {
-          if (!publicAllUsersProgress.value[u.id] || !publicAllUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0 };
+          if (!publicAllUsersProgress.value[u.id] || !publicAllUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0, complete: 0 };
           return publicAllUsersProgress.value[u.id].categories[cat];
         };
 
@@ -3131,7 +3181,7 @@
         const userProgress = computed(() => user.value ? (allUsersProgress.value[user.value.id] || { overall: { percent: 0 }, categories: {} }) : { overall: { percent: 0 }, categories: {} });
         
         const getUserCategoryProgress = (u, cat) => {
-          if (!allUsersProgress.value[u.id] || !allUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0 };
+          if (!allUsersProgress.value[u.id] || !allUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0, complete: 0 };
           return allUsersProgress.value[u.id].categories[cat];
         };
         
@@ -3270,7 +3320,10 @@
           if (comp.allow_file_uploads) await fetchFiles(u.id, comp.id);
           if (comp.required_plan_count > 0) {
             await fetchPlanningLogs(u.id, comp.id);
-            if (u.id === user.value.id) await fetchEligibleAssessors(comp.id);
+          }
+          
+          if (u.id === user.value.id && (comp.required_plan_count > 0 || cellQuizzes.value.some(q => q.is_viva))) {
+            await fetchEligibleAssessors(comp.id);
           }
           takingEval.value = null;
           nextTick(() => {
@@ -3736,7 +3789,7 @@
           try {
             const res = await fetch('/api/viva/submit-self', {
                method: 'POST', headers: getHeaders(true),
-               body: JSON.stringify({ competency_id: selectedCell.value.comp.id, quiz_id: vivaData.value.id, assigned_assessor_id: vivaAssessorId.value, trainee_answers: vivaAnswers.value })
+               body: JSON.stringify({ competency_id: selectedCell.value.comp.id, quiz_id: vivaData.value.id, assigned_assessor_id: parseInt(vivaAssessorId.value, 10), trainee_answers: vivaAnswers.value })
             });
             if (!res.ok) throw new Error((await res.json()).error);
             customAlert("Self-Assessment submitted for review.", "Success");
@@ -4210,7 +4263,11 @@
         const fetchQuizLibrary = async () => {
             try {
                 const res = await fetch('/api/quizzes/library', { headers: getHeaders() });
-                quizLibrary.value = await res.json();
+                if (res.ok) {
+                    quizLibrary.value = await res.json();
+                } else {
+                    quizLibrary.value = [];
+                }
             } catch(e) { console.error(e); }
         };
 
@@ -4361,7 +4418,8 @@
         });
         
         watch(currentTab, (newTab) => {
-          if (newTab === 'trainer') { fetchAssessorQueue(); fetchVivaQueue(); }
+          if (newTab === 'trainer') { fetchAssessorQueue(); }
+          if (newTab === 'assessor') { fetchVivaQueue(); }
         });
 
         const uploadStats = ref([]);
@@ -4550,6 +4608,68 @@
           await saveSections();
         };
 
+        const toggleSectionGamification = async (idx) => {
+          globalSettings.value.sections[idx].gamification = !globalSettings.value.sections[idx].gamification;
+          await saveSections();
+        };
+
+        const isGamificationEnabled = computed(() => {
+          const section = globalSettings.value.sections?.find(s => s.name === selectedDb.value);
+          return section ? !!section.gamification : false;
+        });
+
+        const userBadgeStats = computed(() => {
+          if (!user.value) return { total: 0, completed: 0, trainer: 0, percent: 0 };
+          const myComps = competencies.value.filter(c => isApplicable(user.value, c));
+          let completed = 0;
+          let trainer = 0;
+          myComps.forEach(c => {
+            const p = getProgressStatus(user.value.id, c.id);
+            if (p === 'c' || p === 'x') completed++;
+            if (p === 'x') trainer++;
+          });
+          const total = myComps.length;
+          const percent = total > 0 ? Math.floor((completed / total) * 100) : 0;
+          return { total, completed, trainer, percent };
+        });
+
+        const myBadges = computed(() => {
+          const stats = userBadgeStats.value;
+          const isAdmin = user.value?.is_admin || user.value?.is_superuser;
+          return [
+            {
+              tier: 1, name: 'Sector Starter', description: 'Started progressing in this section.',
+              unlocked: stats.percent > 0, iconColor: 'text-[#cd7f32]',
+              svg: '<circle cx="12" cy="12" r="10" fill="currentColor"/><circle cx="12" cy="12" r="7" fill="rgba(255,255,255,0.2)"/>'
+            },
+            {
+              tier: 2, name: 'Pacesetter', description: 'Reached 50% completion.',
+              unlocked: stats.percent >= 50, iconColor: 'text-gray-400',
+              svg: '<polygon points="12,2 20.66,7 20.66,17 12,22 3.34,17 3.34,7" fill="currentColor"/><polygon points="12,5 18,8.5 18,15.5 12,19 6,15.5 6,8.5" fill="rgba(255,255,255,0.3)"/>'
+            },
+            {
+              tier: 4, name: 'Section Mastery', description: 'Achieved 100% completion.',
+              unlocked: stats.percent === 100, iconColor: 'text-yellow-500',
+              svg: '<path d="M12 2L3 6v5.5c0 5.5 3.8 10.7 9 12.5 5.2-1.8 9-7 9-12.5V6l-9-4z" fill="currentColor"/><path d="M12 6L6 9v3.5c0 3.5 2.5 6.8 6 8 3.5-1.2 6-4.5 6-8V9l-6-3z" fill="rgba(255,255,255,0.3)"/>'
+            },
+            {
+              tier: 5, name: 'Peer Mentor', description: 'Trainer for at least 1 task.',
+              unlocked: stats.trainer >= 1, iconColor: 'text-purple-600',
+              svg: '<path d="M12 2l8 8-8 12-8-12 8-8z" fill="currentColor"/><path d="M12 6l5 5-5 8-5-8 5-5z" fill="rgba(255,255,255,0.3)"/>'
+            },
+            {
+              tier: 6, name: 'Lead Trainer', description: 'Trainer for 50%+ of tasks.',
+              unlocked: stats.total > 0 && stats.trainer >= (stats.total * 0.5), iconColor: 'text-rose-600',
+              svg: '<path d="M12 1L1 12l11 11 11-11L12 1z" fill="currentColor"/><polygon points="12,5 5,12 12,19 19,12" fill="rgba(255,255,255,0.3)"/>'
+            },
+            {
+              tier: 7, name: 'Master Assessor', description: 'Holds standard Assessor privileges.',
+              unlocked: isAdmin, iconColor: 'text-sky-500',
+              svg: '<path d="M12 1l3 6 6-1-3 6 2 7-8-4-8 4 2-7-3-6 6 1 3-6z" fill="currentColor"/><circle cx="12" cy="13" r="3" fill="rgba(255,255,255,0.5)"/>'
+            }
+          ]
+        });
+
         const addSection = async () => {
           const name = newSectionName.value.trim();
           if (!name) return;
@@ -4629,7 +4749,8 @@
                  uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, activeLogReview, submitLogReviewModal,
                  auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, groupedAssessorQueue, editingPlanLogId, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
                  logbookCompetencies, getApprovedLogsCount, getCompPlanningLogs, isTrainerInAny,
-                 vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal, createNewLibraryQuiz: createNewLibraryQuizWithArg, standardQuizzes, selfAssessments
+                 vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal, createNewLibraryQuiz: createNewLibraryQuizWithArg, standardQuizzes, selfAssessments,
+                 toggleSectionGamification, isGamificationEnabled, userBadgeStats, myBadges
         };
       }
     }).mount('#app');
