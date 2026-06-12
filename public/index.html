@@ -144,6 +144,8 @@
       <div class="flex gap-6 mb-4 border-b pb-2">
         <button @click="currentTab = 'individual'" :class="currentTab === 'individual' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Individual</button>
         <button @click="currentTab = 'overview'" :class="currentTab === 'overview' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Overview</button>
+        <button v-if="Object.keys(logbookCompetencies).length > 0" @click="currentTab = 'logbook'" :class="currentTab === 'logbook' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Logbook</button>
+        <button v-if="isTrainerInAny" @click="currentTab = 'trainer'" :class="currentTab === 'trainer' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Trainer</button>
         <button v-if="user.is_admin || user.is_superuser" @click="currentTab = 'assessor'" :class="currentTab === 'assessor' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Assessor</button>
         <button v-if="user.is_admin || user.is_superuser" @click="handleAdminTabClick" :class="currentTab === 'admin' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Admin</button>
       </div>
@@ -336,6 +338,87 @@
         </div>
       </div>
       
+      <!-- Logbook View -->
+      <div v-else-if="currentTab === 'logbook'" class="space-y-6">
+        <div v-for="(comps, cat) in logbookCompetencies" :key="cat" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-3 text-gray-800">{{ cat }}</h3>
+          <div v-for="comp in comps" :key="comp.id" class="mb-4 last:mb-0 border border-gray-200 rounded p-3 bg-gray-50 flex flex-col gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div class="flex-grow w-full">
+                <div class="flex items-center gap-3 mb-2 flex-wrap">
+                  <div class="font-bold text-gray-800">{{ comp.task_name }}</div>
+                  <span :class="getStatusBadgeClass(user.id, comp.id)">
+                    {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(user.id, comp.id)] || 'Not Started' }}
+                  </span>
+                  <span class="text-sm font-semibold text-gray-700 whitespace-nowrap bg-white px-2 py-1 rounded border border-gray-200 shadow-sm">{{ getApprovedLogsCount(comp.id) }} / {{ comp.required_plan_count }} Approved</span>
+                </div>
+                <div class="flex items-center gap-4 mb-1">
+                  <div class="flex-grow bg-gray-200 rounded-full h-2 w-full">
+                    <div class="bg-blue-600 h-2 rounded-full transition-all" :style="`width: ${Math.min(100, (getApprovedLogsCount(comp.id) / comp.required_plan_count) * 100)}%`"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button @click="toggleLogbookView(comp)" :class="activeLogbookCompId === comp.id && activeLogbookMode === 'view' ? 'bg-blue-200 text-blue-900' : 'bg-blue-100 hover:bg-blue-200 text-blue-800'" class="text-xs px-3 py-1.5 rounded font-bold transition shadow-sm whitespace-nowrap">{{ activeLogbookCompId === comp.id && activeLogbookMode === 'view' ? 'Hide Logs' : 'View Logs' }}</button>
+                <button @click="toggleLogbookAdd(comp)" :class="activeLogbookCompId === comp.id && activeLogbookMode === 'add' ? 'bg-green-200 text-green-900' : 'bg-green-100 hover:bg-green-200 text-green-800'" class="text-xs px-3 py-1.5 rounded font-bold transition shadow-sm whitespace-nowrap">Add Log</button>
+              </div>
+            </div>
+
+            <!-- Expanded Logbook View -->
+            <div v-if="activeLogbookCompId === comp.id && activeLogbookMode === 'view'" class="mt-2 border-t border-gray-200 pt-3">
+              <h4 class="font-bold text-gray-800 mb-2">Your Logs</h4>
+              <ul v-if="getCompPlanningLogs(comp.id).length > 0" class="space-y-3">
+                <li v-for="log in getCompPlanningLogs(comp.id)" :key="log.id" class="p-3 border rounded bg-white text-sm shadow-sm border-gray-200">
+                  <div class="flex justify-between items-center mb-1">
+                    <strong class="text-gray-800">Ref: {{ log.patient_reference }} <span v-if="log.log_date" class="text-gray-500 font-normal ml-1">({{ new Date(log.log_date).toLocaleDateString() }})</span></strong>
+                    <div class="flex items-center gap-2">
+                      <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold text-xs bg-gray-50 px-2 py-1 rounded border border-gray-200 shadow-sm">{{ log.status === 'Needs_Amendment' ? 'In Development' : log.status.replace('_', ' ') }}</span>
+                    </div>
+                  </div>
+                  <div class="text-xs text-gray-500 mb-2">
+                    <span v-if="log.status !== 'Draft'">Sent to <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong> on {{ new Date(log.created_at).toLocaleString() }}</span>
+                    <span v-else>Draft saved on {{ new Date(log.created_at).toLocaleString() }}</span>
+                  </div>
+                  <p class="text-gray-700 mt-1 mb-2 italic">"{{ log.trainee_comments }}"</p>
+                  <div v-if="log.status !== 'Pending_Review' && log.status !== 'Draft'" class="border-t border-gray-100 pt-2 mt-2">
+                    <p class="text-xs font-semibold text-gray-800">Score: {{ log.score }}</p>
+                    <p class="text-xs text-gray-600 mt-1">Feedback: {{ log.assessor_comments || 'None' }}</p>
+                  </div>
+                  <div v-if="log.status === 'Draft' || log.status === 'Pending_Review'" class="border-t border-gray-100 pt-2 mt-2 flex gap-2">
+                    <button @click="editPlanLog(log)" class="text-xs text-blue-600 font-semibold hover:underline">Edit</button>
+                    <button @click="deletePlanLog(log.id)" class="text-xs text-red-600 font-semibold hover:underline">Delete</button>
+                  </div>
+                </li>
+              </ul>
+              <div v-else class="text-sm text-gray-500 italic">No logs submitted yet.</div>
+            </div>
+
+            <!-- Expanded Logbook Add/Edit -->
+            <div v-if="activeLogbookCompId === comp.id && activeLogbookMode === 'add'" class="mt-2 bg-blue-50/50 p-4 rounded border border-blue-100 shadow-inner">
+              <h5 class="font-semibold text-blue-900 text-sm mb-3">{{ editingPlanLogId ? 'Edit Case Log' : 'Add New Case Log' }}</h5>
+              <div class="flex flex-col sm:flex-row gap-3 mb-3">
+                <input v-model="newPlanLog.patient_reference" placeholder="Anonymized Case Ref / Patient No." class="w-full sm:w-2/3 border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500">
+                <input type="date" v-model="newPlanLog.log_date" class="w-full sm:w-1/3 border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500">
+              </div>
+              <textarea v-model="newPlanLog.trainee_comments" placeholder="Reflective clinical text..." class="w-full mb-3 border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500 min-h-[80px]"></textarea>
+              <select v-model="newPlanLog.assigned_assessor_id" class="w-full mb-3 border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500">
+                <option disabled value="">Select a Trainer/Assessor...</option>
+                <option v-for="a in eligibleAssessors" :key="a.id" :value="a.id">{{ a.full_name }} ({{ a.designation }})</option>
+              </select>
+              <div v-if="eligibleAssessors.length === 0" class="text-xs text-red-600 mb-2 font-bold">No eligible trainers found for this competency.</div>
+              <div class="flex flex-wrap gap-2">
+                <button @click="submitPlanLog(comp.id, true)" :disabled="!newPlanLog.patient_reference" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1.5 px-3 rounded text-sm disabled:opacity-50 shadow-sm transition border border-gray-300">Save Draft</button>
+                <button @click="submitPlanLog(comp.id, false)" :disabled="!newPlanLog.patient_reference || !newPlanLog.assigned_assessor_id" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-3 rounded text-sm disabled:opacity-50 shadow-sm transition">Submit for Review</button>
+                <button v-if="editingPlanLogId" @click="cancelEditPlanLog" class="bg-gray-400 hover:bg-gray-500 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm ml-auto">Cancel Edit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="Object.keys(logbookCompetencies).length === 0" class="text-sm text-gray-500 italic bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          No case logs are required for any of your competencies.
+        </div>
+      </div>
+
       <!-- Assessor Tab -->
       <div v-else-if="currentTab === 'assessor' && (user.is_admin || user.is_superuser)" class="space-y-6">
         <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -373,6 +456,42 @@
             </div>
           </div>
         </div>
+
+      </div>
+
+      <!-- Trainer Tab -->
+      <div v-else-if="currentTab === 'trainer' && isTrainerInAny" class="space-y-6">
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h3 class="text-lg font-bold mb-3 text-blue-800">Training Log Feedback Queue</h3>
+          <div v-if="Object.keys(groupedAssessorQueue).length === 0" class="text-sm text-gray-500 italic">No pending logs to review.</div>
+          <div v-else class="space-y-4">
+            <div v-for="(logs, traineeName) in groupedAssessorQueue" :key="'log-'+traineeName" class="border border-gray-200 rounded p-3 bg-gray-50">
+              <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ traineeName }}</h4>
+              <ul class="space-y-1">
+                <li v-for="log in logs" :key="log.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
+                  <span>{{ log.category }} - {{ log.task_name }} <span class="text-gray-500 italic ml-1">({{ log.patient_reference }}<template v-if="log.log_date">, {{ new Date(log.log_date).toLocaleDateString() }}</template>)</span></span>
+                  <button @click="activeLogReview = log" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm">Comment & Score</button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mt-6">
+          <h3 class="text-lg font-bold mb-3 text-purple-800">Self Assessment Review Queue</h3>
+          <div v-if="Object.keys(groupedVivaQueue).length === 0" class="text-sm text-gray-500 italic">No pending self assessments to review.</div>
+          <div v-else class="space-y-4">
+            <div v-for="(vivas, traineeName) in groupedVivaQueue" :key="'viva-'+traineeName" class="border border-gray-200 rounded p-3 bg-gray-50">
+              <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ traineeName }}</h4>
+              <ul class="space-y-1">
+                <li v-for="viva in vivas" :key="viva.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
+                  <span>{{ viva.category }} - {{ viva.task_name }} <span class="text-gray-500 italic ml-1">({{ viva.quiz_name }})</span></span>
+                  <button @click="activeVivaReview = viva" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm">Score</button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Admin Dashboard -->
@@ -383,6 +502,7 @@
             <button v-if="user.is_admin" @click="adminSubTab = 'quizzes'" :class="adminSubTab === 'quizzes' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Quizzes</button>
             <button v-if="user.is_admin || user.is_superuser" @click="adminSubTab = 'categories'" :class="adminSubTab === 'categories' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Categories</button>
             <button v-if="user.is_admin" @click="adminSubTab = 'statistics'" :class="adminSubTab === 'statistics' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Statistics</button>
+            <button v-if="user.is_admin || user.is_superuser" @click="adminSubTab = 'audit'" :class="adminSubTab === 'audit' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Audit Logs</button>
             <button v-if="user.is_superuser" @click="adminSubTab = 'users'" :class="adminSubTab === 'users' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Users</button>
             <button v-if="user.is_superuser" @click="adminSubTab = 'superadmin'" :class="adminSubTab === 'superadmin' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Configuration</button>
           </div>
@@ -401,7 +521,7 @@
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label><textarea v-model="newComp.description" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="Provide additional details about this competency..."></textarea></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Renewal Period (Months)</label><input v-model.number="newComp.renewal_period_months" type="number" min="1" class="block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" :placeholder="`Default: ${globalSettings.default_renewal_period || 36}`"></div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
-                <label class="flex items-center space-x-2 cursor-pointer font-semibold text-gray-700 mb-2">Self-Evaluation Questionnaires</label>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Self-Evaluation Questionnaires</label>
                 <div class="flex flex-col gap-2 pl-4">
                   <label class="flex items-center space-x-2 cursor-pointer">
                     <input type="checkbox" v-model="newComp.requires_pre_eval" class="h-4 w-4 text-blue-600 rounded">
@@ -411,6 +531,17 @@
                     <input type="checkbox" v-model="newComp.requires_post_eval" class="h-4 w-4 text-blue-600 rounded">
                     <span class="text-sm font-medium text-gray-700">Post-Training (must score ≥3 on all dimensions to move to assessment)</span>
                   </label>
+                </div>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                  <input type="checkbox" v-model="newComp.requires_case_logs" @change="newComp.requires_case_logs ? (newComp.required_plan_count = newComp.required_plan_count || 5) : (newComp.required_plan_count = 0)" class="h-4 w-4 text-blue-600 rounded"> 
+                  <span class="text-sm font-medium text-gray-700">Case Logbook Prerequisites</span>
+                </label>
+                <div v-if="newComp.requires_case_logs" class="flex flex-col gap-2 pl-4 mt-3 pt-3 border-t border-gray-100">
+                   <label class="block text-sm font-medium text-gray-700 mb-1">Required Successful Case Logs</label>
+                   <input v-model.number="newComp.required_plan_count" type="number" min="1" class="block w-full sm:w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-1.5 text-sm" placeholder="5">
+                   <p class="text-xs text-gray-500">Requires trainees to submit cases for trainer review and score 3+.</p>
                 </div>
               </div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
@@ -543,70 +674,115 @@
             <div v-if="activeLibraryQuiz" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <h3 class="text-lg font-semibold mb-4">{{ isEditingQuiz ? 'Edit Quiz' : 'Create New Quiz' }}</h3>
                 <div class="space-y-4">
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Quiz Name</label><input v-model="activeLibraryQuiz.name" placeholder="Unique Quiz Name" class="block w-full rounded-md border-gray-300 shadow-sm border px-3 py-2"></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label><input v-model.number="activeLibraryQuiz.passing_score_percent" type="number" min="1" max="100" class="block w-32 rounded-md border-gray-300 shadow-sm border px-3 py-2"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">{{ activeLibraryQuiz.is_viva ? 'Assessment Name' : 'Quiz Name' }}</label><input v-model="activeLibraryQuiz.name" placeholder="Unique Name" class="block w-full rounded-md border-gray-300 shadow-sm border px-3 py-2 focus:ring-blue-500 focus:border-blue-500"></div>
+                    
+                    <div v-if="!activeLibraryQuiz.is_viva">
+                      <label class="block text-sm font-medium text-gray-700 mb-1">Passing Score (%)</label>
+                      <input v-model.number="activeLibraryQuiz.passing_score_percent" type="number" min="1" max="100" class="block w-32 rounded-md border-gray-300 shadow-sm border px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
                     
                     <h4 class="font-semibold mb-2 pt-2 border-t">Questions</h4>
                     <div v-for="(q, idx) in activeLibraryQuiz.questions" :key="idx" class="bg-white p-4 border rounded shadow-sm mb-4 relative">
                         <button @click="activeLibraryQuiz.questions.splice(idx, 1)" class="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-bold">Remove</button>
                         <label class="block text-sm font-medium mb-1 text-gray-700">Question {{idx+1}}</label>
                         <input v-model="q.question_text" class="block w-full rounded border-gray-300 border px-3 py-2 mb-2 focus:ring-blue-500 focus:border-blue-500">
-                        <div class="mb-3"><label class="block text-sm font-medium mb-1 text-gray-700">Question Type</label><select v-model="q.question_type" class="block w-48 rounded border-gray-300 border px-3 py-2 text-sm bg-white focus:ring-blue-500 focus:border-blue-500"><option value="multiple_choice">Multiple Choice</option><option value="true_false">True / False</option><option value="short_answer">Short Answer</option></select></div>
-                        <div v-if="!q.question_type || q.question_type === 'multiple_choice'"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs font-semibold text-gray-600">Option A</label><input v-model="q.option_a" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option B</label><input v-model="q.option_b" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option C</label><input v-model="q.option_c" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option D</label><input v-model="q.option_d" class="block w-full rounded border px-2 py-1 text-sm"></div></div><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Option</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
-                        <div v-else-if="q.question_type === 'true_false'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="True">True</option><option value="False">False</option></select></div>
-                        <div v-else-if="q.question_type === 'short_answer'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer (Exact Match)</label><input v-model="q.correct_option" class="block w-full rounded border-gray-300 border px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Case-insensitive answer"></div>
+                        <div v-if="activeLibraryQuiz.is_viva">
+                          <label class="block text-sm font-medium mb-1 mt-2 text-gray-500 italic">Self Assessment questions require a 1-10 slider score from both trainee and assessor.</label>
+                        </div>
+                        <template v-else>
+                          <div class="mb-3"><label class="block text-sm font-medium mb-1 text-gray-700">Question Type</label><select v-model="q.question_type" class="block w-48 rounded border-gray-300 border px-3 py-2 text-sm bg-white focus:ring-blue-500 focus:border-blue-500"><option value="multiple_choice">Multiple Choice</option><option value="true_false">True / False</option><option value="short_answer">Short Answer</option></select></div>
+                          <div v-if="!q.question_type || q.question_type === 'multiple_choice'"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs font-semibold text-gray-600">Option A</label><input v-model="q.option_a" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option B</label><input v-model="q.option_b" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option C</label><input v-model="q.option_c" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option D</label><input v-model="q.option_d" class="block w-full rounded border px-2 py-1 text-sm"></div></div><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Option</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                          <div v-else-if="q.question_type === 'true_false'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="True">True</option><option value="False">False</option></select></div>
+                          <div v-else-if="q.question_type === 'short_answer'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer (Exact Match)</label><input v-model="q.correct_option" class="block w-full rounded border-gray-300 border px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Case-insensitive answer"></div>
+                        </template>
                     </div>
                     <button @click="activeLibraryQuiz.questions.push({question_text:'', question_type: 'multiple_choice', option_a:'', option_b:'', option_c:'', option_d:'', correct_option:'A'})" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-sm mb-4 font-semibold shadow-sm">+ Add Question</button>
                 </div>
                 <div class="mt-4 flex gap-2">
-                    <button @click="saveLibraryQuiz" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">Save Quiz</button>
+                    <button @click="saveLibraryQuiz" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">Save</button>
                     <button @click="cancelEditLibraryQuiz" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded transition">Cancel</button>
                 </div>
             </div>
 
             <!-- Quiz List View -->
-            <div v-else>
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold">Quiz Library</h3>
-                    <button @click="createNewLibraryQuiz" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">+ Create New Quiz</button>
-                </div>
-                <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
-                    <thead class="bg-gray-50"><tr>
-                      <th class="px-3 py-2 text-left text-sm font-semibold">Quiz Name</th>
-                      <th class="px-3 py-2 text-left text-sm font-semibold">Passing Score</th>
-                      <th class="px-3 py-2 text-left text-sm font-semibold">Average Score</th>
-                      <th class="px-3 py-2 text-center text-sm font-semibold">Taken By</th>
-                      <th class="px-3 py-2 text-center text-sm font-semibold">In Use</th>
-                      <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
-                    </tr></thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                      <tr v-for="q in quizLibrary" :key="q.id">
-                        <td class="px-3 py-2 text-sm font-medium">{{ q.name }}</td>
-                        <td class="px-3 py-2 text-sm">{{ q.passing_score_percent }}%</td>
-                        <td class="px-3 py-2 text-sm align-middle w-48">
-                          <div class="flex items-center gap-2">
-                            <div class="relative w-full bg-gray-200 rounded-full h-2">
-                              <div class="bg-blue-500 h-2 rounded-full" :style="`width: ${quizStats[q.id]?.average || 0}%`"></div>
-                              <div class="absolute -top-1 -bottom-1 border-l-2 border-dashed border-gray-700 z-10" :style="`left: ${q.passing_score_percent}%`" title="Passing Score"></div>
+            <div v-else class="space-y-8">
+                <!-- Standard Quizzes -->
+                <div>
+                  <div class="flex justify-between items-center mb-4">
+                      <h3 class="text-lg font-semibold">Quiz Library</h3>
+                      <button @click="createNewLibraryQuiz(false)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded text-sm transition shadow-sm">+ Create New Quiz</button>
+                  </div>
+                  <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
+                      <thead class="bg-gray-50"><tr>
+                        <th class="px-3 py-2 text-left text-sm font-semibold">Quiz Name</th>
+                        <th class="px-3 py-2 text-left text-sm font-semibold">Passing Score</th>
+                        <th class="px-3 py-2 text-left text-sm font-semibold">Average Score</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">Taken By</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">In Use</th>
+                        <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
+                      </tr></thead>
+                      <tbody class="bg-white divide-y divide-gray-200">
+                        <tr v-for="q in standardQuizzes" :key="q.id">
+                          <td class="px-3 py-2 text-sm font-medium">{{ q.name }}</td>
+                          <td class="px-3 py-2 text-sm">{{ q.passing_score_percent }}%</td>
+                          <td class="px-3 py-2 text-sm align-middle w-48">
+                            <div class="flex items-center gap-2">
+                              <div class="relative w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-500 h-2 rounded-full" :style="`width: ${quizStats[q.id]?.average || 0}%`"></div>
+                                <div class="absolute -top-1 -bottom-1 border-l-2 border-dashed border-gray-700 z-10" :style="`left: ${q.passing_score_percent}%`" title="Passing Score"></div>
+                              </div>
+                              <span class="text-xs font-bold text-gray-700 w-8">{{ quizStats[q.id]?.average || 0 }}%</span>
                             </div>
-                            <span class="text-xs font-bold text-gray-700 w-8">{{ quizStats[q.id]?.average || 0 }}%</span>
-                          </div>
-                        </td>
-                        <td class="px-3 py-2 text-sm text-center">{{ quizStats[q.id]?.count || 0 }}</td>
-                        <td class="px-3 py-2 text-sm text-center">
-                          <span v-if="quizStats[q.id]?.inUse" class="text-green-600 font-bold">✓</span>
-                          <span v-else class="text-red-600 font-bold">✗</span>
-                        </td>
-                    <td class="px-3 py-2 text-sm text-right">
-                      <div class="flex justify-end items-center gap-2">
-                        <button @click="editLibraryQuiz(q.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
-                        <button @click="deleteLibraryQuiz(q.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
-                      </div>
-                        </td>
-                      </tr>
-                      <tr v-if="quizLibrary?.length === 0"><td colspan="3" class="px-3 py-4 text-center text-gray-500 italic">No quizzes in the library.</td></tr>
-                    </tbody>
-                </table>
+                          </td>
+                          <td class="px-3 py-2 text-sm text-center">{{ quizStats[q.id]?.count || 0 }}</td>
+                          <td class="px-3 py-2 text-sm text-center">
+                            <span v-if="quizStats[q.id]?.inUse" class="text-green-600 font-bold">✓</span>
+                            <span v-else class="text-red-600 font-bold">✗</span>
+                          </td>
+                          <td class="px-3 py-2 text-sm text-right">
+                            <div class="flex justify-end items-center gap-2">
+                              <button @click="editLibraryQuiz(q.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                              <button @click="deleteLibraryQuiz(q.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr v-if="standardQuizzes.length === 0"><td colspan="6" class="px-3 py-4 text-center text-gray-500 italic">No quizzes in the library.</td></tr>
+                      </tbody>
+                  </table>
+                </div>
+
+                <!-- Self Assessments -->
+                <div>
+                  <div class="flex justify-between items-center mb-4 border-t pt-6 border-gray-200">
+                      <h3 class="text-lg font-semibold text-purple-900">Self Assessment Library</h3>
+                      <button @click="createNewLibraryQuiz(true)" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1.5 px-3 rounded text-sm transition shadow-sm">+ Create New Self Assessment</button>
+                  </div>
+                  <table class="min-w-full divide-y divide-gray-300 border border-gray-200 rounded shadow-sm">
+                      <thead class="bg-gray-50"><tr>
+                        <th class="px-3 py-2 text-left text-sm font-semibold">Assessment Name</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">Taken By</th>
+                        <th class="px-3 py-2 text-center text-sm font-semibold">In Use</th>
+                        <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
+                      </tr></thead>
+                      <tbody class="bg-white divide-y divide-gray-200">
+                        <tr v-for="q in selfAssessments" :key="q.id">
+                          <td class="px-3 py-2 text-sm font-medium">{{ q.name }}</td>
+                          <td class="px-3 py-2 text-sm text-center">{{ quizStats[q.id]?.count || 0 }}</td>
+                          <td class="px-3 py-2 text-sm text-center">
+                            <span v-if="quizStats[q.id]?.inUse" class="text-green-600 font-bold">✓</span>
+                            <span v-else class="text-red-600 font-bold">✗</span>
+                          </td>
+                          <td class="px-3 py-2 text-sm text-right">
+                            <div class="flex justify-end items-center gap-2">
+                              <button @click="editLibraryQuiz(q.id)" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
+                              <button @click="deleteLibraryQuiz(q.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr v-if="selfAssessments.length === 0"><td colspan="4" class="px-3 py-4 text-center text-gray-500 italic">No self assessments in the library.</td></tr>
+                      </tbody>
+                  </table>
+                </div>
             </div>
         </div>
 
@@ -757,6 +933,39 @@
                 </div>
               </div>
             </div>
+        </div>
+        
+        <!-- Audit Logs Admin -->
+        <div v-if="adminSubTab === 'audit'" class="space-y-4 bg-white p-4 rounded border border-gray-200 shadow-sm">
+           <div class="flex justify-between items-center mb-2">
+             <h3 class="text-lg font-semibold text-gray-800">Audit Logs (Recent)</h3>
+             <button @click="fetchAuditLogs" class="text-sm text-blue-600 hover:underline font-semibold">Refresh</button>
+           </div>
+           <div class="overflow-x-auto">
+             <table class="min-w-full divide-y divide-gray-200 border rounded shadow-sm text-sm bg-white">
+               <thead class="bg-gray-50">
+                 <tr>
+                   <th class="px-3 py-2 text-left font-semibold text-gray-700">Timestamp</th>
+                   <th class="px-3 py-2 text-left font-semibold text-gray-700">Target User</th>
+                   <th class="px-3 py-2 text-left font-semibold text-gray-700">Action</th>
+                   <th class="px-3 py-2 text-left font-semibold text-gray-700">Actioned By</th>
+                   <th class="px-3 py-2 text-left font-semibold text-gray-700">Competency Task</th>
+                   <th class="px-3 py-2 text-left font-semibold text-gray-700">Notes</th>
+                 </tr>
+               </thead>
+               <tbody class="divide-y divide-gray-200">
+                 <tr v-for="l in auditLogs" :key="l.id" class="hover:bg-gray-50">
+                   <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ new Date(l.timestamp).toLocaleString() }}</td>
+                   <td class="px-3 py-2 font-medium">{{ l.target_user_name }}</td>
+                   <td class="px-3 py-2 font-semibold text-indigo-700">{{ l.action_type }}</td>
+                   <td class="px-3 py-2">{{ l.actioned_by_name }}</td>
+                   <td class="px-3 py-2 text-gray-600">{{ l.task_name || 'N/A' }}</td>
+                   <td class="px-3 py-2 text-gray-600 truncate max-w-sm" :title="l.notes">{{ l.notes }}</td>
+                 </tr>
+                 <tr v-if="auditLogs.length === 0"><td colspan="6" class="p-4 text-center text-gray-500 italic">No audit logs found.</td></tr>
+               </tbody>
+             </table>
+           </div>
         </div>
         
         <!-- Statistics Admin -->
@@ -1180,20 +1389,80 @@
               </div>
               
               <template v-if="selectedCell.comp.requires_quiz && cellQuizzes?.length > 0">
-                <div v-for="qz in cellQuizzes" :key="qz.id" class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
-                  <span class="text-gray-800 font-medium text-sm">Quiz: {{ qz.name }}</span>
+                <template v-for="qz in cellQuizzes" :key="qz.id">
+                  <div class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md mt-2 mb-1">
+                  <span class="text-gray-800 font-medium text-sm">{{ qz.is_viva ? 'Self Assessment:' : 'Quiz:' }} {{ qz.name }}</span>
                   <div class="flex items-center gap-2">
-                    <button v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="loadQuizForTaking(qz.id)" class="text-xs text-blue-600 hover:underline whitespace-nowrap">Retake</button>
-                    <button v-else-if="selectedCell.user.id === user.id" @click="loadQuizForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">Take Quiz</button>
-
-                    <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
-                    <span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
-                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                    <template v-if="qz.is_viva">
+                      <button v-if="getLatestViva(qz.id)?.variance_analysis" @click="toggleVivaScore(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                        {{ showingVivaFor === qz.id ? 'Hide Score' : 'Score' }}
+                      </button>
+                      <button v-if="selectedCell.user.id === user.id && (!getLatestViva(qz.id) || getLatestViva(qz.id).status === 'Needs_Retake')" @click="loadVivaForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                        {{ getLatestViva(qz.id) ? 'Retake Self Assessment' : 'Take Self Assessment' }}
+                      </button>
+                      <span v-if="getLatestViva(qz.id)?.status === 'Assessor_Pending'" class="text-orange-600 font-bold text-sm bg-orange-50 px-2 py-1 rounded whitespace-nowrap">⏳ Assessor Pending</span>
+                      <span v-else-if="getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed</span>
+                      <span v-else-if="getLatestViva(qz.id)?.status === 'Needs_Retake' || (getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 0)" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed</span>
+                      <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Not Started</span>
+                    </template>
+                    <template v-else>
+                      <button v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="loadQuizForTaking(qz.id)" class="text-xs text-blue-600 hover:underline whitespace-nowrap">Retake</button>
+                      <button v-else-if="selectedCell.user.id === user.id" @click="loadQuizForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">Take Quiz</button>
+  
+                      <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
+                      <span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
+                      <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                    </template>
                   </div>
                 </div>
-              </template>
-
-              <div v-if="takingQuiz" class="mt-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                  
+                  <!-- Self Assessment Variance Analysis -->
+                  <div v-if="qz.is_viva && getLatestViva(qz.id) && getLatestViva(qz.id).variance_analysis && showingVivaFor === qz.id" class="mt-1 mb-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                     <h5 class="font-bold text-gray-800 mb-3 border-b pb-2">Self-Assessment Results Analysis: {{ qz.name }}</h5>
+                     <p v-if="getLatestViva(qz.id).status === 'Assessor_Pending'" class="text-gray-500 italic text-xs mb-2">Waiting for assessor to complete their review...</p>
+                     <div v-for="va in getLatestViva(qz.id).variance_analysis" :key="va.question_id" class="mb-3 bg-white p-2 rounded border shadow-sm">
+                        <p class="font-semibold text-gray-700 mb-1">{{ va.question_text }}</p>
+                        <div class="flex justify-between items-center text-xs">
+                          <span>Trainee: <strong class="text-blue-600">{{ va.trainee_score || '-' }}</strong></span>
+                          <span>Assessor: <strong class="text-purple-600">{{ va.assessor_score || '-' }}</strong></span>
+                        </div>
+                        <div v-if="getLatestViva(qz.id).status !== 'Assessor_Pending'" class="mt-1 pt-1 border-t flex justify-between items-center">
+                          <span class="text-xs font-medium text-gray-500">Variance: <span :class="va.variance > 0 ? 'text-green-600' : (va.variance < 0 ? 'text-red-600' : '')">{{ va.variance > 0 ? '+' : '' }}{{ va.variance }}</span></span>
+                          <span :class="{'text-red-600': va.flag === 'Overconfidence Danger', 'text-yellow-600': va.flag === 'Imposter Alert', 'text-green-600': va.flag === 'Calibrated Alignment'}" class="text-xs font-bold">{{ va.flag }}</span>
+                        </div>
+                     </div>
+                  </div>
+                  
+                  <!-- Taking Viva -->
+                  <div v-if="takingViva && vivaData?.id === qz.id" class="mt-1 mb-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                  <h4 class="font-bold text-gray-800 mb-3">Self Assessment: {{ vivaData?.name }}</h4>
+                  <p class="text-xs text-gray-600 mb-4">Grade your confidence for each topic from 1 (Novice) to 10 (Expert).</p>
+                  
+                  <div v-for="(q, idx) in vivaData.questions" :key="q.id" class="mb-4 bg-white p-3 border rounded">
+                      <p class="font-semibold text-sm mb-2 text-gray-800">{{idx+1}}. {{q.question_text}}</p>
+                      <div class="flex items-center gap-4">
+                         <input type="range" min="1" max="10" v-model.number="vivaAnswers[q.id]" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                         <span class="font-bold text-blue-800 w-6 text-right">{{ vivaAnswers[q.id] || 1 }}</span>
+                      </div>
+                  </div>
+                  
+                  <div class="mt-4 mb-4">
+                      <label class="block text-sm font-medium text-gray-700 mb-1">Select Assessor for Review</label>
+                      <select v-model="vivaAssessorId" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500">
+                          <option disabled value="">Select an Assessor...</option>
+                          <option v-for="a in eligibleAssessors" :key="a.id" :value="a.id">{{ a.full_name }} ({{ a.designation }})</option>
+                      </select>
+                      <div v-if="eligibleAssessors.length === 0" class="text-xs text-red-600 mt-1 font-bold">No eligible assessors found for this competency.</div>
+                  </div>
+                  
+                  <div class="flex gap-2">
+                      <button @click="submitVivaSelf" :disabled="!vivaAssessorId" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded disabled:opacity-50 shadow-sm">Submit for Review</button>
+                      <button @click="takingViva = false" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold px-4 py-2 rounded shadow-sm">Cancel</button>
+                  </div>
+              </div>
+                  
+                  <!-- Taking Quiz -->
+                  <div v-if="takingQuiz && quizData?.id === qz.id" class="mt-1 mb-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
                 <h4 class="font-bold text-gray-800 mb-3">Assessment Quiz: {{ quizData?.name }}</h4>
                 <div v-for="(q, idx) in quizData.questions" :key="q.id" class="mb-5 bg-white p-3 border rounded">
                   <p class="font-semibold text-sm mb-2 text-gray-800">{{idx+1}}. {{q.question_text}}</p>
@@ -1213,6 +1482,8 @@
                 </div>
                 <div class="flex gap-2"><button @click="submitQuiz" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded">Submit Answers</button><button @click="takingQuiz = false" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold px-4 py-2 rounded">Cancel</button></div>
               </div>
+                </template>
+              </template>
               
               <div v-if="selectedCell.comp.qatrack_requirements && selectedCell.comp.qatrack_requirements?.length > 0" class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-3">
                 <div class="flex justify-between items-center border-b pb-1">
@@ -1282,6 +1553,32 @@
                   </ul>
                 </div>
               </template>
+
+              <div v-if="selectedCell.comp.required_plan_count > 0" class="flex flex-col bg-white border border-gray-200 shadow-sm p-3 rounded-md gap-2 mt-1 mb-1">
+                <div class="flex items-center justify-between" :class="showingPlanLogs ? 'border-b pb-1' : ''">
+                  <span class="text-gray-800 font-medium text-sm">Case Logs</span>
+                  <div class="flex items-center gap-2">
+                    <button @click="showingPlanLogs = !showingPlanLogs" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded font-bold shadow-sm transition whitespace-nowrap">
+                      {{ showingPlanLogs ? 'Hide' : 'Show' }}
+                    </button>
+                    <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ planningLogs.filter(l => l.status === 'Completed' && l.score >= 3).length }} / {{ selectedCell.comp.required_plan_count }} Met</span>
+                    <span v-if="planningLogs.filter(l => l.status === 'Completed' && l.score >= 3).length >= selectedCell.comp.required_plan_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
+                    <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                  </div>
+                </div>
+                <div v-if="showingPlanLogs" class="flex flex-col gap-1 mt-1">
+                  <div v-for="log in planningLogs" :key="log.id" class="flex justify-between items-center text-xs bg-gray-50 p-1.5 rounded border border-gray-100">
+                    <span class="font-medium text-gray-700">
+                      <template v-if="log.log_date">{{ new Date(log.log_date).toLocaleDateString() }}, </template>Reviewed By: {{ getAssessorName(log.assigned_assessor_id) }}
+                    </span>
+                    <span class="flex items-center gap-1">
+                      <span v-if="log.score" class="font-semibold text-blue-600">Score: {{ log.score }}</span>
+                      <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold">{{ log.status === 'Needs_Amendment' ? 'In Development' : log.status.replace('_', ' ') }}</span>
+                    </span>
+                  </div>
+                  <div v-if="planningLogs.length === 0" class="text-xs text-gray-500 italic">No case logs submitted.</div>
+                </div>
+              </div>
 
               <template v-if="selectedCell.comp.requires_post_eval">
                 <div class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
@@ -1406,8 +1703,14 @@
               </div>
               <div v-if="selectedCell.comp.requires_quiz" class="flex flex-col gap-2 text-sm text-gray-800">
                 <div v-for="qz in cellQuizzes" :key="qz.id" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Quiz: {{ qz.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'Passed' : 'Pending/Failed' }}</strong></span>
-                  <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                  <template v-if="qz.is_viva">
+                    <span>Self Assessment: {{ qz.name }} - <strong :class="getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1 ? 'text-green-600' : 'text-gray-500'">{{ getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1 ? 'Passed' : (getLatestViva(qz.id)?.status ? getLatestViva(qz.id).status.replace('_', ' ') : 'Pending/Failed') }}</strong></span>
+                    <button v-if="getLatestViva(qz.id)" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                  </template>
+                  <template v-else>
+                    <span>Quiz: {{ qz.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'Passed' : 'Pending/Failed' }}</strong></span>
+                    <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                  </template>
                 </div>
               </div>
               <div v-if="selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="flex flex-col gap-2 text-sm text-gray-800">
@@ -1484,9 +1787,93 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v1.31
+        James Burnley v2.01
       </div>
     </div>
+
+    <!-- Log Review Modal -->
+    <div v-if="activeLogReview" @click.self="activeLogReview = null" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+        <h3 class="text-xl font-bold mb-2 text-blue-900">Review Case Log</h3>
+        <p class="text-sm text-gray-600 mb-4">{{ activeLogReview.trainee_name }} - {{ activeLogReview.category }} / {{ activeLogReview.task_name }}</p>
+        <div class="mb-4 text-sm bg-gray-50 p-3 rounded border border-gray-200">
+          <strong>Ref:</strong> {{ activeLogReview.patient_reference }} <span v-if="activeLogReview.log_date" class="text-gray-500 ml-1">({{ new Date(activeLogReview.log_date).toLocaleDateString() }})</span><br>
+          <strong>Submitted:</strong> {{ new Date(activeLogReview.created_at).toLocaleString() }}
+        </div>
+        <p class="mb-4 italic bg-white p-3 border border-gray-200 rounded text-gray-700 shadow-inner">"{{ activeLogReview.trainee_comments }}"</p>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Feedback Comments</label>
+            <textarea v-model="activeLogReview.review_comments" class="w-full border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Provide feedback to the trainee..."></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Score (1-5)</label>
+            <select v-model.number="activeLogReview.review_score" class="w-full border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+              <option disabled value="">Select Score</option>
+              <option value="1">1 - Unsatisfactory</option>
+              <option value="2">2 - Needs Improvement</option>
+              <option value="3">3 - Satisfactory</option>
+              <option value="4">4 - Very Good</option>
+              <option value="5">5 - Excellent</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
+          <button @click="activeLogReview = null" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1.5 px-4 rounded transition text-sm">Cancel</button>
+          <button @click="submitLogReviewModal(activeLogReview)" :disabled="!activeLogReview.review_score" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded transition shadow-sm disabled:opacity-50 text-sm">Submit Score</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viva Review Modal -->
+    <div v-if="activeVivaReview" @click.self="activeVivaReview = null" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <h3 class="text-xl font-bold mb-2 text-purple-900">Score Self Assessment</h3>
+        <p class="text-sm text-gray-600 mb-4">{{ activeVivaReview.trainee_name }} - {{ activeVivaReview.category }} / {{ activeVivaReview.task_name }}</p>
+        <div class="mb-4 text-sm bg-gray-50 p-3 rounded border border-gray-200 flex justify-between items-center">
+          <div>
+            <strong>Assessment:</strong> {{ activeVivaReview.quiz_name }}<br>
+            <strong>Submitted:</strong> {{ new Date(activeVivaReview.created_at).toLocaleString() }}
+          </div>
+          <div class="flex items-center gap-2 text-xs text-blue-800 font-semibold bg-blue-100 px-2 py-1 rounded border border-blue-200 shadow-sm">
+            <div class="h-3 border-l-2 border-dashed border-blue-600"></div> Trainee Score
+          </div>
+        </div>
+        
+        <div v-for="q in activeVivaReview.questions" :key="q.id" class="mb-4 bg-white p-3 border border-gray-200 rounded shadow-sm">
+           <p class="font-semibold text-gray-700 mb-2">{{ q.question_text }}</p>
+           <div class="flex items-center gap-4 mt-3 bg-purple-50 p-3 rounded border border-purple-100">
+              <label class="text-sm font-semibold text-purple-800 whitespace-nowrap">Your Score:</label>
+              <div class="relative w-full flex items-center h-6" :title="`Trainee Self-Score: ${JSON.parse(activeVivaReview.trainee_answers || '{}')[q.id] || '-'}`">
+                <div class="absolute inset-0 pointer-events-none px-2 flex items-center">
+                   <div class="relative w-full h-full">
+                      <div class="absolute h-6 border-l-2 border-dashed border-blue-600 top-1/2 -translate-y-1/2 -translate-x-px z-0"
+                           :style="`left: ${((JSON.parse(activeVivaReview.trainee_answers || '{}')[q.id] || 1) - 1) / 9 * 100}%;`">
+                      </div>
+                   </div>
+                </div>
+                <input type="range" min="1" max="10" v-model.number="activeVivaReview.assessor_answers[q.id]" class="w-full h-2 bg-purple-300 rounded-lg appearance-none cursor-pointer relative z-10 opacity-75 hover:opacity-100 transition-opacity">
+              </div>
+              <span class="font-bold text-purple-900 w-6 text-right">{{ activeVivaReview.assessor_answers[q.id] || 1 }}</span>
+           </div>
+        </div>
+        
+        <div class="mt-4 pt-4 border-t border-gray-200">
+           <label class="block text-sm font-semibold text-gray-700 mb-1">Final Result</label>
+           <select v-model="activeVivaReview.is_passed" class="w-full border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-purple-500 focus:border-purple-500">
+              <option :value="null" disabled>Select Result...</option>
+              <option :value="1">Pass</option>
+              <option :value="0">Fail (Requires Retake)</option>
+           </select>
+        </div>
+        
+        <div class="flex justify-end gap-2 mt-6">
+          <button @click="activeVivaReview = null" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-1.5 px-4 rounded transition text-sm">Cancel</button>
+          <button @click="submitVivaReviewModal(activeVivaReview)" :disabled="activeVivaReview.is_passed === null" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-4 rounded transition shadow-sm disabled:opacity-50 text-sm">Submit Review</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -1624,7 +2011,7 @@
         
         const adminSubTab = ref('users');
         const isEditingComp = ref(false);
-        const newComp = ref({ category: '', task_name: '', description: '', requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false });
+        const newComp = ref({ category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0 });
         
         const categoryOrder = ref([]);
 
@@ -1633,6 +2020,157 @@
         const newCategoryName = ref('');
         const editingCategoryName = ref(null);
         const editCategoryValue = ref('');
+
+        const auditLogs = ref([]);
+        const assessorQueue = ref([]);
+        const planningLogs = ref([]);
+        const eligibleAssessors = ref([]);
+        const newPlanLog = ref({ patient_reference: '', log_date: new Date().toISOString().split('T')[0], trainee_comments: '', assigned_assessor_id: '' });
+        const showingPlanLogs = ref(false);
+        const activeLogReview = ref(null);
+        const editingPlanLogId = ref(null);
+        const activeLogbookCompId = ref(null);
+        const activeLogbookMode = ref(null);
+
+        const vivaQueue = ref([]);
+        const vivaSummaries = ref([]);
+        const takingViva = ref(false);
+        const vivaData = ref(null);
+        const vivaAnswers = ref({});
+        const vivaAssessorId = ref('');
+        const showingVivaFor = ref(null);
+        const activeVivaReview = ref(null);
+
+        const groupedAssessorQueue = computed(() => {
+          const result = {};
+          assessorQueue.value.forEach(log => {
+            if (!result[log.trainee_name]) result[log.trainee_name] = [];
+            result[log.trainee_name].push(log);
+          });
+          return result;
+        });
+
+        const groupedVivaQueue = computed(() => {
+          const result = {};
+          vivaQueue.value.forEach(viva => {
+            if (!result[viva.trainee_name]) result[viva.trainee_name] = [];
+            result[viva.trainee_name].push(viva);
+          });
+          return result;
+        });
+
+        const logbookCompetencies = computed(() => {
+          if (!user.value) return {};
+          const groups = {};
+          competencies.value.forEach(c => {
+            if (c.required_plan_count > 0 && isApplicable(user.value, c)) {
+              if (!groups[c.category]) groups[c.category] = [];
+              groups[c.category].push(c);
+            }
+          });
+          
+          const orderedGroups = {};
+          Object.keys(groups).sort((a, b) => {
+            const indexA = categoryOrder.value.findIndex(co => co.category === a);
+            const indexB = categoryOrder.value.findIndex(co => co.category === b);
+            return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
+          }).forEach(k => orderedGroups[k] = groups[k]);
+          
+          return orderedGroups;
+        });
+
+        const myPlanningLogs = ref([]);
+        const fetchMyPlanningLogs = async () => {
+          if (!user.value) return;
+          try {
+            const res = await fetch('/api/my-planning-logs', { headers: getHeaders() });
+            if (res.ok) myPlanningLogs.value = await res.json();
+          } catch (e) {}
+        };
+
+        const getApprovedLogsCount = (compId) => {
+          return myPlanningLogs.value.filter(l => l.competency_id === compId && l.status === 'Completed' && l.score >= 3).length;
+        };
+
+        const getCompPlanningLogs = (compId) => myPlanningLogs.value.filter(l => l.competency_id === compId);
+
+        const isTrainerInAny = computed(() => {
+          if (!user.value) return false;
+          return progress.value.some(p => {
+            if (p.user_id !== user.value.id || p.current_status !== 'x') return false;
+            const c = competencies.value.find(comp => comp.id === p.competency_id);
+            if (!c) return false;
+            const hasViva = c.quiz_ids && c.quiz_ids.some(qId => {
+              const quiz = quizLibrary.value.find(q => q.id === qId);
+              return quiz && quiz.is_viva;
+            });
+            return c.required_plan_count > 0 || hasViva;
+          });
+        });
+
+        const toggleVivaScore = (quizId) => {
+          if (showingVivaFor.value === quizId) {
+            showingVivaFor.value = null;
+          } else {
+            showingVivaFor.value = quizId;
+          }
+        };
+
+        const fetchVivaQueue = async () => {
+          try {
+             const res = await fetch('/api/assessor/viva-queue', { headers: getHeaders() });
+             if (res.ok) {
+                 vivaQueue.value = await res.json();
+                 vivaQueue.value.forEach(v => {
+                     if (!v.assessor_answers) v.assessor_answers = {};
+                     v.questions.forEach(q => {
+                         if (!v.assessor_answers[q.id]) v.assessor_answers[q.id] = 1;
+                     });
+                 });
+             }
+          } catch(e) {}
+        };
+        
+        const fetchVivaSummaries = async (userId, compId) => {
+            try {
+                const res = await fetch(`/api/viva/summary/${userId}/${compId}`, { headers: getHeaders() });
+                if (res.ok) vivaSummaries.value = await res.json();
+            } catch(e) {}
+        };
+
+        const fetchAuditLogs = async () => {
+          try {
+             const res = await fetch('/api/admin/audit-logs?limit=200', { headers: getHeaders() });
+             if (res.ok) auditLogs.value = await res.json();
+          } catch(e) {}
+        };
+
+        const fetchAssessorQueue = async () => {
+          try {
+             const res = await fetch('/api/assessor/feedback-queue', { headers: getHeaders() });
+             if (res.ok) {
+               assessorQueue.value = await res.json();
+               assessorQueue.value.forEach(q => {
+                 q.review_score = '';
+                 q.review_comments = '';
+               });
+             }
+          } catch(e) {}
+        };
+
+        const fetchPlanningLogs = async (userId, compId) => {
+          try {
+             const res = await fetch(`/api/competency/${compId}/planning-logs?user_id=${userId}`, { headers: getHeaders() });
+             if (res.ok) planningLogs.value = await res.json();
+          } catch(e) {}
+        };
+
+        const fetchEligibleAssessors = async (compId) => {
+          try {
+             const res = await fetch(`/api/competencies/${compId}/eligible-assessors`, { headers: getHeaders() });
+             if (res.ok) eligibleAssessors.value = await res.json();
+          } catch(e) {}
+        };
 
         const publicSummaryData = ref({ users: [], competencies: [], progress: [], categoryOrder: [], userGroups: [] });
 
@@ -1719,6 +2257,7 @@
           if (c.requires_prerequisite_competencies && c.prerequisite_competencies?.length > 0) return false;
           if (c.requires_pre_eval) return false;
           if (c.qatrack_requirements?.length > 0) return false;
+          if (c.required_plan_count > 0) return false;
           return true;
         };
 
@@ -2393,6 +2932,8 @@
           isEditingQuiz.value = false;
           showQaEvidenceFor.value = null;
           qaEvidenceCache.value = {};
+          activeLogbookCompId.value = null;
+          activeLogbookMode.value = null;
 
           if (!token.value) {
             await fetchPublicSummary();
@@ -2653,6 +3194,7 @@
           
           await fetchQuizLibrary();
           await fetchMyEvaluations();
+          await fetchMyPlanningLogs();
         };
 
         const isApplicable = (u, comp) => {
@@ -2707,6 +3249,8 @@
           selectedCell.value = { user: u, comp }; 
           signoffComment.value = '';
           showQaEvidenceFor.value = null;
+          showingPlanLogs.value = false;
+          showingVivaFor.value = null;
           const p = getProgressObj(u.id, comp.id);
           const currentStatus = p ? p.current_status : (hasNoPrerequisites(comp) ? 'm' : 't');
           adminEdit.value = {
@@ -2718,10 +3262,16 @@
           if (comp.requires_quiz) {
             const res = await fetch(`/api/competency/${comp.id}/quiz`, { headers: getHeaders() });
             cellQuizzes.value = await res.json();
+            await fetchVivaSummaries(u.id, comp.id);
           } else {
             cellQuizzes.value = [];
+            vivaSummaries.value = [];
           }await fetchEvaluations(u, comp);
           if (comp.allow_file_uploads) await fetchFiles(u.id, comp.id);
+          if (comp.required_plan_count > 0) {
+            await fetchPlanningLogs(u.id, comp.id);
+            if (u.id === user.value.id) await fetchEligibleAssessors(comp.id);
+          }
           takingEval.value = null;
           nextTick(() => {
             renderRadarChart();
@@ -2730,6 +3280,8 @@
         const closeModal = () => { 
           selectedCell.value = null; 
           takingQuiz.value = false; 
+          showingPlanLogs.value = false;
+          showingVivaFor.value = null;
           showQaEvidenceFor.value = null; 
           if (radarChartInstance) {
             radarChartInstance.destroy();
@@ -3074,6 +3626,146 @@
             isUploading.value = false;
           }
         };
+        
+        const submitPlanLog = async (compId, isDraft = false) => {
+          try {
+            const payload = {
+               competency_id: compId,
+               patient_reference: newPlanLog.value.patient_reference,
+               log_date: newPlanLog.value.log_date,
+               trainee_comments: newPlanLog.value.trainee_comments,
+               assigned_assessor_id: newPlanLog.value.assigned_assessor_id,
+               is_draft: isDraft
+            };
+            let url = '/api/planning-logs/submit';
+            let method = 'POST';
+            if (editingPlanLogId.value) {
+              url = `/api/planning-logs/${editingPlanLogId.value}`;
+              method = 'PUT';
+            }
+            const res = await fetch(url, { method, headers: getHeaders(true), body: JSON.stringify(payload) });
+            if (!res.ok) throw new Error((await res.json()).error);
+            
+            customAlert(isDraft ? "Draft saved successfully." : "Case log submitted successfully for review.", "Success");
+            cancelEditPlanLog();
+            await fetchMyPlanningLogs();
+            await syncProgress(compId);
+            await fetchData();
+          } catch (e) { customAlert(e.message, "Error"); }
+        };
+
+        const toggleLogbookView = (comp) => {
+          if (activeLogbookCompId.value === comp.id && activeLogbookMode.value === 'view') {
+            activeLogbookCompId.value = null;
+            activeLogbookMode.value = null;
+          } else {
+            activeLogbookCompId.value = comp.id;
+            activeLogbookMode.value = 'view';
+            cancelEditPlanLog();
+          }
+        };
+
+        const toggleLogbookAdd = async (comp) => {
+          if (activeLogbookCompId.value === comp.id && activeLogbookMode.value === 'add') {
+            activeLogbookCompId.value = null;
+            activeLogbookMode.value = null;
+            cancelEditPlanLog();
+          } else {
+            activeLogbookCompId.value = comp.id;
+            activeLogbookMode.value = 'add';
+            cancelEditPlanLog();
+            await fetchEligibleAssessors(comp.id);
+          }
+        };
+
+        const editPlanLog = (log) => {
+          editingPlanLogId.value = log.id;
+          newPlanLog.value = { 
+            patient_reference: log.patient_reference,
+            log_date: log.log_date || new Date().toISOString().split('T')[0],
+            trainee_comments: log.trainee_comments, 
+            assigned_assessor_id: log.assigned_assessor_id || '' 
+          };
+          activeLogbookCompId.value = log.competency_id;
+          activeLogbookMode.value = 'add';
+          fetchEligibleAssessors(log.competency_id);
+        };
+
+        const cancelEditPlanLog = () => {
+          editingPlanLogId.value = null;
+          newPlanLog.value = { patient_reference: '', log_date: new Date().toISOString().split('T')[0], trainee_comments: '', assigned_assessor_id: '' };
+        };
+
+        const deletePlanLog = async (id) => {
+          if (!(await customConfirm("Are you sure you want to delete this log?", "Delete Log"))) return;
+          try {
+            const res = await fetch(`/api/planning-logs/${id}`, { method: 'DELETE', headers: getHeaders() });
+            if (!res.ok) throw new Error((await res.json()).error);
+            await fetchMyPlanningLogs();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const submitLogReview = async (log) => {
+          try {
+            const res = await fetch(`/api/planning-logs/review/${log.id}`, { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ score: log.review_score, assessor_comments: log.review_comments }) });
+            if (!res.ok) throw new Error((await res.json()).error);
+            customAlert("Feedback submitted successfully.", "Success");
+            await fetchAssessorQueue();
+            await fetchData();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const getLatestViva = (quizId) => {
+          return vivaSummaries.value.find(v => v.quiz_id === quizId) || null;
+        };
+
+        const loadVivaForTaking = (quizId) => {
+          const qz = cellQuizzes.value.find(q => q.id === quizId);
+          if (qz && qz.questions.length > 0) {
+            vivaData.value = qz;
+            vivaAnswers.value = {};
+            qz.questions.forEach(q => vivaAnswers.value[q.id] = 1);
+            vivaAssessorId.value = '';
+            takingViva.value = true;
+          } else {
+            customAlert("This assessment has no questions configured.", "Warning");
+          }
+        };
+
+        const submitVivaSelf = async () => {
+          try {
+            const res = await fetch('/api/viva/submit-self', {
+               method: 'POST', headers: getHeaders(true),
+               body: JSON.stringify({ competency_id: selectedCell.value.comp.id, quiz_id: vivaData.value.id, assigned_assessor_id: vivaAssessorId.value, trainee_answers: vivaAnswers.value })
+            });
+            if (!res.ok) throw new Error((await res.json()).error);
+            customAlert("Self-Assessment submitted for review.", "Success");
+            takingViva.value = false;
+            await fetchVivaSummaries(selectedCell.value.user.id, selectedCell.value.comp.id);
+            await syncProgress(selectedCell.value.comp.id);
+            await fetchData();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const submitVivaReview = async (viva) => {
+          try {
+            const res = await fetch(`/api/viva/submit-review/${viva.id}`, { method: 'PUT', headers: getHeaders(true), body: JSON.stringify({ assessor_answers: viva.assessor_answers, is_passed: viva.is_passed }) });
+            if (!res.ok) throw new Error((await res.json()).error);
+            customAlert("Assessment Review submitted successfully.", "Success");
+            await fetchVivaQueue();
+            await fetchData();
+          } catch(e) { customAlert(e.message, "Error"); }
+        };
+
+        const submitLogReviewModal = async (log) => {
+          await submitLogReview(log);
+          activeLogReview.value = null;
+        };
+
+        const submitVivaReviewModal = async (viva) => {
+          await submitVivaReview(viva);
+          activeVivaReview.value = null;
+        };
 
         const fetchFiles = async (userId, compId) => {
           try {
@@ -3306,7 +3998,7 @@
         };
 
         const adminResetQuiz = async (quizId) => {
-          if (!(await customConfirm("Reset this user's quiz progress? They will need to retake it.", "Reset Quiz"))) return;
+          if (!(await customConfirm("Reset this user's assessment progress? They will need to retake it.", "Reset Assessment"))) return;
           try {
             const res = await fetch('/api/progress/admin-reset-quiz', {
               method: 'POST', headers: getHeaders(true),
@@ -3391,6 +4083,7 @@
         
         const editComp = (c) => { 
           newComp.value = JSON.parse(JSON.stringify(c)); 
+          newComp.value.requires_case_logs = c.required_plan_count > 0;
           newComp.value.requires_qatrack = newComp.value.qatrack_requirements && newComp.value.qatrack_requirements.length > 0; 
           if (!newComp.value.qatrack_requirements) newComp.value.qatrack_requirements = []; 
           newComp.value.requires_instructions = !!c.requires_instructions;
@@ -3408,7 +4101,7 @@
           isEditingComp.value = true; 
           window.scrollTo({ top: 0, behavior: 'smooth' });
         };
-        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false }; isEditingComp.value = false; };
+        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0 }; isEditingComp.value = false; };
         
         const deleteComp = async (id) => {
           if (!(await customConfirm('Are you sure you want to delete this competency?', "Delete Competency"))) return;
@@ -3522,14 +4215,22 @@
         };
 
         const createNewLibraryQuiz = () => {
-            isEditingQuiz.value = false;
-            activeLibraryQuiz.value = { name: '', passing_score_percent: 80, questions: [] };
+            createNewLibraryQuiz(false);
         };
+        
+        const createNewLibraryQuizWithArg = (isViva = false) => {
+            isEditingQuiz.value = false;
+            activeLibraryQuiz.value = { name: '', passing_score_percent: 80, questions: [], is_viva: isViva };
+        };
+
+        const standardQuizzes = computed(() => quizLibrary.value.filter(q => !q.is_viva));
+        const selfAssessments = computed(() => quizLibrary.value.filter(q => q.is_viva));
 
         const editLibraryQuiz = async (quizId) => {
             try {
                 const res = await fetch(`/api/quizzes/library/${quizId}`, { headers: getHeaders() });
                 activeLibraryQuiz.value = await res.json();
+                activeLibraryQuiz.value.is_viva = !!activeLibraryQuiz.value.is_viva;
                 isEditingQuiz.value = true;
             } catch(e) { console.error(e); }
         };
@@ -3654,8 +4355,15 @@
             fetchDbInfo();
             fetchUploadStats();
           }
+          if (newTab === 'audit') {
+            fetchAuditLogs();
+          }
         });
         
+        watch(currentTab, (newTab) => {
+          if (newTab === 'trainer') { fetchAssessorQueue(); fetchVivaQueue(); }
+        });
+
         const uploadStats = ref([]);
         const fetchUploadStats = async () => {
           try {
@@ -3918,7 +4626,10 @@
                  customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
                  qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing,
                  selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
-                 uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads
+                 uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, activeLogReview, submitLogReviewModal,
+                 auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, groupedAssessorQueue, editingPlanLogId, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
+                 logbookCompetencies, getApprovedLogsCount, getCompPlanningLogs, isTrainerInAny,
+                 vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal, createNewLibraryQuiz: createNewLibraryQuizWithArg, standardQuizzes, selfAssessments
         };
       }
     }).mount('#app');

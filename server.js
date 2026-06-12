@@ -97,7 +97,7 @@ const dbs = {};
 const initDb = (db) => {
   db.serialize(() => {
     // CREATE BASE TABLES IF THEY DO NOT EXIST (Needed for dynamically created databases)
-    db.run(`CREATE TABLE IF NOT EXISTS competencies (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, task_name TEXT, required_qatrack_count INTEGER DEFAULT 0, qatrack_test_identifier TEXT, requires_instructions INTEGER DEFAULT 1, requires_quiz INTEGER DEFAULT 0, requires_prerequisite_competencies INTEGER DEFAULT 0, prerequisite_competencies TEXT DEFAULT '[]', display_order INTEGER DEFAULT 0, reading_prerequisites TEXT DEFAULT '[]', renewal_period_months INTEGER DEFAULT 36, requires_pre_eval INTEGER DEFAULT 0, requires_post_eval INTEGER DEFAULT 0, qatrack_requirements TEXT DEFAULT '[]', allow_file_uploads INTEGER DEFAULT 0)`, () => {
+    db.run(`CREATE TABLE IF NOT EXISTS competencies (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, task_name TEXT, required_qatrack_count INTEGER DEFAULT 0, qatrack_test_identifier TEXT, requires_instructions INTEGER DEFAULT 1, requires_quiz INTEGER DEFAULT 0, requires_prerequisite_competencies INTEGER DEFAULT 0, prerequisite_competencies TEXT DEFAULT '[]', display_order INTEGER DEFAULT 0, reading_prerequisites TEXT DEFAULT '[]', renewal_period_months INTEGER DEFAULT 36, requires_pre_eval INTEGER DEFAULT 0, requires_post_eval INTEGER DEFAULT 0, qatrack_requirements TEXT DEFAULT '[]', allow_file_uploads INTEGER DEFAULT 0, required_plan_count INTEGER DEFAULT 0)`, () => {
       db.get("SELECT count(*) as count FROM competencies", (err, row) => {
         if (row && row.count === 0) {
           db.run(`INSERT INTO competencies (id, category, task_name, required_qatrack_count, qatrack_test_identifier, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months) VALUES 
@@ -120,13 +120,27 @@ const initDb = (db) => {
       });
     });
 
-    db.run(`CREATE TABLE IF NOT EXISTS quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, competency_id INTEGER, passing_score_percent INTEGER DEFAULT 80, name TEXT DEFAULT 'Competency Quiz')`, () => {
+    db.run(`CREATE TABLE IF NOT EXISTS quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, competency_id INTEGER, passing_score_percent INTEGER DEFAULT 80, name TEXT DEFAULT 'Competency Quiz', is_viva INTEGER DEFAULT 0)`, () => {
       db.get("SELECT count(*) as count FROM quizzes", (err, row) => {
         if (row && row.count === 0) {
           db.run(`INSERT INTO quizzes (id, competency_id, passing_score_percent, name) VALUES (1, 1, 100, 'Induction Quiz')`, (err) => { if(err) console.warn('InitDB Seed Quizzes:', err.message); });
         }
       });
     });
+
+    db.run(`CREATE TABLE IF NOT EXISTS viva_evaluations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trainee_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      quiz_id INTEGER NOT NULL,
+      assigned_assessor_id INTEGER NOT NULL,
+      trainee_answers TEXT NOT NULL,
+      assessor_answers TEXT,
+      is_passed INTEGER,
+      status TEXT DEFAULT 'Assessor_Pending',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT
+    )`, () => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS quiz_questions (id INTEGER PRIMARY KEY AUTOINCREMENT, quiz_id INTEGER, question_text TEXT, question_type TEXT DEFAULT 'multiple_choice', option_a TEXT, option_b TEXT, option_c TEXT, option_d TEXT, correct_option TEXT)`, () => {
       db.get("SELECT count(*) as count FROM quiz_questions", (err, row) => {
@@ -164,6 +178,21 @@ const initDb = (db) => {
       });
     });
 
+    db.run(`CREATE TABLE IF NOT EXISTS patient_plan_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trainee_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      patient_reference TEXT NOT NULL,
+      log_date TEXT,
+      trainee_comments TEXT NOT NULL,
+      assigned_assessor_id INTEGER NOT NULL,
+      assessor_comments TEXT,
+      score INTEGER,
+      status TEXT DEFAULT 'Pending_Review',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at TEXT
+    )`, () => {});
+
     db.run(`CREATE TABLE IF NOT EXISTS competency_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT DEFAULT CURRENT_TIMESTAMP, target_user_id INTEGER, competency_id INTEGER, action_type TEXT, actioned_by_id INTEGER, previous_status TEXT, new_status TEXT, notes TEXT)`, () => {});
     
     db.run("CREATE TABLE IF NOT EXISTS competency_groups (competency_id INTEGER, group_name TEXT, UNIQUE(competency_id, group_name))", () => {
@@ -200,6 +229,10 @@ const initDb = (db) => {
             db.run("CREATE TABLE quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, passing_score_percent INTEGER DEFAULT 80)");
             db.run("INSERT INTO quizzes (id, name, passing_score_percent) SELECT id, name, passing_score_percent FROM quizzes_old");
             db.run("DROP TABLE quizzes_old");
+            db.all("PRAGMA table_info(quizzes)", (err, cols) => {
+              const hasIsViva = cols && cols.some(c => c.name === 'is_viva');
+              if (!hasIsViva) db.run("ALTER TABLE quizzes ADD COLUMN is_viva INTEGER DEFAULT 0", () => {});
+            });
             db.run("COMMIT", (err) => {
               if (!err) console.log("Quizzes table migrated successfully.");
             });
@@ -255,6 +288,7 @@ const initDb = (db) => {
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN description TEXT", () => {});
+    db.run("ALTER TABLE competencies ADD COLUMN required_plan_count INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN requires_pre_eval INTEGER DEFAULT 0", () => {
         db.run("UPDATE competencies SET requires_pre_eval = 1 WHERE self_evaluation_timing = 'pre' OR self_evaluation_timing = 'any'", (err) => {});
     });
@@ -280,6 +314,14 @@ const initDb = (db) => {
       file_path TEXT NOT NULL,
       upload_date TEXT DEFAULT CURRENT_TIMESTAMP
     )`, () => {});
+    db.all("PRAGMA table_info(quizzes)", (err, cols) => {
+      const hasIsViva = cols && cols.some(c => c.name === 'is_viva');
+      if (!hasIsViva) db.run("ALTER TABLE quizzes ADD COLUMN is_viva INTEGER DEFAULT 0", () => {});
+    });
+    db.all("PRAGMA table_info(patient_plan_logs)", (err, cols) => {
+      const hasLogDate = cols && cols.some(c => c.name === 'log_date');
+      if (!hasLogDate) db.run("ALTER TABLE patient_plan_logs ADD COLUMN log_date TEXT", () => {});
+    });
   });
 };
 
@@ -346,6 +388,95 @@ function getFolderSize(dirPath) {
   }
   return size;
 }
+
+const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
+    const compQuery = await query(db, `SELECT * FROM competencies WHERE id = ?`, [competency_id]);
+    if (compQuery.length === 0) return { error: 'Competency not found' };
+    const comp = compQuery[0];
+    let rp = [];
+    try { 
+      rp = JSON.parse(comp.reading_prerequisites || '[]'); 
+      while(typeof rp === 'string') rp = JSON.parse(rp);
+      if (!Array.isArray(rp)) rp = [];
+    } catch(e) {}
+
+    let progress = null;
+    let rc = [];
+    let qc = {};
+
+    const progressQuery = await query(db, `SELECT * FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+    if (progressQuery.length > 0) {
+      progress = progressQuery[0];
+      try { rc = JSON.parse(progress.readings_completed || '[]'); while(typeof rc === 'string') rc = JSON.parse(rc); if (!Array.isArray(rc)) rc = []; } catch(e) {}
+      try { qc = JSON.parse(progress.quizzes_completed || '{}'); while(typeof qc === 'string') qc = JSON.parse(qc); if (!qc || typeof qc !== 'object' || Array.isArray(qc)) qc = {}; } catch(e) {}
+    } else {
+      progress = { current_status: 't', qatrack_records: null, qatrack_manual_override: 0 };
+    }
+      
+    let requirementsMet = true;
+    let missingReason = '';
+
+    if (comp.requires_instructions) {
+      for (let r of rp) {
+        if (!rc.includes(r.id)) { requirementsMet = false; missingReason = `Reading prerequisite '${r.name}' not completed.`; break; }
+      }
+    }
+    
+    if (requirementsMet && comp.requires_quiz) {
+        const qzs = await query(db, `SELECT q.id, q.name, q.is_viva FROM quizzes q JOIN competency_quizzes cq ON q.id = cq.quiz_id WHERE cq.competency_id = ?`, [competency_id]);
+        for (let qz of qzs) {
+          if (qz.is_viva) {
+              const passedVivas = await query(db, `SELECT id FROM viva_evaluations WHERE trainee_id = ? AND competency_id = ? AND quiz_id = ? AND status = 'Completed' AND is_passed = 1`, [user_id, competency_id, qz.id]);
+              if (passedVivas.length === 0) { requirementsMet = false; missingReason = `Viva Assessment '${qz.name}' not passed.`; break; }
+          } else {
+              if (!qc[qz.id] || !qc[qz.id].passed) { requirementsMet = false; missingReason = `Quiz '${qz.name}' not passed.`; break; }
+          }
+        }
+    }
+    
+    if (requirementsMet && comp.requires_prerequisite_competencies) {
+      let pc = [];
+      try { pc = JSON.parse(comp.prerequisite_competencies || '[]'); while(typeof pc === 'string') pc = JSON.parse(pc); if (!Array.isArray(pc)) pc = []; } catch(e) {}
+      for (let pcId of pc) {
+        const pcProg = await query(db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, pcId]);
+        if (pcProg.length === 0 || (pcProg[0].current_status !== 'c' && pcProg[0].current_status !== 'x')) { requirementsMet = false; missingReason = `Prerequisite competencies not fully met.`; break; }
+      }
+    }
+
+    if (requirementsMet && comp.requires_pre_eval) {
+      const evaluations = await query(db, `SELECT * FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = 'pre'`, [user_id, competency_id]);
+      if (evaluations.length === 0) { requirementsMet = false; missingReason = 'Pre-training self-evaluation not completed.'; }
+    }
+
+    let qatrack_records_detail = {};
+    try { qatrack_records_detail = JSON.parse(progress.qatrack_records_detail || '{}'); } catch(e) {}
+
+    let reqs = [];
+    try { reqs = JSON.parse(comp.qatrack_requirements || '[]'); } catch(e) {}
+    if (reqs.length === 0 && comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) { reqs = [{ count: comp.required_qatrack_count, identifier: comp.qatrack_test_identifier }]; }
+    let hasQATrackChecks = reqs.length > 0;
+    
+    if (hasQATrackChecks) {
+      for (const req of reqs) {
+        const qaData = await fetchQATrackInstances(username, req.identifier);
+        qatrack_records_detail[req.identifier] = qaData.count;
+        if (qaData.count == null || qaData.count < req.count) { requirementsMet = false; if (!missingReason) missingReason = `QATrack+ missing data for ${req.identifier}: Found ${qaData.count || 0}, requires ${req.count}.`; }
+      }
+    }
+
+    if (requirementsMet && comp.required_plan_count > 0) {
+      const planLogs = await query(db, `SELECT id FROM patient_plan_logs WHERE trainee_id = ? AND competency_id = ? AND status = 'Completed' AND score >= 3`, [user_id, competency_id]);
+      if (planLogs.length < comp.required_plan_count) { requirementsMet = false; missingReason = `Requires ${comp.required_plan_count} successful case logs (found ${planLogs.length}).`; }
+    }
+
+    let initialized = false;
+    const detailStr = JSON.stringify(qatrack_records_detail);
+    if (progressQuery.length === 0) { await execute(db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail) VALUES (?, ?, 't', ?)`, [user_id, competency_id, detailStr]); initialized = true; } else if (hasQATrackChecks) { await execute(db, `UPDATE staff_competency_progress SET qatrack_records_detail = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, user_id, competency_id]); }
+      
+    if (progress.current_status === 't' && requirementsMet) { await execute(db, `UPDATE staff_competency_progress SET current_status = 'm' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]); await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'PROMOTED_TO_M', ?, 't', 'm', 'System auto-promotion (Prerequisites met)')`, [user_id, competency_id, user_id]); return { success: true, promoted: true }; } else if ((progress.current_status === 'm' || progress.current_status === 'a') && !requirementsMet) { await execute(db, `UPDATE staff_competency_progress SET current_status = 't' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]); await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'DEMOTED_TO_T', ?, ?, 't', 'System auto-demotion (Prerequisites no longer met)')`, [user_id, competency_id, user_id, progress.current_status]); return { success: true, demoted: true, reason: missingReason }; }
+
+    return { success: true, promoted: false, reason: missingReason || 'Milestones incomplete.', initialized };
+};
 
 app.get('/api/public/summary', async (req, res) => {
   try {
@@ -634,7 +765,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
 
 app.get('/api/competencies', authenticateToken, async (req, res) => {
   try {
-    const competencies = await query(req.db, 'SELECT *, renewal_period_months, requires_pre_eval, requires_post_eval FROM competencies ORDER BY display_order ASC, id ASC');
+    const competencies = await query(req.db, 'SELECT *, renewal_period_months, requires_pre_eval, requires_post_eval, required_plan_count FROM competencies ORDER BY display_order ASC, id ASC');
     const competencyGroups = await query(req.db, 'SELECT * FROM competency_groups');
     
     const groupsByComp = {};
@@ -689,15 +820,16 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/competencies', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads } = req.body;
+  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
     const tuStr = JSON.stringify(target_users || []);
     const qaStr = JSON.stringify(qatrack_requirements || []);
+    const planCount = parseInt(required_plan_count, 10) || 0;
     await execute(req.db, 
-      `INSERT INTO competencies (category, task_name, qatrack_requirements, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description, requires_pre_eval, requires_post_eval, allow_file_uploads) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0]
+      `INSERT INTO competencies (category, task_name, qatrack_requirements, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, planCount]
     );
     const result = await query(req.db, `SELECT last_insert_rowid() AS id`);
     const comp_id = result[0].id;
@@ -730,15 +862,16 @@ app.put('/api/competencies/reorder', authenticateToken, requireAdmin, async (req
 });
 
 app.put('/api/competencies/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads } = req.body;
+  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
     const tuStr = JSON.stringify(target_users || []);
     const qaStr = JSON.stringify(qatrack_requirements || []);
+    const planCount = parseInt(required_plan_count, 10) || 0;
     await execute(req.db, 
-      `UPDATE competencies SET category = ?, task_name = ?, qatrack_requirements = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ?, requires_pre_eval = ?, requires_post_eval = ?, allow_file_uploads = ? WHERE id = ?`,
-      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, req.params.id]
+      `UPDATE competencies SET category = ?, task_name = ?, qatrack_requirements = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ?, requires_pre_eval = ?, requires_post_eval = ?, allow_file_uploads = ?, required_plan_count = ? WHERE id = ?`,
+      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, planCount, req.params.id]
     );
     await execute(req.db, `DELETE FROM competency_groups WHERE competency_id = ?`, [req.params.id]);
     if (target_groups && target_groups.length > 0) {
@@ -962,9 +1095,9 @@ app.get('/api/quizzes/library/:id', authenticateToken, requireAdmin, async (req,
 });
 
 app.post('/api/quizzes/library', authenticateToken, requireAdmin, async (req, res) => {
-    const { name, passing_score_percent, questions } = req.body;
+    const { name, passing_score_percent, questions, is_viva } = req.body;
     try {
-        const result = await execute(req.db, `INSERT INTO quizzes (name, passing_score_percent) VALUES (?, ?)`, [name, passing_score_percent]);
+        const result = await execute(req.db, `INSERT INTO quizzes (name, passing_score_percent, is_viva) VALUES (?, ?, ?)`, [name, passing_score_percent, is_viva ? 1 : 0]);
         const quiz_id = result.lastID;
         if (questions && questions.length > 0) {
             for (let qs of questions) {
@@ -979,10 +1112,10 @@ app.post('/api/quizzes/library', authenticateToken, requireAdmin, async (req, re
 });
 
 app.put('/api/quizzes/library/:id', authenticateToken, requireAdmin, async (req, res) => {
-    const { name, passing_score_percent, questions } = req.body;
+    const { name, passing_score_percent, questions, is_viva } = req.body;
     const quiz_id = req.params.id;
     try {
-        await execute(req.db, `UPDATE quizzes SET name = ?, passing_score_percent = ? WHERE id = ?`, [name, passing_score_percent, quiz_id]);
+        await execute(req.db, `UPDATE quizzes SET name = ?, passing_score_percent = ?, is_viva = ? WHERE id = ?`, [name, passing_score_percent, is_viva ? 1 : 0, quiz_id]);
         await execute(req.db, `DELETE FROM quiz_questions WHERE quiz_id = ?`, [quiz_id]);
         if (questions && questions.length > 0) {
             for (let qs of questions) {
@@ -1232,6 +1365,195 @@ app.delete('/api/competency/:comp_id/files/:file_id', authenticateToken, async (
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
+// --- PATIENT PLANNING CASE LOGBOOK & ASSESSOR GATEWAY ---
+app.get('/api/competencies/:id/eligible-assessors', authenticateToken, async (req, res) => {
+  try {
+    const progress = await query(req.db, `SELECT user_id FROM staff_competency_progress WHERE competency_id = ? AND current_status IN ('x', 'x+')`, [req.params.id]);
+    if (progress.length === 0) return res.json([]);
+    const userIds = progress.map(p => p.user_id);
+    const placeholders = userIds.map(() => '?').join(',');
+    const users = await query(sharedDb, `SELECT id, full_name, designation FROM users WHERE is_active = 1 AND id IN (${placeholders})`, userIds);
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/planning-logs/submit', authenticateToken, async (req, res) => {
+  const { competency_id, patient_reference, log_date, trainee_comments, assigned_assessor_id, is_draft } = req.body;
+  const trainee_id = req.user.id;
+  if (!competency_id || !patient_reference) return res.status(400).json({ error: "Missing required fields" });
+  try {
+    const status = is_draft ? 'Draft' : 'Pending_Review';
+    let assessor_id = assigned_assessor_id || 0;
+    if (!is_draft && !assessor_id) return res.status(400).json({ error: "Missing assessor" });
+    
+    if (!is_draft) {
+      const check = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [assessor_id, competency_id]);
+      if (check.length === 0 || !['x', 'x+'].includes(check[0].current_status)) return res.status(400).json({ error: "Selected assessor is not eligible for this competency." });
+    }
+    await execute(req.db, `INSERT INTO patient_plan_logs (trainee_id, competency_id, patient_reference, log_date, trainee_comments, assigned_assessor_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)`, [trainee_id, competency_id, patient_reference, log_date || null, trainee_comments || '', assessor_id, status]);
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, ?, ?, ?)`, [trainee_id, competency_id, is_draft ? 'CASE_LOG_DRAFTED' : 'CASE_LOG_SUBMITTED', trainee_id, is_draft ? `Saved draft case log for patient ${patient_reference}` : `Submitted case log for patient ${patient_reference} to assessor ID ${assessor_id}`]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/planning-logs/:id', authenticateToken, async (req, res) => {
+  const { patient_reference, log_date, trainee_comments, assigned_assessor_id, is_draft } = req.body;
+  const trainee_id = req.user.id;
+  const logId = req.params.id;
+  try {
+    const log = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ? AND trainee_id = ?`, [logId, trainee_id]);
+    if (log.length === 0) return res.status(404).json({ error: "Log not found" });
+    if (!['Draft', 'Pending_Review'].includes(log[0].status)) return res.status(400).json({ error: "Cannot edit an assessed log." });
+    const status = is_draft ? 'Draft' : 'Pending_Review';
+    let assessor_id = assigned_assessor_id || 0;
+    if (!is_draft && !assessor_id) return res.status(400).json({ error: "Missing assessor" });
+    if (!is_draft) {
+      const check = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [assessor_id, log[0].competency_id]);
+      if (check.length === 0 || !['x', 'x+'].includes(check[0].current_status)) return res.status(400).json({ error: "Selected assessor is not eligible for this competency." });
+    }
+    await execute(req.db, `UPDATE patient_plan_logs SET patient_reference = ?, log_date = ?, trainee_comments = ?, assigned_assessor_id = ?, status = ? WHERE id = ?`, [patient_reference, log_date || null, trainee_comments || '', assessor_id, status, logId]);
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, ?, ?, ?)`, [trainee_id, log[0].competency_id, is_draft ? 'CASE_LOG_DRAFT_UPDATED' : 'CASE_LOG_SUBMITTED', trainee_id, is_draft ? `Updated draft case log ${patient_reference}` : `Submitted case log ${patient_reference} to assessor ID ${assessor_id}`]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/planning-logs/:id', authenticateToken, async (req, res) => {
+  const trainee_id = req.user.id;
+  const logId = req.params.id;
+  try {
+    const log = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ? AND trainee_id = ?`, [logId, trainee_id]);
+    if (log.length === 0) return res.status(404).json({ error: "Log not found" });
+    if (!['Draft', 'Pending_Review'].includes(log[0].status)) return res.status(400).json({ error: "Cannot delete an assessed log." });
+    await execute(req.db, `DELETE FROM patient_plan_logs WHERE id = ?`, [logId]);
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'CASE_LOG_DELETED', ?, ?)`, [trainee_id, log[0].competency_id, trainee_id, `Deleted case log ${log[0].patient_reference}`]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/my-planning-logs', authenticateToken, async (req, res) => {
+  try {
+    const logs = await query(req.db, `SELECT * FROM patient_plan_logs WHERE trainee_id = ? ORDER BY created_at DESC`, [req.user.id]);
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/competency/:id/planning-logs', authenticateToken, async (req, res) => {
+  const target_user_id = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
+  try {
+    const logs = await query(req.db, `SELECT * FROM patient_plan_logs WHERE trainee_id = ? AND competency_id = ? ORDER BY created_at DESC`, [target_user_id, req.params.id]);
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/assessor/feedback-queue', authenticateToken, async (req, res) => {
+  try {
+    const logs = await query(req.db, `SELECT p.*, c.task_name, c.category FROM patient_plan_logs p JOIN competencies c ON p.competency_id = c.id WHERE p.assigned_assessor_id = ? AND p.status = 'Pending_Review' ORDER BY p.created_at ASC`, [req.user.id]);
+    const users = await query(sharedDb, `SELECT id, full_name FROM users`);
+    const userMap = {}; users.forEach(u => userMap[u.id] = u.full_name);
+    logs.forEach(l => l.trainee_name = userMap[l.trainee_id] || 'Unknown');
+    res.json(logs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/planning-logs/review/:id', authenticateToken, async (req, res) => {
+  const { score, assessor_comments } = req.body;
+  const logId = req.params.id;
+  try {
+    const log = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ?`, [logId]);
+    if (log.length === 0) return res.status(404).json({ error: "Log not found" });
+    if (log[0].assigned_assessor_id !== req.user.id && !req.user.is_superuser) return res.status(403).json({ error: "Unauthorized" });
+    const status = score >= 3 ? 'Completed' : 'Needs_Amendment';
+    await execute(req.db, `UPDATE patient_plan_logs SET score = ?, assessor_comments = ?, status = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`, [score, assessor_comments || null, status, logId]);
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'CASE_LOG_REVIEWED', ?, ?)`, [log[0].trainee_id, log[0].competency_id, req.user.id, `Reviewed case log ${log[0].patient_reference}. Score: ${score}. Status: ${status}`]);
+    
+    const trainee = await query(sharedDb, `SELECT username FROM users WHERE id = ?`, [log[0].trainee_id]);
+    if (trainee.length > 0) {
+      await syncCompetencyInternal(req.db, log[0].trainee_id, trainee[0].username, log[0].competency_id);
+    }
+    
+    res.json({ success: true, status });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- STRUCTURED VIVA ASSESSMENTS ---
+app.post('/api/viva/submit-self', authenticateToken, async (req, res) => {
+  const { competency_id, quiz_id, assigned_assessor_id, trainee_answers } = req.body;
+  const trainee_id = req.user.id;
+  try {
+    const check = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [assigned_assessor_id, competency_id]);
+    if (check.length === 0 || !['x', 'x+'].includes(check[0].current_status)) return res.status(400).json({ error: "Selected assessor is not eligible." });
+    
+    await execute(req.db, `INSERT INTO viva_evaluations (trainee_id, competency_id, quiz_id, assigned_assessor_id, trainee_answers) VALUES (?, ?, ?, ?, ?)`, 
+      [trainee_id, competency_id, quiz_id, assigned_assessor_id, JSON.stringify(trainee_answers)]);
+      
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'VIVA_SUBMITTED', ?, ?)`, 
+      [trainee_id, competency_id, trainee_id, `Submitted Viva Self-Assessment for quiz ID ${quiz_id} to assessor ID ${assigned_assessor_id}`]);
+      
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/assessor/viva-queue', authenticateToken, async (req, res) => {
+  try {
+    const vivas = await query(req.db, `SELECT v.*, q.name as quiz_name, c.task_name, c.category FROM viva_evaluations v JOIN quizzes q ON v.quiz_id = q.id JOIN competencies c ON v.competency_id = c.id WHERE v.assigned_assessor_id = ? AND v.status = 'Assessor_Pending' ORDER BY v.created_at ASC`, [req.user.id]);
+    const users = await query(sharedDb, `SELECT id, full_name FROM users`);
+    const userMap = {}; users.forEach(u => userMap[u.id] = u.full_name);
+    for (let v of vivas) {
+      v.trainee_name = userMap[v.trainee_id] || 'Unknown';
+      v.questions = await query(req.db, `SELECT id, question_text FROM quiz_questions WHERE quiz_id = ?`, [v.quiz_id]);
+    }
+    res.json(vivas);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/viva/submit-review/:id', authenticateToken, async (req, res) => {
+  const { assessor_answers, is_passed } = req.body;
+  const vivaId = req.params.id;
+  try {
+    const viva = await query(req.db, `SELECT * FROM viva_evaluations WHERE id = ?`, [vivaId]);
+    if (viva.length === 0) return res.status(404).json({ error: "Viva not found" });
+    if (viva[0].assigned_assessor_id !== req.user.id && !req.user.is_superuser) return res.status(403).json({ error: "Unauthorized" });
+    
+    const status = is_passed === 1 ? 'Completed' : 'Needs_Retake';
+    await execute(req.db, `UPDATE viva_evaluations SET assessor_answers = ?, is_passed = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, 
+      [JSON.stringify(assessor_answers), is_passed, status, vivaId]);
+      
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'VIVA_REVIEWED', ?, ?)`, 
+      [viva[0].trainee_id, viva[0].competency_id, req.user.id, `Reviewed Viva ID ${vivaId}. Status: ${status}`]);
+      
+    const trainee = await query(sharedDb, `SELECT username FROM users WHERE id = ?`, [viva[0].trainee_id]);
+    if (trainee.length > 0) {
+      await syncCompetencyInternal(req.db, viva[0].trainee_id, trainee[0].username, viva[0].competency_id);
+    }
+      
+    res.json({ success: true, status });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/viva/summary/:user_id/:competency_id', authenticateToken, async (req, res) => {
+  const { user_id, competency_id } = req.params;
+  try {
+    const evals = await query(req.db, `SELECT v.*, q.name as quiz_name FROM viva_evaluations v JOIN quizzes q ON v.quiz_id = q.id WHERE v.trainee_id = ? AND v.competency_id = ? ORDER BY v.created_at DESC`, [user_id, competency_id]);
+    for (let ev of evals) {
+      ev.questions = await query(req.db, `SELECT id, question_text FROM quiz_questions WHERE quiz_id = ?`, [ev.quiz_id]);
+      try { ev.trainee_answers = JSON.parse(ev.trainee_answers || '{}'); } catch(e) { ev.trainee_answers = {}; }
+      try { ev.assessor_answers = JSON.parse(ev.assessor_answers || '{}'); } catch(e) { ev.assessor_answers = {}; }
+      ev.variance_analysis = ev.questions.map(q => {
+        const tScore = parseInt(ev.trainee_answers[q.id], 10) || 0;
+        const aScore = parseInt(ev.assessor_answers[q.id], 10) || 0;
+        const variance = aScore - tScore;
+        let flag = 'Calibrated Alignment';
+        if (variance <= -3) flag = 'Imposter Alert';
+        else if (variance >= 3) flag = 'Overconfidence Danger';
+        return { question_id: q.id, question_text: q.question_text, trainee_score: tScore, assessor_score: aScore, variance, flag };
+      });
+    }
+    res.json(evals);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- MILESTONE TRACKING & AUTOMATION ---
 app.post('/api/competency/milestone', authenticateToken, async (req, res) => {
   const { competency_id, milestone, value, reading_id } = req.body;
@@ -1268,130 +1590,9 @@ app.post('/api/competency/sync', authenticateToken, async (req, res) => {
   const username = req.user.username; // Derived from JWT payload
 
   try {
-    // Get the required milestones for this specific competency
-    const compQuery = await query(req.db, `SELECT * FROM competencies WHERE id = ?`, [competency_id]);
-    if (compQuery.length === 0) return res.status(404).json({ error: 'Competency not found' });
-    const comp = compQuery[0];
-    let rp = [];
-    try { 
-      rp = JSON.parse(comp.reading_prerequisites || '[]'); 
-      while(typeof rp === 'string') rp = JSON.parse(rp);
-      if (!Array.isArray(rp)) rp = [];
-    } catch(e) {}
-
-    let progress = null;
-    let rc = [];
-    let qc = {};
-
-    const progressQuery = await query(req.db, `SELECT * FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-    if (progressQuery.length > 0) {
-      progress = progressQuery[0];
-      try { 
-        rc = JSON.parse(progress.readings_completed || '[]'); 
-        while(typeof rc === 'string') rc = JSON.parse(rc);
-        if (!Array.isArray(rc)) rc = [];
-      } catch(e) {}
-      try { 
-        qc = JSON.parse(progress.quizzes_completed || '{}'); 
-        while(typeof qc === 'string') qc = JSON.parse(qc);
-        if (!qc || typeof qc !== 'object' || Array.isArray(qc)) qc = {};
-      } catch(e) {}
-    } else {
-      progress = { current_status: 't', qatrack_records: null, qatrack_manual_override: 0 };
-    }
-      
-    let requirementsMet = true;
-    let missingReason = '';
-
-    if (comp.requires_instructions) {
-      for (let r of rp) {
-        if (!rc.includes(r.id)) {
-          requirementsMet = false;
-          missingReason = `Reading prerequisite '${r.name}' not completed.`;
-          break;
-        }
-      }
-    }
-    
-    if (requirementsMet && comp.requires_quiz) {
-        const qzs = await query(req.db, `SELECT q.id, q.name FROM quizzes q JOIN competency_quizzes cq ON q.id = cq.quiz_id WHERE cq.competency_id = ?`, [competency_id]);
-        for (let qz of qzs) {
-          if (!qc[qz.id] || !qc[qz.id].passed) {
-            requirementsMet = false;
-            missingReason = `Quiz '${qz.name}' not passed.`;
-            break;
-          }
-        }
-    }
-    
-    if (requirementsMet && comp.requires_prerequisite_competencies) {
-      let pc = [];
-      try { 
-        pc = JSON.parse(comp.prerequisite_competencies || '[]'); 
-        while(typeof pc === 'string') pc = JSON.parse(pc);
-        if (!Array.isArray(pc)) pc = [];
-      } catch(e) {}
-      for (let pcId of pc) {
-        const pcProg = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, pcId]);
-        if (pcProg.length === 0 || (pcProg[0].current_status !== 'c' && pcProg[0].current_status !== 'x')) {
-          requirementsMet = false;
-          missingReason = `Prerequisite competencies not fully met.`;
-          break;
-        }
-      }
-    }
-
-    if (requirementsMet && comp.requires_pre_eval) {
-      const evaluations = await query(req.db, `SELECT * FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = 'pre'`, [user_id, competency_id]);
-      if (evaluations.length === 0) {
-          requirementsMet = false;
-          missingReason = 'Pre-training self-evaluation not completed.';
-      }
-    }
-
-    let qatrack_records_detail = {};
-    try { qatrack_records_detail = JSON.parse(progress.qatrack_records_detail || '{}'); } catch(e) {}
-
-    let reqs = [];
-    try { reqs = JSON.parse(comp.qatrack_requirements || '[]'); } catch(e) {}
-    if (reqs.length === 0 && comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) {
-      reqs = [{ count: comp.required_qatrack_count, identifier: comp.qatrack_test_identifier }];
-    }
-
-    let hasQATrackChecks = reqs.length > 0;
-    
-    if (hasQATrackChecks) {
-      for (const req of reqs) {
-        const qaData = await fetchQATrackInstances(username, req.identifier);
-        const count = qaData.count;
-        qatrack_records_detail[req.identifier] = count;
-        if (count == null || count < req.count) {
-          requirementsMet = false;
-          if (!missingReason) missingReason = `QATrack+ missing data for ${req.identifier}: Found ${count || 0}, requires ${req.count}.`;
-        }
-      }
-    }
-
-    let initialized = false;
-    const detailStr = JSON.stringify(qatrack_records_detail);
-    if (progressQuery.length === 0) {
-      await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail) VALUES (?, ?, 't', ?)`, [user_id, competency_id, detailStr]);
-      initialized = true;
-    } else if (hasQATrackChecks) {
-      await execute(req.db, `UPDATE staff_competency_progress SET qatrack_records_detail = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, user_id, competency_id]);
-    }
-      
-    if (progress.current_status === 't' && requirementsMet) {
-      await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'm' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'PROMOTED_TO_M', ?, 't', 'm', 'System auto-promotion (Prerequisites met)')`, [user_id, competency_id, user_id]);
-      return res.json({ success: true, promoted: true });
-    } else if ((progress.current_status === 'm' || progress.current_status === 'a') && !requirementsMet) {
-      await execute(req.db, `UPDATE staff_competency_progress SET current_status = 't' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'DEMOTED_TO_T', ?, ?, 't', 'System auto-demotion (Prerequisites no longer met)')`, [user_id, competency_id, user_id, progress.current_status]);
-      return res.json({ success: true, demoted: true, reason: missingReason });
-    }
-
-    return res.json({ success: true, promoted: false, reason: missingReason || 'Milestones incomplete.', initialized });
+    const result = await syncCompetencyInternal(req.db, req.user.id, req.user.username, req.body.competency_id);
+    if (result.error) return res.status(404).json(result);
+    return res.json(result);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -1601,6 +1802,12 @@ app.post('/api/progress/admin-reset-quiz', authenticateToken, requireSuperuser, 
   const { user_id, competency_id, quiz_id } = req.body;
   const admin_id = req.user.id;
   try {
+    if (quiz_id) {
+      await execute(req.db, `DELETE FROM viva_evaluations WHERE trainee_id = ? AND competency_id = ? AND quiz_id = ?`, [user_id, competency_id, quiz_id]);
+    } else {
+      await execute(req.db, `DELETE FROM viva_evaluations WHERE trainee_id = ? AND competency_id = ?`, [user_id, competency_id]);
+    }
+
     const check = await query(req.db, `SELECT id, current_status, quizzes_completed FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
     if (check.length > 0) {
       let qc = {};
@@ -1668,6 +1875,21 @@ app.post('/api/progress/admin-reset-eval', authenticateToken, requireSuperuser, 
       [user_id, competency_id, admin_id, `Admin reset ${eval_type}-training evaluation`]
     );
     res.json({ success: true, message: "Evaluation reset." });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- AUDIT LOG ADMIN ENDPOINT ---
+app.get('/api/admin/audit-logs', authenticateToken, requireAdmin, async (req, res) => {
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : 200;
+  try {
+    const logs = await query(req.db, `SELECT a.*, c.task_name FROM competency_audit_log a LEFT JOIN competencies c ON a.competency_id = c.id ORDER BY a.timestamp DESC LIMIT ?`, [limit]);
+    const users = await query(sharedDb, `SELECT id, full_name FROM users`);
+    const userMap = {}; users.forEach(u => userMap[u.id] = u.full_name);
+    logs.forEach(l => {
+      l.target_user_name = userMap[l.target_user_id] || 'Unknown';
+      l.actioned_by_name = userMap[l.actioned_by_id] || 'Unknown';
+    });
+    res.json(logs);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1740,6 +1962,7 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
         try { reqs = JSON.parse(c.qatrack_requirements || '[]'); } catch(e) {}
         if (reqs.length === 0 && c.required_qatrack_count > 0 && c.qatrack_test_identifier) reqs = [{ count: c.required_qatrack_count, identifier: c.qatrack_test_identifier }];
         if (reqs.length > 0) return false;
+        if (c.required_plan_count > 0) return false;
         return true;
       };
 
