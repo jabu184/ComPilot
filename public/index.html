@@ -45,9 +45,9 @@
             <p v-if="loginError" class="text-red-500 mt-1 text-sm">{{ loginError }}</p>
           </div>
           <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-            <input v-model="username" @keyup.enter="login" type="text" placeholder="Username" 
+            <input v-model.lazy="username" @keyup.enter="login" type="text" placeholder="Username" 
                    class="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48" />
-            <input v-model="password" @keyup.enter="login" type="password" placeholder="Password" 
+            <input v-model.lazy="password" @keyup.enter="login" type="password" placeholder="Password" 
                    class="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48" />
             <button @click="login" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition w-full sm:w-auto whitespace-nowrap">
               Login
@@ -82,9 +82,11 @@
                       <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-200 border-r-2 border-gray-300">{{ cat }}</td>
                       <td v-for="u in publicDisplayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 bg-gray-50 align-top">
                         <div v-if="getPublicUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
-                          <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getPublicUserCategoryProgress(u, cat).complete }} / {{ getPublicUserCategoryProgress(u, cat).total }}</span>
-                          <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
-                            <div class="bg-green-500 h-1.5 rounded-full transition-all" :style="`width: ${getPublicUserCategoryProgress(u, cat).percent}%`"></div>
+                          <div class="relative w-full bg-gray-300 rounded-full h-4 max-w-[80px] overflow-hidden shadow-inner">
+                            <div class="bg-green-500 h-full transition-all" :style="`width: ${getPublicUserCategoryProgress(u, cat).percent}%`"></div>
+                            <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold" :class="getPublicUserCategoryProgress(u, cat).percent > 55 ? 'text-white drop-shadow' : 'text-gray-700'">
+                              {{ getPublicUserCategoryProgress(u, cat).percent === 100 ? 'Completed' : getPublicUserCategoryProgress(u, cat).complete + ' / ' + getPublicUserCategoryProgress(u, cat).total }}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -119,9 +121,11 @@
                     <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-100 border-r-2 border-gray-400">Section Progress</td>
                     <td v-for="u in publicDisplayedUsers" :key="'overall-'+u.id" class="px-3 py-3 text-center border-l border-gray-400 bg-gray-50 align-top">
                       <div class="flex flex-col items-center w-full justify-center">
-                        <span class="text-[10px] text-blue-900 font-bold mb-1">{{ publicAllUsersProgress[u.id]?.overall.percent || 0 }}%</span>
-                        <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
-                          <div class="bg-blue-600 h-1.5 rounded-full transition-all" :style="`width: ${publicAllUsersProgress[u.id]?.overall.percent || 0}%`"></div>
+                        <div class="relative w-full bg-gray-300 rounded-full h-4 max-w-[80px] overflow-hidden shadow-inner">
+                          <div class="bg-green-500 h-full transition-all" :style="`width: ${publicAllUsersProgress[u.id]?.overall?.percent || 0}%`"></div>
+                          <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold" :class="(publicAllUsersProgress[u.id]?.overall?.percent || 0) > 55 ? 'text-white drop-shadow' : 'text-gray-700'">
+                            {{ publicAllUsersProgress[u.id]?.overall?.percent === 100 ? 'Completed' : (publicAllUsersProgress[u.id]?.overall?.complete || 0) + ' / ' + (publicAllUsersProgress[u.id]?.overall?.total || 0) }}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -189,7 +193,7 @@
         <!-- Gamified Milestone Rewards -->
         <div v-if="currentTab === 'individual' && isGamificationEnabled" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <h3 class="text-lg font-bold mb-4 text-gray-800">Your Achievements</h3>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             <div v-for="badge in myBadges" :key="badge.tier" 
                  :title="badge.unlocked ? badge.name + ':\n' + badge.description : 'Locked'"
                  :class="['flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-300', badge.unlocked ? 'border-gray-200 bg-gray-50 shadow-sm hover:scale-105 hover:shadow-md cursor-help' : 'border-gray-100 bg-gray-50 opacity-25 grayscale cursor-not-allowed']">
@@ -306,9 +310,11 @@
                 </td>
                 <td v-for="u in displayedUsers" :key="u.id" class="px-3 py-3 text-center border-l border-gray-300 align-top" :class="currentTab === 'individual' ? 'bg-gray-50 group-hover/cat:bg-gray-100' : 'bg-gray-50'">
                   <div v-if="getUserCategoryProgress(u, cat).total > 0" class="flex flex-col items-center w-full justify-center">
-                    <span class="text-[10px] text-gray-600 font-semibold mb-1">{{ getUserCategoryProgress(u, cat).complete }} / {{ getUserCategoryProgress(u, cat).total }}</span>
-                    <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
-                      <div class="bg-green-500 h-1.5 rounded-full transition-all" :style="`width: ${getUserCategoryProgress(u, cat).percent}%`"></div>
+                    <div class="relative w-full bg-gray-300 rounded-full h-4 max-w-[80px] overflow-hidden shadow-inner">
+                      <div class="bg-green-500 h-full transition-all" :style="`width: ${getUserCategoryProgress(u, cat).percent}%`"></div>
+                      <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold" :class="getUserCategoryProgress(u, cat).percent > 55 ? 'text-white drop-shadow' : 'text-gray-700'">
+                        {{ getUserCategoryProgress(u, cat).percent === 100 ? 'Complete' : getUserCategoryProgress(u, cat).complete + ' / ' + getUserCategoryProgress(u, cat).total }}
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -348,9 +354,11 @@
               <td class="py-3 pl-4 pr-3 text-sm font-bold text-gray-900 sticky left-0 z-10 bg-gray-100 border-r-2 border-gray-400">Section Progress</td>
               <td v-for="u in displayedUsers" :key="'overall-'+u.id" class="px-3 py-3 text-center border-l border-gray-400 bg-gray-50 align-top">
                 <div class="flex flex-col items-center w-full justify-center">
-                  <span class="text-[10px] text-blue-900 font-bold mb-1">{{ allUsersProgress[u.id]?.overall.percent || 0 }}%</span>
-                  <div class="w-full bg-gray-300 rounded-full h-1.5 max-w-[80px]">
-                    <div class="bg-blue-600 h-1.5 rounded-full transition-all" :style="`width: ${allUsersProgress[u.id]?.overall.percent || 0}%`"></div>
+                  <div class="relative w-full bg-gray-300 rounded-full h-4 max-w-[80px] overflow-hidden shadow-inner">
+                    <div class="bg-green-500 h-full transition-all" :style="`width: ${allUsersProgress[u.id]?.overall?.percent || 0}%`"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold" :class="(allUsersProgress[u.id]?.overall?.percent || 0) > 55 ? 'text-white drop-shadow' : 'text-gray-700'">
+                      {{ allUsersProgress[u.id]?.overall?.percent === 100 ? 'Completed' : (allUsersProgress[u.id]?.overall?.complete || 0) + ' / ' + (allUsersProgress[u.id]?.overall?.total || 0) }}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -1485,7 +1493,15 @@
                   <!-- Taking Viva -->
                   <div v-if="takingViva && vivaData?.id === qz.id" class="mt-1 mb-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
                   <h4 class="font-bold text-gray-800 mb-3">Self Assessment: {{ vivaData?.name }}</h4>
-                  <p class="text-xs text-gray-600 mb-4">Grade your confidence for each topic from 1 (Novice) to 10 (Expert).</p>
+                  <p class="text-xs text-gray-600 mb-2">Grade your confidence for each topic from 1 (Novice) to 10 (Expert).</p>
+                  
+                  <div class="mb-4 text-xs text-gray-600 bg-white border border-gray-200 p-2 rounded flex flex-wrap gap-2 justify-between shadow-sm">
+                    <span class="font-bold text-blue-800 mr-2">Legend:</span>
+                    <span><strong>1-3:</strong> Novice</span>
+                    <span><strong>4-6:</strong> Intermediate</span>
+                    <span><strong>7-8:</strong> Competent</span>
+                    <span><strong>9-10:</strong> Expert</span>
+                  </div>
                   
                   <div v-for="(q, idx) in vivaData.questions" :key="q.id" class="mb-4 bg-white p-3 border rounded">
                       <p class="font-semibold text-sm mb-2 text-gray-800">{{idx+1}}. {{q.question_text}}</p>
@@ -1722,7 +1738,7 @@
           
           <!-- Admin Controls -->
           <div v-if="user.is_superuser" class="mt-4 pt-4 border-t border-red-200">
-            <h4 class="font-semibold text-red-800 mb-2">Overrides & Controls</h4>
+            <h4 class="font-semibold text-red-800 mb-2">Admin Overrides</h4>
             
             <div class="flex items-center gap-2 mb-3">
               <span class="text-sm font-medium text-gray-700">Force Status:</span>
@@ -1888,6 +1904,14 @@
             <div class="h-3 border-l-2 border-dashed border-blue-600"></div> Trainee Score
           </div>
         </div>
+
+        <div class="mb-4 text-xs text-gray-600 bg-purple-50 border border-purple-100 p-2 rounded flex flex-wrap gap-2 justify-between shadow-sm">
+          <span class="font-bold text-purple-800 mr-2">Score Legend:</span>
+          <span><strong>1-3:</strong> Novice</span>
+          <span><strong>4-6:</strong> Intermediate</span>
+          <span><strong>7-8:</strong> Competent</span>
+          <span><strong>9-10:</strong> Expert</span>
+        </div>
         
         <div v-for="q in activeVivaReview.questions" :key="q.id" class="mb-4 bg-white p-3 border border-gray-200 rounded shadow-sm">
            <p class="font-semibold text-gray-700 mb-2">{{ q.question_text }}</p>
@@ -1907,13 +1931,19 @@
            </div>
         </div>
         
-        <div class="mt-4 pt-4 border-t border-gray-200">
-           <label class="block text-sm font-semibold text-gray-700 mb-1">Final Result</label>
-           <select v-model="activeVivaReview.is_passed" class="w-full border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-purple-500 focus:border-purple-500">
-              <option :value="null" disabled>Select Result...</option>
-              <option :value="1">Pass</option>
-              <option :value="0">Fail (Requires Retake)</option>
-           </select>
+        <div class="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+           <label class="block text-sm font-semibold text-gray-700">Final Result</label>
+           <div class="flex items-center gap-3">
+             <span :class="{'text-gray-400 font-medium': activeVivaReview.is_passed !== 0, 'text-red-600 font-bold': activeVivaReview.is_passed === 0}">Fail (Retake)</span>
+             <button type="button" 
+                     @click="activeVivaReview.is_passed = activeVivaReview.is_passed === 1 ? 0 : 1"
+                     :class="activeVivaReview.is_passed === 1 ? 'bg-green-500' : (activeVivaReview.is_passed === 0 ? 'bg-red-500' : 'bg-gray-300')"
+                     class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 shadow-inner">
+               <span :class="activeVivaReview.is_passed === 1 ? 'translate-x-5' : 'translate-x-0'"
+                     class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+             </button>
+             <span :class="{'text-gray-400 font-medium': activeVivaReview.is_passed !== 1, 'text-green-600 font-bold': activeVivaReview.is_passed === 1}">Pass</span>
+           </div>
         </div>
         
         <div class="flex justify-end gap-2 mt-6">
@@ -4619,18 +4649,43 @@
         });
 
         const userBadgeStats = computed(() => {
-          if (!user.value) return { total: 0, completed: 0, trainer: 0, percent: 0 };
+          if (!user.value) return { total: 0, completed: 0, trainer: 0, percent: 0, categoryPercent: 0, yearsInPost: 0 };
           const myComps = competencies.value.filter(c => isApplicable(user.value, c));
           let completed = 0;
           let trainer = 0;
+          
+          const catMap = {};
+          
           myComps.forEach(c => {
             const p = getProgressStatus(user.value.id, c.id);
-            if (p === 'c' || p === 'x') completed++;
+            const isCompleted = p === 'c' || p === 'x';
+            if (isCompleted) completed++;
             if (p === 'x') trainer++;
+            
+            if (!catMap[c.category]) catMap[c.category] = { total: 0, completed: 0 };
+            catMap[c.category].total++;
+            if (isCompleted) catMap[c.category].completed++;
           });
+          
           const total = myComps.length;
           const percent = total > 0 ? Math.floor((completed / total) * 100) : 0;
-          return { total, completed, trainer, percent };
+          
+          let completedCategories = 0;
+          let totalCategories = Object.keys(catMap).length;
+          Object.values(catMap).forEach(cat => {
+            if (cat.total > 0 && cat.total === cat.completed) completedCategories++;
+          });
+          const categoryPercent = totalCategories > 0 ? Math.floor((completedCategories / totalCategories) * 100) : 0;
+          
+          let yearsInPost = 0;
+          if (user.value.date_in_post) {
+            const start = new Date(user.value.date_in_post);
+            if (!isNaN(start.getTime())) {
+               yearsInPost = (new Date() - start) / (1000 * 60 * 60 * 24 * 365.25);
+            }
+          }
+
+          return { total, completed, trainer, percent, categoryPercent, yearsInPost };
         });
 
         const myBadges = computed(() => {
@@ -4646,6 +4701,11 @@
               tier: 2, name: 'Pacesetter', description: 'Reached 50% completion.',
               unlocked: stats.percent >= 50, iconColor: 'text-gray-400',
               svg: '<polygon points="12,2 20.66,7 20.66,17 12,22 3.34,17 3.34,7" fill="currentColor"/><polygon points="12,5 18,8.5 18,15.5 12,19 6,15.5 6,8.5" fill="rgba(255,255,255,0.3)"/>'
+            },
+            {
+              tier: 3, name: 'Broad Specialist', description: 'Completed 100% of tasks in 50%+ of all categories.',
+              unlocked: stats.categoryPercent >= 50, iconColor: 'text-emerald-500',
+              svg: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/><path d="M12 5.5l1.85 3.75 4.14.6-3 2.92.7 4.13L12 14.94l-3.69 1.96.7-4.13-3-2.92 4.14-.6L12 5.5z" fill="rgba(255,255,255,0.3)"/>'
             },
             {
               tier: 4, name: 'Section Mastery', description: 'Achieved 100% completion.',
@@ -4666,6 +4726,21 @@
               tier: 7, name: 'Master Assessor', description: 'Holds standard Assessor privileges.',
               unlocked: isAdmin, iconColor: 'text-sky-500',
               svg: '<path d="M12 1l3 6 6-1-3 6 2 7-8-4-8 4 2-7-3-6 6 1 3-6z" fill="currentColor"/><circle cx="12" cy="13" r="3" fill="rgba(255,255,255,0.5)"/>'
+            },
+            {
+              tier: 8, name: 'Dedicated (1+ Yr)', description: 'In role for over 1 year.',
+              unlocked: stats.yearsInPost >= 1, iconColor: 'text-orange-400',
+              svg: '<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/><circle cx="12" cy="12" r="4" fill="rgba(255,255,255,0.8)"/><path d="M12 9v3l2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'
+            },
+            {
+              tier: 9, name: 'Veteran (5+ Yrs)', description: 'In role for over 5 years.',
+              unlocked: stats.yearsInPost >= 5, iconColor: 'text-indigo-500',
+              svg: '<path d="M12 2l2.4 7.4L22 9.4l-5.6 5.4L17.7 22 12 19l-5.7 3 1.3-7.2L2 9.4l7.6 0L12 2z" fill="currentColor"/><circle cx="12" cy="12" r="3" fill="rgba(255,255,255,0.8)"/>'
+            },
+            {
+              tier: 10, name: 'Pillar (10+ Yrs)', description: 'In role for over 10 years.',
+              unlocked: stats.yearsInPost >= 10, iconColor: 'text-amber-600',
+              svg: '<path d="M12 1L2 6v5c0 5.5 3.8 10.7 10 12 6.2-1.3 10-6.5 10-12V6l-10-5z" fill="currentColor"/><path d="M12 4L4 8v4c0 4.5 3.1 8.7 8 10 4.9-1.3 8-5.5 8-10V8l-8-4z" fill="rgba(255,255,255,0.3)"/><circle cx="12" cy="13" r="3" fill="rgba(255,255,255,0.9)"/>'
             }
           ]
         });
