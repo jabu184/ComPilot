@@ -490,9 +490,10 @@ app.get('/api/public/summary', async (req, res) => {
     const dbName = req.headers['x-database'] || 'QA';
     const dbInstance = getDb(dbName);
     const users = await query(sharedDb, 'SELECT id, username, full_name, designation, active_in FROM users WHERE is_active = 1');
+    const allUsers = await query(sharedDb, 'SELECT id, full_name FROM users');
     const competencies = await query(dbInstance, 'SELECT id, category, task_name, display_order, target_users, description FROM competencies ORDER BY display_order ASC, id ASC');
     const competencyGroups = await query(dbInstance, 'SELECT * FROM competency_groups');
-    const progress = await query(dbInstance, 'SELECT user_id, competency_id, current_status, date_signed_off, date_reviewed FROM staff_competency_progress');
+    const progress = await query(dbInstance, 'SELECT user_id, competency_id, current_status, date_started, date_signed_off, assessor_id, date_reviewed, reviewer_id, signoff_comment FROM staff_competency_progress');
     const categoryOrder = await query(dbInstance, 'SELECT category, display_order FROM category_order ORDER BY display_order ASC');
     const userGroups = await query(sharedDb, 'SELECT * FROM user_groups ORDER BY display_order ASC, id ASC');
     
@@ -541,6 +542,7 @@ app.get('/api/public/summary', async (req, res) => {
     for (const user of users) {
        let activeIn = [];
        try { activeIn = JSON.parse(user.active_in || '[]'); } catch(e){}
+       user.active_in = activeIn;
        if (activeIn.includes(dbName)) {
            activeUsers.push(user);
        }
@@ -548,6 +550,7 @@ app.get('/api/public/summary', async (req, res) => {
     
     res.json({
       users: activeUsers,
+      allUsers,
       competencies,
       progress,
       categoryOrder,
@@ -582,6 +585,10 @@ app.post('/api/login', async (req, res) => {
     if (user.is_active === 0) {
       return res.status(403).json({ error: 'Account is archived. Please contact an administrator.' });
     }
+
+    try { user.active_in = JSON.parse(user.active_in || '[]'); } catch(e) { user.active_in = []; }
+    delete user.password;
+
     const token = jwt.sign(
       { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, dbName }, 
       SECRET_KEY, 
@@ -615,6 +622,9 @@ app.post('/api/switch-db', (req, res) => {
       if (!activeIn.includes(newDbName)) {
         return res.status(403).json({ error: 'Not authorized for this section.' });
       }
+
+      user.active_in = activeIn;
+      delete user.password;
 
       const newToken = jwt.sign(
         { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, dbName: newDbName }, 
@@ -800,6 +810,10 @@ app.put('/api/groups/:id', authenticateToken, requireSuperuser, async (req, res)
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
     const users = await query(sharedDb, 'SELECT id, username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post FROM users');
+    users.forEach(user => {
+      try { user.active_in = JSON.parse(user.active_in || '[]'); } catch(e) { user.active_in = []; }
+      delete user.password;
+    });
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });

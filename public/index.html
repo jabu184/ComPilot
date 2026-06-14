@@ -107,11 +107,12 @@
                         </div>
                       </td>
                       <td v-for="u in publicDisplayedUsers" :key="u.id" 
+                          @click="isPublicApplicable(u, comp) ? openPublicModal(u, comp) : null"
                           :class="['whitespace-nowrap px-3 py-4 text-sm text-center border-l transition relative',
-                                   isPublicApplicable(u, comp) ? '' : 'bg-gray-100']">
+                                   isPublicApplicable(u, comp) ? 'cursor-pointer hover:bg-gray-100' : 'bg-gray-100']">
                         <div v-if="isPublicApplicable(u, comp)" class="inline-flex items-center justify-center gap-1">
                           <span :class="getPublicStatusBadgeClass(u.id, comp.id)">
-                            {{ (getPublicProgressStatus(u.id, comp.id) || '').toUpperCase() || '-' }}
+                            {{ (getPublicProgressStatus(u.id, comp.id) || '').toUpperCase() || '-' }}<span v-if="getPublicProgressObj(u.id, comp.id)?.signoff_comment" class="ml-0.5">*</span>
                           </span>
                         </div>
                       </td>
@@ -1358,9 +1359,13 @@
                 {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(selectedCell.user.id, selectedCell.comp.id)] || 'Not Started' }}
               </span>
             </div>
-            <div class="text-xs text-gray-500 font-medium">Date Started: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
-            <div class="text-xs text-gray-500 font-medium">Date Signed Off: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off || 'N/A' }}</span></div>
-            <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id">Signed Off By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id) }}</span></div>
+          <div class="text-xs text-gray-500 font-medium" v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
+          <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off">
+            Date Signed Off: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off || 'Legacy / Pre-System' }}</span>
+          </div>
+          <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id">
+            Signed Off By: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id ? getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id) : 'Legacy / System' }}</span>
+          </div>
             <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.reviewer_id) }} on {{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed }}</span></div>
             <div class="text-xs text-gray-500 font-medium mt-1" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.signoff_comment">Sign-off Comment: <span class="text-gray-800 italic">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id).signoff_comment }}</span></div>
           </div>
@@ -1794,6 +1799,41 @@
       </div>
     </div>
 
+    <!-- Public Interactive Cell Modal -->
+    <div v-if="publicSelectedCell && !token" @click.self="closePublicModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <h3 class="text-xl font-bold text-gray-900">{{ publicSelectedCell.comp.category }}</h3>
+            <div class="text-lg font-bold text-gray-800">{{ publicSelectedCell.comp.task_name }}</div>
+            <p v-if="publicSelectedCell.comp.description" class="text-sm text-gray-600 mt-1 mb-2 whitespace-pre-wrap">{{ publicSelectedCell.comp.description }}</p>
+            <p class="text-sm text-gray-500">{{ publicSelectedCell.user.full_name }} ({{ publicSelectedCell.user.designation }})</p>
+          </div>
+          <button @click="closePublicModal" class="text-gray-400 hover:text-gray-600">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div class="flex flex-col gap-1 border-t pt-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-sm font-semibold">Current Status:</span>
+            <span :class="getPublicStatusBadgeClass(publicSelectedCell.user.id, publicSelectedCell.comp.id)">
+              {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id)] || 'Not Started' }}
+            </span>
+          </div>
+          <div class="text-xs text-gray-500 font-medium" v-if="getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
+          <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id)) || getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_signed_off">
+            Date Signed Off: <span class="text-gray-800">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_signed_off || 'Legacy / Pre-System' }}</span>
+          </div>
+          <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id)) || getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.assessor_id">
+            Signed Off By: <span class="text-gray-800">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.assessor_id ? getPublicAssessorName(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.assessor_id) : 'Legacy / System' }}</span>
+          </div>
+          <div class="text-xs text-gray-500 font-medium" v-if="getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getPublicAssessorName(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.reviewer_id) }} on {{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_reviewed }}</span></div>
+          <div class="text-xs text-gray-500 font-medium mt-1" v-if="getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.signoff_comment">Sign-off Comment: <span class="text-gray-800 italic">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id).signoff_comment }}</span></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Custom Dialog -->
     <div v-if="customDialog.isOpen" @click.self="closeDialog(false)" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4">
       <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-sm transform transition-all">
@@ -1852,7 +1892,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v2.03
+        James Burnley v2.04
       </div>
     </div>
 
@@ -2049,6 +2089,8 @@
           if (e.key === 'Escape') {
             if (customDialog.value.isOpen) {
               closeDialog(false);
+            } else if (publicSelectedCell.value) {
+              closePublicModal();
             } else if (selectedCell.value) {
               closeModal();
             }
@@ -2252,7 +2294,7 @@
           } catch(e) {}
         };
 
-        const publicSummaryData = ref({ users: [], competencies: [], progress: [], categoryOrder: [], userGroups: [] });
+      const publicSummaryData = ref({ users: [], allUsers: [], competencies: [], progress: [], categoryOrder: [], userGroups: [] });
 
         const fetchPublicSummary = async () => {
           try {
@@ -2361,6 +2403,24 @@
           if (status === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
           if (status === 'x') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
           return "text-gray-400"; // Empty state
+        };
+
+        const publicSelectedCell = ref(null);
+        const openPublicModal = (u, comp) => {
+          publicSelectedCell.value = { user: u, comp };
+        };
+        const closePublicModal = () => {
+          publicSelectedCell.value = null;
+        };
+
+        const getPublicProgressObj = (userId, compId) => {
+          return publicSummaryData.value.progress.find(p => p.user_id === userId && p.competency_id === compId);
+        };
+
+        const getPublicAssessorName = (assessorId) => {
+        const userList = publicSummaryData.value.allUsers && publicSummaryData.value.allUsers.length > 0 ? publicSummaryData.value.allUsers : publicSummaryData.value.users;
+        const assessor = userList.find(u => u.id === assessorId);
+          return assessor ? assessor.full_name : 'Unknown';
         };
 
         const fetchPublicData = async () => {
@@ -3005,6 +3065,7 @@
           const wasOnAdminTab = currentTab.value === 'admin';
           // Clear active UI states that belong to the previous database
           selectedCell.value = null;
+          publicSelectedCell.value = null;
           takingQuiz.value = false;
           isEditingComp.value = false;
           isEditingUser.value = false;
@@ -3244,7 +3305,11 @@
 
           const uData = await uRes.json();
           users.value = uData.map(u => {
-            try { u.active_in = JSON.parse(u.active_in || '[]'); } catch(e) { u.active_in = []; }
+            if (typeof u.active_in === 'string') {
+              try { u.active_in = JSON.parse(u.active_in || '[]'); } catch(e) { u.active_in = []; }
+            } else if (!Array.isArray(u.active_in)) {
+              u.active_in = [];
+            }
             return u;
           });
           competencies.value = await cRes.json();
@@ -4817,7 +4882,8 @@
                  statistics, sectionSummaryStats, statCompetencies, groupedStatCompetencies, statCompSortCol, statCompSortDir, toggleStatCompSort, expandedStatCategories, toggleStatCategory,
                  sectionApplicableUsers, statUserSortCol, statUserSortDir, toggleStatUserSort, getTimeInPost, getStatSectionDesignationAverage, getStatOverallDesignationAverage, statUserModal, openStatUserModal, statEvalDateRange, userStatEvalDateRange,
                  dbInfo, backupFile, frontendFile, globalSettings, newSectionName, activeSections, fetchDbInfo, onBackupFileSelected, onFrontendFileSelected, backupDatabase, restoreDatabase, uploadFrontend, saveGlobalSettings, testQATrackConnection, toggleSectionActive, addSection, deleteSection, individualRestoreInput, restoreScope, triggerRestore, onIndividualRestoreFileSelected,
-                 publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass,
+                 publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass, getPublicProgressObj, getPublicAssessorName,
+                 publicSelectedCell, openPublicModal, closePublicModal,
                  customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
                  qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing,
                  selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
