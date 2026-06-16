@@ -94,16 +94,7 @@
                     <tr v-for="comp in group" :key="comp.id" class="hover:bg-gray-50 group">
                       <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300">
                         <div class="flex items-center gap-2">
-                          <span>{{ comp.task_name }}</span>
-                          <span v-if="comp.avg_delta !== null && comp.avg_delta !== undefined" 
-                                :class="['px-2 py-0.5 rounded text-[10px] font-bold shadow-sm', 
-                                         comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                                         comp.avg_delta > 0.5 ? 'bg-slate-100 text-slate-700 border border-slate-300' :
-                                         'bg-amber-100 text-amber-800 border border-amber-300']"
-                                :title="'Mean Delta: ' + comp.avg_delta.toFixed(2)">
-                            {{ comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'Balanced Alignment' :
-                               comp.avg_delta > 0.5 ? 'Confidence Gap' : 'Expectation Mismatch' }}
-                          </span>
+                          <span>{{ comp.task_name }}</span>                          
                         </div>
                       </td>
                       <td v-for="u in publicDisplayedUsers" :key="u.id" 
@@ -196,8 +187,8 @@
           <h3 class="text-lg font-bold mb-4 text-gray-800">Your Achievements</h3>
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             <div v-for="badge in myBadges" :key="badge.tier" 
-                 :title="badge.unlocked ? badge.name + ':\n' + badge.description : 'Locked'"
-                 :class="['flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-300', badge.unlocked ? 'border-gray-200 bg-gray-50 shadow-sm hover:scale-105 hover:shadow-md cursor-help' : 'border-gray-100 bg-gray-50 opacity-25 grayscale cursor-not-allowed']">
+               :title="badge.name + ':\n' + badge.description + (badge.unlocked ? '' : '\n(Locked)')"
+               :class="['flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-300', badge.unlocked ? 'border-gray-200 bg-gray-50 shadow-sm hover:scale-105 hover:shadow-md cursor-help' : 'border-gray-100 bg-gray-50 opacity-25 grayscale cursor-help']">
               <svg viewBox="0 0 24 24" class="w-14 h-14 mb-2 drop-shadow-sm transition-transform" :class="[badge.iconColor, badge.unlocked ? 'hover:animate-pulse' : '']" fill="currentColor" v-html="badge.svg"></svg>
               <span class="text-xs font-bold text-center text-gray-800 leading-tight">{{ badge.name }}</span>
             </div>
@@ -324,16 +315,7 @@
                 <td class="whitespace-nowrap py-4 pl-8 pr-3 text-sm font-medium text-gray-900 cursor-pointer bg-white group-hover:bg-gray-100 transition-colors sticky left-0 z-10 border-r-2 border-gray-300" @click="currentTab === 'individual' ? (isApplicable(user, comp) ? openModal(user, comp) : null) : toggleCompetencyFilter(comp.id)">
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                      <span>{{ comp.task_name }}</span>
-                      <span v-if="comp.avg_delta !== null && comp.avg_delta !== undefined" 
-                            :class="['px-2 py-0.5 rounded text-[10px] font-bold shadow-sm', 
-                                     comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                                     comp.avg_delta > 0.5 ? 'bg-slate-100 text-slate-700 border border-slate-300' :
-                                     'bg-amber-100 text-amber-800 border border-amber-300']"
-                            :title="'Mean Delta: ' + comp.avg_delta.toFixed(2)">
-                        {{ comp.avg_delta >= -0.5 && comp.avg_delta <= 0.5 ? 'Balanced Alignment' :
-                           comp.avg_delta > 0.5 ? 'Confidence Gap' : 'Expectation Mismatch' }}
-                      </span>
+                      <span>{{ comp.task_name }}</span>                      
                     </div>
                     <span v-if="selectedFilterCompetency === comp.id" class="text-blue-600 ml-2" title="Filter Active">🔍</span>
                   </div>
@@ -414,14 +396,14 @@
               <ul v-if="getCompPlanningLogs(comp.id).length > 0" class="space-y-3">
                 <li v-for="log in getCompPlanningLogs(comp.id)" :key="log.id" class="p-3 border rounded bg-white text-sm shadow-sm border-gray-200">
                   <div class="flex justify-between items-center mb-1">
-                    <strong class="text-gray-800">Ref: {{ log.patient_reference }} <span v-if="log.log_date" class="text-gray-500 font-normal ml-1">({{ new Date(log.log_date).toLocaleDateString() }})</span></strong>
+                    <strong class="text-gray-800">Ref: {{ log.patient_reference }} <span v-if="log.log_date" class="text-gray-500 font-normal ml-1">({{ formatDate(log.log_date) }})</span></strong>
                     <div class="flex items-center gap-2">
                       <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold text-xs bg-gray-50 px-2 py-1 rounded border border-gray-200 shadow-sm">{{ log.status === 'Needs_Amendment' ? 'In Development' : log.status.replace('_', ' ') }}</span>
                     </div>
                   </div>
                   <div class="text-xs text-gray-500 mb-2">
-                    <span v-if="log.status !== 'Draft'">Sent to <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong> on {{ new Date(log.created_at).toLocaleString() }}</span>
-                    <span v-else>Draft saved on {{ new Date(log.created_at).toLocaleString() }}</span>
+                    <span v-if="log.status !== 'Draft'">Sent to <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong> on {{ formatDate(log.created_at, true) }}</span>
+                    <span v-else>Draft saved on {{ formatDate(log.created_at, true) }}</span>
                   </div>
                   <p class="text-gray-700 mt-1 mb-2 italic">"{{ log.trainee_comments }}"</p>
                   <div v-if="log.status !== 'Pending_Review' && log.status !== 'Draft'" class="border-t border-gray-100 pt-2 mt-2">
@@ -530,7 +512,7 @@
               <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">{{ traineeName }}</h4>
               <ul class="space-y-1">
                 <li v-for="log in logs" :key="log.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
-                  <span>{{ log.category }} - {{ log.task_name }} <span class="text-gray-500 italic ml-1">({{ log.patient_reference }}<template v-if="log.log_date">, {{ new Date(log.log_date).toLocaleDateString() }}</template>)</span></span>
+                  <span>{{ log.category }} - {{ log.task_name }} <span class="text-gray-500 italic ml-1">({{ log.patient_reference }}<template v-if="log.log_date">, {{ formatDate(log.log_date) }}</template>)</span></span>
                   <button @click="activeLogReview = log" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm">Comment & Score</button>
                 </li>
               </ul>
@@ -1009,7 +991,7 @@
                </thead>
                <tbody class="divide-y divide-gray-200">
                  <tr v-for="l in auditLogs" :key="l.id" class="hover:bg-gray-50">
-                   <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ new Date(l.timestamp).toLocaleString() }}</td>
+                   <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ formatDate(l.timestamp, true) }}</td>
                    <td class="px-3 py-2 font-medium">{{ l.target_user_name }}</td>
                    <td class="px-3 py-2 font-semibold text-indigo-700">{{ l.action_type }}</td>
                    <td class="px-3 py-2">{{ l.actioned_by_name }}</td>
@@ -1215,7 +1197,7 @@
                     <td class="px-3 py-2 text-sm font-medium">{{ name }}</td>
                     <td class="px-3 py-2 text-sm">{{ info.size }}</td>
                     <td class="px-3 py-2 text-sm">{{ info.entries }}</td>
-                  <td class="px-3 py-2 text-sm">{{ [dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0] ? new Date([dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0]).toLocaleString() : 'Never' }}</td>
+                  <td class="px-3 py-2 text-sm">{{ formatDate([dbInfo.settings['last_backup_' + name], dbInfo.settings['last_backup_all']].filter(Boolean).sort().reverse()[0], true) || 'Never' }}</td>
                   <td class="px-3 py-2 text-sm text-right">
                     <div class="flex justify-end items-center gap-2">
                       <button @click="backupDatabase(name)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 font-semibold py-1 px-2 rounded text-xs transition shadow-sm">Backup</button>
@@ -1225,7 +1207,7 @@
                   </tr>
                 </tbody>
               </table>
-              <div class="mt-2 text-sm text-gray-600">Last 'All Sections' Backup: <span class="font-bold">{{ dbInfo.settings.last_backup_all ? new Date(dbInfo.settings.last_backup_all).toLocaleString() : 'Never' }}</span></div>
+              <div class="mt-2 text-sm text-gray-600">Last 'All Sections' Backup: <span class="font-bold">{{ formatDate(dbInfo.settings.last_backup_all, true) || 'Never' }}</span></div>
               <input type="file" ref="individualRestoreInput" @change="onIndividualRestoreFileSelected" accept=".json" class="hidden">
             </div>
 
@@ -1359,14 +1341,14 @@
                 {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(selectedCell.user.id, selectedCell.comp.id)] || 'Not Started' }}
               </span>
             </div>
-          <div class="text-xs text-gray-500 font-medium" v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
+          <div class="text-xs text-gray-500 font-medium" v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ formatDate(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started) || 'N/A' }}</span></div>
           <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off">
-            Date Signed Off: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off || 'Legacy / Pre-System' }}</span>
+            Date Signed Off: <span class="text-gray-800">{{ formatDate(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off) || 'Legacy / Pre-System' }}</span>
           </div>
           <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id">
             Signed Off By: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id ? getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id) : 'Legacy / System' }}</span>
           </div>
-            <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.reviewer_id) }} on {{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed }}</span></div>
+            <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.reviewer_id) }} on {{ formatDate(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed) }}</span></div>
             <div class="text-xs text-gray-500 font-medium mt-1" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.signoff_comment">Sign-off Comment: <span class="text-gray-800 italic">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id).signoff_comment }}</span></div>
           </div>
 
@@ -1589,7 +1571,7 @@
                       <ul v-if="qaEvidenceCache[selectedCell.comp.id].find(e => e.identifier === req.identifier)?.evidence?.length > 0" class="space-y-2">
                         <li v-for="(item, index) in qaEvidenceCache[selectedCell.comp.id].find(e => e.identifier === req.identifier).evidence" :key="index" class="flex justify-between items-center border-b pb-1 last:border-0 border-gray-200">
                           <span>
-                            <strong>Date:</strong> {{ formatDate(item.date) }}<br>
+                            <strong>Date:</strong> {{ formatDate(item.date, true) }}<br>
                             <span class="text-xs text-gray-500">Reviewed By: {{ item.reviewed_by }}</span>
                           </span>
                           <a :href="item.url" target="_blank" class="text-blue-500 text-xs hover:underline bg-white px-2 py-1 rounded border shadow-sm transition">View &rarr;</a>
@@ -1616,7 +1598,7 @@
                       <div class="flex items-center gap-2 overflow-hidden">
                         <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clip-rule="evenodd"></path></svg>
                         <a :href="file.file_path" target="_blank" class="text-blue-600 hover:underline truncate">{{ file.file_name }}</a>
-                        <span class="text-xs text-gray-400 whitespace-nowrap">{{ new Date(file.upload_date).toLocaleDateString() }}</span>
+                        <span class="text-xs text-gray-400 whitespace-nowrap">{{ formatDate(file.upload_date) }}</span>
                       </div>
                       <button v-if="selectedCell.user.id === user.id || user.is_superuser" @click="deleteFile(file.id)" class="text-red-500 hover:text-red-700 text-xs font-semibold ml-2">Delete</button>
                     </li>
@@ -1639,7 +1621,7 @@
                 <div v-if="showingPlanLogs" class="flex flex-col gap-1 mt-1">
                   <div v-for="log in planningLogs" :key="log.id" class="flex justify-between items-center text-xs bg-gray-50 p-1.5 rounded border border-gray-100">
                     <span class="font-medium text-gray-700">
-                      <template v-if="log.log_date">{{ new Date(log.log_date).toLocaleDateString() }}, </template>Reviewed By: {{ getAssessorName(log.assigned_assessor_id) }}
+                      <template v-if="log.log_date">{{ formatDate(log.log_date) }}, </template>Reviewed By: {{ getAssessorName(log.assigned_assessor_id) }}
                     </span>
                     <span class="flex items-center gap-1">
                       <span v-if="log.score" class="font-semibold text-blue-600">Score: {{ log.score }}</span>
@@ -1767,30 +1749,34 @@
             <div v-if="selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz || selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
               <div v-if="selectedCell.comp.requires_instructions" class="flex flex-col gap-2 text-sm text-gray-800">
                 <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Task: {{ rp.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id) ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id) ? 'Done' : 'Not Done' }}</strong></span>
+                  <span>Task: {{ rp.name }}<span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)"> - <strong class="text-green-600">Done</strong></span></span>
                   <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" @click="adminResetReading(rp.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Redo</button>
+                  <button v-else @click="adminMarkReadingDone(rp.id)" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Done</button>
                 </div>
               </div>
               <div v-if="selectedCell.comp.requires_quiz" class="flex flex-col gap-2 text-sm text-gray-800">
                 <div v-for="qz in cellQuizzes" :key="qz.id" class="flex justify-between items-center border-b border-red-200 pb-1">
                   <template v-if="qz.is_viva">
-                    <span>Self Assessment: {{ qz.name }} - <strong :class="getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1 ? 'text-green-600' : 'text-gray-500'">{{ getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1 ? 'Passed' : (getLatestViva(qz.id)?.status ? getLatestViva(qz.id).status.replace('_', ' ') : 'Pending/Failed') }}</strong></span>
+                    <span>Self Assessment: {{ qz.name }}<span v-if="getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getLatestViva(qz.id)?.status === 'Needs_Retake' || (getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 0)"> - <strong class="text-red-600">Failed</strong></span><span v-else-if="getLatestViva(qz.id)?.status"> - <strong class="text-gray-500">{{ getLatestViva(qz.id).status.replace('_', ' ') }}</strong></span></span>
                     <button v-if="getLatestViva(qz.id)" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
                   </template>
                   <template v-else>
-                    <span>Quiz: {{ qz.name }} - <strong :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'text-green-600' : 'text-gray-500'">{{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'Passed' : 'Pending/Failed' }}</strong></span>
+                    <span>Quiz: {{ qz.name }}<span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false"> - <strong class="text-red-600">Failed</strong></span></span>
                     <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                    <button v-else @click="adminMarkQuizPassed(qz.id)" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Passed</button>
                   </template>
                 </div>
               </div>
               <div v-if="selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="flex flex-col gap-2 text-sm text-gray-800">
                 <div v-if="selectedCell.comp.requires_pre_eval" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Pre-Training Eval: <strong :class="latestPreEvaluation ? 'text-green-600' : 'text-gray-500'">{{ latestPreEvaluation ? 'Completed' : 'Pending' }}</strong></span>
+                  <span>Pre-Training Eval<span v-if="latestPreEvaluation"> - <strong class="text-green-600">Completed</strong></span></span>
                   <button v-if="latestPreEvaluation" @click="adminResetEval('pre')" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                  <button v-else @click="adminMarkEvalPassed('pre')" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Done</button>
                 </div>
                 <div v-if="selectedCell.comp.requires_post_eval" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Post-Training Eval: <strong :class="latestPostEvaluation ? 'text-green-600' : 'text-gray-500'">{{ latestPostEvaluation ? 'Completed' : 'Pending' }}</strong></span>
+                  <span>Post-Training Eval<span v-if="latestPostEvaluation"> - <strong class="text-green-600">Completed</strong></span></span>
                   <button v-if="latestPostEvaluation" @click="adminResetEval('post')" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
+                  <button v-else @click="adminMarkEvalPassed('post')" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Done</button>
                 </div>
               </div>
             </div>
@@ -1821,14 +1807,14 @@
               {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id)] || 'Not Started' }}
             </span>
           </div>
-          <div class="text-xs text-gray-500 font-medium" v-if="getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_started || 'N/A' }}</span></div>
+          <div class="text-xs text-gray-500 font-medium" v-if="getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ formatDate(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_started) || 'N/A' }}</span></div>
           <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id)) || getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_signed_off">
-            Date Signed Off: <span class="text-gray-800">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_signed_off || 'Legacy / Pre-System' }}</span>
+            Date Signed Off: <span class="text-gray-800">{{ formatDate(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_signed_off) || 'Legacy / Pre-System' }}</span>
           </div>
           <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getPublicProgressStatus(publicSelectedCell.user.id, publicSelectedCell.comp.id)) || getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.assessor_id">
             Signed Off By: <span class="text-gray-800">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.assessor_id ? getPublicAssessorName(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.assessor_id) : 'Legacy / System' }}</span>
           </div>
-          <div class="text-xs text-gray-500 font-medium" v-if="getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getPublicAssessorName(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.reviewer_id) }} on {{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_reviewed }}</span></div>
+          <div class="text-xs text-gray-500 font-medium" v-if="getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getPublicAssessorName(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.reviewer_id) }} on {{ formatDate(getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.date_reviewed) }}</span></div>
           <div class="text-xs text-gray-500 font-medium mt-1" v-if="getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id)?.signoff_comment">Sign-off Comment: <span class="text-gray-800 italic">{{ getPublicProgressObj(publicSelectedCell.user.id, publicSelectedCell.comp.id).signoff_comment }}</span></div>
         </div>
       </div>
@@ -1892,7 +1878,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v2.04
+        James Burnley v2.1
       </div>
     </div>
 
@@ -1902,8 +1888,8 @@
         <h3 class="text-xl font-bold mb-2 text-blue-900">Review Case Log</h3>
         <p class="text-sm text-gray-600 mb-4">{{ activeLogReview.trainee_name }} - {{ activeLogReview.category }} / {{ activeLogReview.task_name }}</p>
         <div class="mb-4 text-sm bg-gray-50 p-3 rounded border border-gray-200">
-          <strong>Ref:</strong> {{ activeLogReview.patient_reference }} <span v-if="activeLogReview.log_date" class="text-gray-500 ml-1">({{ new Date(activeLogReview.log_date).toLocaleDateString() }})</span><br>
-          <strong>Submitted:</strong> {{ new Date(activeLogReview.created_at).toLocaleString() }}
+          <strong>Ref:</strong> {{ activeLogReview.patient_reference }} <span v-if="activeLogReview.log_date" class="text-gray-500 ml-1">({{ formatDate(activeLogReview.log_date) }})</span><br>
+          <strong>Submitted:</strong> {{ formatDate(activeLogReview.created_at, true) }}
         </div>
         <p class="mb-4 italic bg-white p-3 border border-gray-200 rounded text-gray-700 shadow-inner">"{{ activeLogReview.trainee_comments }}"</p>
         <div class="space-y-3">
@@ -1938,7 +1924,7 @@
         <div class="mb-4 text-sm bg-gray-50 p-3 rounded border border-gray-200 flex justify-between items-center">
           <div>
             <strong>Assessment:</strong> {{ activeVivaReview.quiz_name }}<br>
-            <strong>Submitted:</strong> {{ new Date(activeVivaReview.created_at).toLocaleString() }}
+            <strong>Submitted:</strong> {{ formatDate(activeVivaReview.created_at, true) }}
           </div>
           <div class="flex items-center gap-2 text-xs text-blue-800 font-semibold bg-blue-100 px-2 py-1 rounded border border-blue-200 shadow-sm">
             <div class="h-3 border-l-2 border-dashed border-blue-600"></div> Trainee Score
@@ -3288,8 +3274,14 @@
         });
 
         const fetchData = async () => {
-          const [uRes, cRes, pRes, gRes, catOrderRes, opRes, setRes] = await Promise.all([
-            fetch('/api/users', { headers: getHeaders() }),
+          const uRes = await fetch('/api/users', { headers: getHeaders() });
+          
+          if (!uRes.ok) {
+            if (uRes.status === 401 || uRes.status === 403) logout();
+            throw new Error(`Failed to fetch data: ${uRes.statusText}`);
+          }
+
+          const [cRes, pRes, gRes, catOrderRes, opRes, setRes] = await Promise.all([
             fetch('/api/competencies', { headers: getHeaders() }),
             fetch('/api/progress', { headers: getHeaders() }),
             fetch('/api/groups', { headers: getHeaders() }),
@@ -3297,11 +3289,6 @@
             fetch('/api/progress/overall', { headers: getHeaders() }),
             fetch('/api/settings', { headers: getHeaders() })
           ]);
-          
-          if (!uRes.ok) {
-            if (uRes.status === 401 || uRes.status === 403) logout();
-            throw new Error(`Failed to fetch data: ${uRes.statusText}`);
-          }
 
           const uData = await uRes.json();
           users.value = uData.map(u => {
@@ -3694,9 +3681,26 @@
           });
         };
 
-        const formatDate = (dateString) => {
-          if (!dateString) return "Unknown";
-          return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+        const formatDate = (dateString, includeTime = false) => {
+          if (!dateString) return null;
+          try {
+            const d = new Date(dateString);
+            if (isNaN(d.getTime())) return dateString;
+            
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            
+            if (includeTime) {
+                const hours = String(d.getHours()).padStart(2, '0');
+                const minutes = String(d.getMinutes()).padStart(2, '0');
+                return `${day}-${month}-${year} ${hours}:${minutes}`;
+            }
+            
+            return `${day}-${month}-${year}`;
+          } catch (e) {
+            return dateString;
+          }
         };
 
         const fetchEvaluations = async (u, comp) => {
@@ -4142,6 +4146,42 @@
             
             await fetchData();
             openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+        
+        const adminMarkReadingDone = async (readingId) => {
+          if (!(await customConfirm("Mark this user's reading progress as done?", "Mark Reading Done"))) return;
+          try {
+            const p = getProgressObj(selectedCell.value.user.id, selectedCell.value.comp.id);
+            let rc = p && p.readings_completed ? [...p.readings_completed] : [];
+            if (!rc.includes(readingId)) rc.push(readingId);
+            const res1 = await fetch('/api/progress/admin-update', {
+              method: 'POST', headers: getHeaders(true),
+              body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, readings_completed: rc })
+            });
+            if (!res1.ok) throw new Error((await res1.json()).error || 'Failed to update reading progress');
+            await syncProgress(selectedCell.value.comp.id);
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const adminMarkQuizPassed = async (quizId) => {
+          if (!(await customConfirm("Mark this user's assessment progress as passed?", "Mark Assessment Passed"))) return;
+          try {
+            const res = await fetch('/api/progress/admin-pass-quiz', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, quiz_id: quizId }) });
+            if (!res.ok) throw new Error((await res.json()).error);
+            await syncProgress(selectedCell.value.comp.id); await fetchData(); openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const adminMarkEvalPassed = async (evalType) => {
+          const typeName = evalType === 'pre' ? 'Pre-Training' : 'Post-Training';
+          if (!(await customConfirm(`Mark this user's ${typeName} Evaluation as passed?`, "Mark Evaluation Passed"))) return;
+          try {
+            const res = await fetch('/api/progress/admin-pass-eval', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, eval_type: evalType }) });
+            if (!res.ok) throw new Error((await res.json()).error);
+            await syncProgress(selectedCell.value.comp.id); await fetchData(); openModal(selectedCell.value.user, selectedCell.value.comp);
           } catch (err) { customAlert(err.message, "Error"); }
         };
 
@@ -4874,7 +4914,7 @@
                  newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort,
                  quizLibrary, activeLibraryQuiz, isEditingQuiz, createNewLibraryQuiz, editLibraryQuiz, cancelEditLibraryQuiz, saveLibraryQuiz, deleteLibraryQuiz, cellQuizzes, takingQuiz, quizData, quizAnswers, loadQuizForTaking, submitQuiz, quizStats,
                  userGroups, newGroup, dragStartGroup, dropGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, adminResetEval, saveAdminOverrides, adminForceStatus,
-                 adminResetReading, myRenewalDue, myPreEvalDue, myPostEvalDue, myObjectivesMet, myAwaitingAssessment, usersRequiringAssessment, usersObjectivesMet, getUserName, getUser,
+                 adminResetReading, adminMarkReadingDone, adminMarkQuizPassed, adminMarkEvalPassed, myRenewalDue, myPreEvalDue, myPostEvalDue, myObjectivesMet, myAwaitingAssessment, usersRequiringAssessment, usersObjectivesMet, getUserName, getUser,
                  selectedDb, handleDbChange, handleAdminTabClick,
                  expandedMatrixCategories, toggleMatrixCategory,
                  activeLegends, selectedFilterCompetency, toggleLegend, toggleCompetencyFilter,

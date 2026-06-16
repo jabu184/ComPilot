@@ -2006,6 +2006,41 @@ app.post('/api/progress/admin-reset-quiz', authenticateToken, requireSuperuser, 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/progress/admin-pass-quiz', authenticateToken, requireSuperuser, async (req, res) => {
+  const { user_id, competency_id, quiz_id } = req.body;
+  const admin_id = req.user.id;
+  try {
+    const check = await query(req.db, `SELECT id, current_status, quizzes_completed FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+    let qc = {};
+    if (check.length > 0) {
+      try { 
+        qc = JSON.parse(check[0].quizzes_completed || '{}'); 
+        while(typeof qc === 'string') qc = JSON.parse(qc);
+        if (!qc || typeof qc !== 'object' || Array.isArray(qc)) qc = {};
+      } catch(e) {}
+    }
+    qc[quiz_id] = { passed: true, score: 100, answers: {} };
+    if (check.length === 0) {
+      await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, quizzes_completed) VALUES (?, ?, 't', ?)`, [user_id, competency_id, JSON.stringify(qc)]);
+    } else {
+      await execute(req.db, `UPDATE staff_competency_progress SET quizzes_completed = ? WHERE user_id = ? AND competency_id = ?`, [JSON.stringify(qc), user_id, competency_id]);
+    }
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_QUIZ_PASS', ?, 'Admin forced quiz as passed')`, [user_id, competency_id, admin_id]);
+    res.json({ success: true, message: "Quiz marked as passed." });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/progress/admin-pass-eval', authenticateToken, requireSuperuser, async (req, res) => {
+  const { user_id, competency_id, eval_type } = req.body;
+  const admin_id = req.user.id;
+  try {
+    await execute(req.db, `DELETE FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = ?`, [user_id, competency_id, eval_type]);
+    await execute(req.db, `INSERT INTO self_evaluations (user_id, competency_id, evaluation_type, score_a, score_b, score_c) VALUES (?, ?, ?, 5, 5, 5)`, [user_id, competency_id, eval_type]);
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_EVAL_PASS', ?, ?)`, [user_id, competency_id, admin_id, `Admin forced ${eval_type}-training evaluation as passed`]);
+    res.json({ success: true, message: "Evaluation marked as completed." });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/progress/admin-reset-eval', authenticateToken, requireSuperuser, async (req, res) => {
   const { user_id, competency_id, eval_type } = req.body;
   const admin_id = req.user.id;
