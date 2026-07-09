@@ -5,8 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "init-db": "node init.js",
-    "seed": "node seed.js"
+    "reset-db": "node scripts/reset_progress.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",

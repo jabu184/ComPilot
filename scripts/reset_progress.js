@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
 
-const sharedDbPath = path.resolve(__dirname, 'shared.db');
+// Database paths resolved to parent directory because this script is in scripts/
+const sharedDbPath = path.resolve(__dirname, '..', 'shared.db');
 
 if (!fs.existsSync(sharedDbPath)) {
   console.error('shared.db not found. Please run the main app first to initialize.');
@@ -60,7 +61,7 @@ async function clearDatabaseProgress() {
 
     for (const dbName of dbNames) {
       const safeName = dbName.replace(/[^a-zA-Z0-9]/g, '_');
-      const dbPath = path.resolve(__dirname, `${safeName}.db`);
+      const dbPath = path.resolve(__dirname, '..', `${safeName}.db`);
       
       if (!fs.existsSync(dbPath)) {
         console.log(`Skipping ${safeName}.db (does not exist)`);
@@ -86,7 +87,7 @@ async function clearDatabaseProgress() {
     }
 
     // Clean up physical file uploads directory 
-    const uploadsDir = path.join(__dirname, 'public', 'uploads');
+    const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
     if (fs.existsSync(uploadsDir)) {
       console.log('\nEmptying physical file uploads directory...');
       fs.rmSync(uploadsDir, { recursive: true, force: true });

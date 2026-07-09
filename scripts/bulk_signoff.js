@@ -27,8 +27,9 @@ if (!['c', 'x'].includes(status)) {
     process.exit(1);
 }
 
-const sharedDbPath = path.resolve(__dirname, 'shared.db');
-const sectionDbPath = path.resolve(__dirname, `${section}.db`);
+// Database paths resolved to parent directory because this script is in scripts/
+const sharedDbPath = path.resolve(__dirname, '..', 'shared.db');
+const sectionDbPath = path.resolve(__dirname, '..', `${section}.db`);
 
 if (!fs.existsSync(sharedDbPath) || !fs.existsSync(sectionDbPath)) {
     console.error(`Error: Database files not found. Ensure shared.db and ${section}.db exist.`);
