@@ -1122,6 +1122,7 @@ app.delete('/api/users/:id', authenticateToken, requireSuperuser, async (req, re
       await execute(dbInstance, `DELETE FROM self_evaluations WHERE user_id = ?`, [userId]);
       await execute(dbInstance, `DELETE FROM patient_plan_logs WHERE trainee_id = ?`, [userId]);
       await execute(dbInstance, `DELETE FROM competency_audit_log WHERE target_user_id = ?`, [userId]);
+      await execute(dbInstance, `DELETE FROM pre_assessment_submissions WHERE trainee_id = ?`, [userId]);
     }
     await execute(sharedDb, `DELETE FROM users WHERE id=?`, [userId]);
     res.json({ success: true });
@@ -1508,6 +1509,38 @@ app.get('/api/assessor/pre-assessment-queue', authenticateToken, async (req, res
       try { sub.trainee_responses = JSON.parse(sub.trainee_responses || '{}'); } catch (e) { sub.trainee_responses = {}; }
     }
     res.json(submissions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/pre-assessment-submissions-files', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const submissions = await query(req.db, `SELECT p.id, p.trainee_id, p.quiz_id, p.competency_id, p.trainee_responses, p.created_at, q.name as quiz_name, c.task_name, c.category FROM pre_assessment_submissions p JOIN quizzes q ON p.quiz_id = q.id JOIN competencies c ON p.competency_id = c.id ORDER BY p.created_at DESC`);
+    const users = await query(sharedDb, `SELECT id, full_name FROM users`);
+    const userMap = {};
+    users.forEach(u => userMap[u.id] = u.full_name);
+    
+    const results = [];
+    for (let sub of submissions) {
+      let responses = {};
+      try {
+        responses = typeof sub.trainee_responses === 'string' ? JSON.parse(sub.trainee_responses || '{}') : sub.trainee_responses;
+      } catch (e) {}
+      
+      if (responses && responses._uploaded_file) {
+        results.push({
+          submission_id: sub.id,
+          trainee_name: userMap[sub.trainee_id] || 'Unknown',
+          quiz_name: sub.quiz_name,
+          competency_name: `${sub.category} - ${sub.task_name}`,
+          file_name: responses._uploaded_file.file_name,
+          file_data: responses._uploaded_file.file_data,
+          created_at: sub.created_at
+        });
+      }
+    }
+    res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3063,7 +3096,37 @@ app.get('/api/admin/uploads/stats', authenticateToken, requireSuperuser, async (
     const stats = [];
     for (const section of sections) {
       const uploadDir = path.join(__dirname, 'public', 'uploads', section.name);
-      const bytes = getFolderSize(uploadDir);
+      let bytes = getFolderSize(uploadDir);
+      
+      try {
+        const dbInstance = getDb(section.name);
+        const paSubmissions = await query(dbInstance, `SELECT trainee_responses FROM pre_assessment_submissions`);
+        for (const sub of paSubmissions) {
+          let responses = {};
+          try {
+            responses = typeof sub.trainee_responses === 'string' ? JSON.parse(sub.trainee_responses || '{}') : sub.trainee_responses;
+          } catch(e) {}
+          
+          if (!responses) continue;
+          const files = [];
+          if (responses._uploaded_files && Array.isArray(responses._uploaded_files)) {
+            files.push(...responses._uploaded_files);
+          } else if (responses._uploaded_file) {
+            files.push(responses._uploaded_file);
+          }
+          
+          for (const f of files) {
+            if (f && f.file_data) {
+              const base64Data = f.file_data.split(',')[1] || '';
+              const sizeInBytes = Math.floor((base64Data.length * 3) / 4);
+              bytes += sizeInBytes;
+            }
+          }
+        }
+      } catch(e) {
+        console.warn(`Could not add pre-assessment sizes for section ${section.name}:`, e.message);
+      }
+      
       stats.push({ section: section.name, bytes });
     }
     res.json(stats);
@@ -3093,6 +3156,92 @@ app.get('/api/admin/uploads/:section/backup', authenticateToken, requireSuperuse
     res.set('Content-Disposition', `attachment; filename=uploads_backup_${section}.zip`);
     res.send(zip.toBuffer());
   } catch(e) { res.status(500).json({error: e.code === 'MODULE_NOT_FOUND' ? 'The adm-zip module is not installed. Please run "npm install adm-zip" on the server.' : e.message}); }
+});
+
+app.get('/api/admin/uploads/:section/users', authenticateToken, requireSuperuser, async (req, res) => {
+  const section = req.params.section;
+  try {
+    const dbInstance = getDb(section);
+    const uploads = await query(dbInstance, `SELECT * FROM file_uploads`);
+    const users = await query(sharedDb, `SELECT id, full_name, username FROM users`);
+    const userMap = {};
+    users.forEach(u => userMap[u.id] = u);
+    
+    const userStats = {};
+    
+    // Add competency physical file uploads
+    for (const file of uploads) {
+      const uId = file.user_id;
+      if (!userStats[uId]) {
+        const u = userMap[uId] || { full_name: `User ID ${uId}`, username: 'unknown' };
+        userStats[uId] = {
+          user_id: uId,
+          full_name: u.full_name,
+          username: u.username,
+          bytes: 0,
+          files_count: 0
+        };
+      }
+      try {
+        const absolutePath = path.join(__dirname, 'public', decodeURIComponent(file.file_path));
+        if (fs.existsSync(absolutePath)) {
+          const stat = fs.statSync(absolutePath);
+          userStats[uId].bytes += stat.size;
+        }
+      } catch (e) {
+        console.warn(`Could not stat file ${file.file_path}:`, e.message);
+      }
+      userStats[uId].files_count++;
+    }
+    
+    // Add trainee pre-assessment database uploads
+    const paSubmissions = await query(dbInstance, `SELECT trainee_id, trainee_responses FROM pre_assessment_submissions`);
+    for (const sub of paSubmissions) {
+      let responses = {};
+      try {
+        responses = typeof sub.trainee_responses === 'string' ? JSON.parse(sub.trainee_responses || '{}') : sub.trainee_responses;
+      } catch (e) {}
+      
+      if (!responses) continue;
+      
+      const files = [];
+      if (responses._uploaded_files && Array.isArray(responses._uploaded_files)) {
+        files.push(...responses._uploaded_files);
+      } else if (responses._uploaded_file) {
+        files.push(responses._uploaded_file);
+      }
+      
+      if (files.length === 0) continue;
+      
+      const uId = sub.trainee_id;
+      if (!userStats[uId]) {
+        const u = userMap[uId] || { full_name: `User ID ${uId}`, username: 'unknown' };
+        userStats[uId] = {
+          user_id: uId,
+          full_name: u.full_name,
+          username: u.username,
+          bytes: 0,
+          files_count: 0
+        };
+      }
+      
+      for (const f of files) {
+        if (f && f.file_data) {
+          try {
+            const base64Data = f.file_data.split(',')[1] || '';
+            const sizeInBytes = Math.floor((base64Data.length * 3) / 4);
+            userStats[uId].bytes += sizeInBytes;
+            userStats[uId].files_count++;
+          } catch(e) {}
+        }
+      }
+    }
+    
+    const result = Object.values(userStats).sort((a, b) => b.bytes - a.bytes);
+    res.json(result);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/settings', authenticateToken, async (req, res) => {
