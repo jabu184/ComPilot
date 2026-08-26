@@ -1410,8 +1410,21 @@ app.get('/api/competency/:id/quiz', authenticateToken, async (req, res) => {
     const qzs = await query(req.db, `SELECT q.* FROM quizzes q JOIN competency_quizzes cq ON q.id = cq.quiz_id WHERE cq.competency_id = ?`, [req.params.id]);
     const result = [];
     for (let qz of qzs) {
-      const questions = await query(req.db, `SELECT id, question_text, question_type, option_a, option_b, option_c, option_d FROM quiz_questions WHERE quiz_id = ?`, [qz.id]);
-      result.push({ ...qz, questions }); // correct_option intentionally omitted for trainees
+      const questions = await query(req.db, `SELECT id, question_text, question_type, option_a, option_b, option_c, option_d, correct_option FROM quiz_questions WHERE quiz_id = ?`, [qz.id]);
+      const processedQuestions = questions.map(q => {
+        const is_multiselect = q.correct_option && q.correct_option.includes(',');
+        return {
+          id: q.id,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          option_a: q.option_a,
+          option_b: q.option_b,
+          option_c: q.option_c,
+          option_d: q.option_d,
+          is_multiselect: !!is_multiselect
+        };
+      });
+      result.push({ ...qz, questions: processedQuestions }); // correct_option intentionally omitted for trainees
     }
     res.json(result);
   } catch (error) {
@@ -3146,16 +3159,116 @@ app.delete('/api/admin/uploads/:section', authenticateToken, requireSuperuser, a
 
 app.get('/api/admin/uploads/:section/backup', authenticateToken, requireSuperuser, async (req, res) => {
   const section = req.params.section;
-  const uploadDir = path.join(__dirname, 'public', 'uploads', section);
-  if (!fs.existsSync(uploadDir)) return res.status(404).json({error: 'No uploads found for this section.'});
   try {
+    const dbInstance = getDb(section);
+
+    // Fetch all users to map user_id -> user details
+    const users = await query(sharedDb, `SELECT id, full_name, username FROM users`);
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u.id] = u;
+    });
+
+    // Fetch all competencies in this section to map competency_id -> task name
+    const competencies = await query(dbInstance, `SELECT id, task_name FROM competencies`);
+    const compMap = {};
+    competencies.forEach(c => {
+      compMap[c.id] = c;
+    });
+
     const AdmZip = require('adm-zip');
     const zip = new AdmZip();
-    zip.addLocalFolder(uploadDir);
+    let hasFiles = false;
+
+    // Helper to sanitize path components
+    const sanitizePath = (str) => {
+      return (str || '').replace(/[\\/:*?"<>|]/g, '_').trim();
+    };
+
+    // 1. Process regular file uploads from disk
+    let regularUploads = [];
+    try {
+      regularUploads = await query(dbInstance, `SELECT * FROM file_uploads`);
+    } catch (e) {
+      console.warn(`Could not query file_uploads for section ${section}:`, e.message);
+    }
+
+    for (const upload of regularUploads) {
+      const u = userMap[upload.user_id] || { full_name: `User_${upload.user_id}`, username: `user_${upload.user_id}` };
+      const comp = compMap[upload.competency_id] || { task_name: `Competency_${upload.competency_id}` };
+      
+      const absolutePath = path.join(__dirname, 'public', upload.file_path);
+      if (fs.existsSync(absolutePath)) {
+        try {
+          const fileContent = fs.readFileSync(absolutePath);
+          const folderName = `${sanitizePath(u.full_name)} (${sanitizePath(u.username)})`;
+          const compFolderName = sanitizePath(comp.task_name);
+          const zipPath = `${folderName}/${compFolderName}/${sanitizePath(upload.file_name)}`;
+          
+          zip.addFile(zipPath, fileContent);
+          hasFiles = true;
+        } catch (err) {
+          console.error(`Failed to read file ${absolutePath}:`, err.message);
+        }
+      }
+    }
+
+    // 2. Process pre-assessment submissions from database (stored as base64 in JSON)
+    let preAssessments = [];
+    try {
+      preAssessments = await query(dbInstance, `SELECT * FROM pre_assessment_submissions`);
+    } catch (e) {
+      console.warn(`Could not query pre_assessment_submissions for section ${section}:`, e.message);
+    }
+
+    for (const sub of preAssessments) {
+      const u = userMap[sub.trainee_id] || { full_name: `User_${sub.trainee_id}`, username: `user_${sub.trainee_id}` };
+      const comp = compMap[sub.competency_id] || { task_name: `Competency_${sub.competency_id}` };
+      
+      let responses = {};
+      try {
+        responses = typeof sub.trainee_responses === 'string' ? JSON.parse(sub.trainee_responses || '{}') : sub.trainee_responses;
+      } catch (e) {}
+      
+      if (!responses) continue;
+      
+      const files = [];
+      if (responses._uploaded_files && Array.isArray(responses._uploaded_files)) {
+        files.push(...responses._uploaded_files);
+      } else if (responses._uploaded_file) {
+        files.push(responses._uploaded_file);
+      }
+      
+      for (const f of files) {
+        if (f && f.file_data && f.file_name) {
+          try {
+            const parts = f.file_data.split(',');
+            const base64Data = parts[1] || parts[0] || '';
+            const fileBuffer = Buffer.from(base64Data, 'base64');
+            
+            const folderName = `${sanitizePath(u.full_name)} (${sanitizePath(u.username)})`;
+            const compFolderName = sanitizePath(comp.task_name);
+            const zipPath = `${folderName}/${compFolderName}/${sanitizePath(f.file_name)}`;
+            
+            zip.addFile(zipPath, fileBuffer);
+            hasFiles = true;
+          } catch (e) {
+            console.error('Failed to parse base64 for pre-assessment backup file:', e.message);
+          }
+        }
+      }
+    }
+
+    if (!hasFiles) {
+      return res.status(404).json({ error: `No uploads found for section: ${section}` });
+    }
+
     res.set('Content-Type', 'application/zip');
     res.set('Content-Disposition', `attachment; filename=uploads_backup_${section}.zip`);
     res.send(zip.toBuffer());
-  } catch(e) { res.status(500).json({error: e.code === 'MODULE_NOT_FOUND' ? 'The adm-zip module is not installed. Please run "npm install adm-zip" on the server.' : e.message}); }
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/admin/uploads/:section/users', authenticateToken, requireSuperuser, async (req, res) => {

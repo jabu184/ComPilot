@@ -733,7 +733,11 @@
                     
                     <h4 class="font-semibold mb-2 pt-2 border-t">Questions</h4>
                     <div v-for="(q, idx) in activeLibraryQuiz.questions" :key="idx" class="bg-white p-4 border rounded shadow-sm mb-4 relative">
-                        <button @click="activeLibraryQuiz.questions.splice(idx, 1)" class="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-bold">Remove</button>
+                        <div class="absolute top-2 right-2 flex items-center gap-1.5">
+                            <button v-if="idx > 0" @click="moveQuestion(idx, -1)" type="button" class="text-gray-500 hover:text-gray-700 text-xs font-semibold bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded shadow-sm">▲ Up</button>
+                            <button v-if="idx < activeLibraryQuiz.questions.length - 1" @click="moveQuestion(idx, 1)" type="button" class="text-gray-500 hover:text-gray-700 text-xs font-semibold bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded shadow-sm">▼ Down</button>
+                            <button @click="activeLibraryQuiz.questions.splice(idx, 1)" type="button" class="text-red-500 hover:text-red-700 text-xs font-semibold bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded shadow-sm">Remove</button>
+                        </div>
                         <label class="block text-sm font-medium mb-1 text-gray-700">Question {{idx+1}}</label>
                         <input v-model="q._text" class="block w-full rounded border-gray-300 border px-3 py-2 mb-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter question text...">
                         <div v-if="activeLibraryQuiz.is_viva">
@@ -757,12 +761,12 @@
                         </template>
                         <template v-else>
                           <div class="mb-3"><label class="block text-sm font-medium mb-1 text-gray-700">Question Type</label><select v-model="q.question_type" class="block w-48 rounded border-gray-300 border px-3 py-2 text-sm bg-white focus:ring-blue-500 focus:border-blue-500"><option value="multiple_choice">Multiple Choice</option><option value="true_false">True / False</option><option value="short_answer">Short Answer</option></select></div>
-                          <div v-if="!q.question_type || q.question_type === 'multiple_choice'"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs font-semibold text-gray-600">Option A</label><input v-model="q.option_a" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option B</label><input v-model="q.option_b" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option C</label><input v-model="q.option_c" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option D</label><input v-model="q.option_d" class="block w-full rounded border px-2 py-1 text-sm"></div></div><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Option</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                          <div v-if="!q.question_type || q.question_type === 'multiple_choice'"><div class="grid grid-cols-2 gap-2 mb-2"><div><label class="text-xs font-semibold text-gray-600">Option A</label><input v-model="q.option_a" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option B</label><input v-model="q.option_b" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option C</label><input v-model="q.option_c" class="block w-full rounded border px-2 py-1 text-sm"></div><div><label class="text-xs font-semibold text-gray-600">Option D</label><input v-model="q.option_d" class="block w-full rounded border px-2 py-1 text-sm"></div></div><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Option(s)</label><div class="flex gap-4 items-center bg-gray-50 p-2 rounded border"><label class="inline-flex items-center text-sm font-medium cursor-pointer"><input type="checkbox" value="A" v-model="q._correct_options" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-1.5"> A</label><label class="inline-flex items-center text-sm font-medium cursor-pointer"><input type="checkbox" value="B" v-model="q._correct_options" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-1.5"> B</label><label class="inline-flex items-center text-sm font-medium cursor-pointer"><input type="checkbox" value="C" v-model="q._correct_options" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-1.5"> C</label><label class="inline-flex items-center text-sm font-medium cursor-pointer"><input type="checkbox" value="D" v-model="q._correct_options" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-1.5"> D</label></div></div>
                           <div v-else-if="q.question_type === 'true_false'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer</label><select v-model="q.correct_option" class="block w-32 rounded border-gray-300 border px-3 py-2 text-sm bg-white"><option value="True">True</option><option value="False">False</option></select></div>
                           <div v-else-if="q.question_type === 'short_answer'"><label class="block text-sm font-medium mb-1 mt-2 text-gray-700">Correct Answer (Exact Match)</label><input v-model="q.correct_option" class="block w-full rounded border-gray-300 border px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Case-insensitive answer"></div>
                         </template>
                     </div>
-                    <button @click="activeLibraryQuiz.questions.push({question_text:'', _text:'', _attachments:[], question_type: activeLibraryQuiz.is_pre_assessment ? 'short_answer' : 'multiple_choice', option_a:'', option_b:'', option_c:'', option_d:'', correct_option:'A'})" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-sm mb-4 font-semibold shadow-sm">+ Add Question</button>
+                    <button @click="activeLibraryQuiz.questions.push({question_text:'', _text:'', _attachments:[], question_type: activeLibraryQuiz.is_pre_assessment ? 'short_answer' : 'multiple_choice', option_a:'', option_b:'', option_c:'', option_d:'', correct_option:'A', _correct_options:['A']})" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-sm mb-4 font-semibold shadow-sm">+ Add Question</button>
                 </div>
                 <div class="mt-4 flex gap-2">
                     <button @click="saveLibraryQuiz" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition">Save</button>
@@ -772,6 +776,19 @@
 
             <!-- Quiz List View -->
             <div v-else class="space-y-8">
+                <!-- Search Bar -->
+                <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center gap-3">
+                  <div class="relative flex-1">
+                    <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.604 10.604z" />
+                      </svg>
+                    </div>
+                    <input v-model="quizSearchQuery" type="text" placeholder="Search quiz or assessment name..." class="block w-full rounded-md border-0 py-1.5 pl-10 pr-3 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6">
+                  </div>
+                  <button v-if="quizSearchQuery" @click="quizSearchQuery = ''" class="text-xs text-gray-500 hover:text-gray-700 font-medium">Clear</button>
+                </div>
+
                 <!-- Standard Quizzes -->
                 <div>
                   <div class="flex justify-between items-center mb-4">
@@ -1822,10 +1839,18 @@
                 <div v-for="(q, idx) in quizData.questions" :key="q.id" class="mb-5 bg-white p-3 border rounded">
                   <p class="font-semibold text-sm mb-2 text-gray-800">{{idx+1}}. {{q.question_text}}</p>
                   <div v-if="!q.question_type || q.question_type === 'multiple_choice'" class="flex flex-col gap-2 text-sm text-gray-700 pl-2">
-                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="A" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> A) {{q.option_a}}</label>
-                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="B" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> B) {{q.option_b}}</label>
-                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="C" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> C) {{q.option_c}}</label>
-                    <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="D" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> D) {{q.option_d}}</label>
+                    <template v-if="q.is_multiselect">
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="checkbox" value="A" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600 rounded"> A) {{q.option_a}}</label>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="checkbox" value="B" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600 rounded"> B) {{q.option_b}}</label>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="checkbox" value="C" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600 rounded"> C) {{q.option_c}}</label>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="checkbox" value="D" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600 rounded"> D) {{q.option_d}}</label>
+                    </template>
+                    <template v-else>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="A" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> A) {{q.option_a}}</label>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="B" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> B) {{q.option_b}}</label>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="C" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> C) {{q.option_c}}</label>
+                      <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="D" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> D) {{q.option_d}}</label>
+                    </template>
                   </div>
                   <div v-else-if="q.question_type === 'true_false'" class="flex flex-col gap-2 text-sm text-gray-700 pl-2">
                     <label class="cursor-pointer hover:bg-gray-50 p-1 rounded block"><input type="radio" :name="'q'+q.id" value="True" v-model="quizAnswers[q.id]" class="mr-2 text-blue-600"> True</label>
@@ -4924,7 +4949,9 @@
               
             const headers = ['Category', 'Competency Task'];
             activeUsers.forEach(u => {
-              headers.push(`${u.full_name} (${u.designation})`);
+              headers.push(`${u.full_name} (${u.designation}) Status`);
+              headers.push(`${u.full_name} (${u.designation}) Date Achieved`);
+              headers.push(`${u.full_name} (${u.designation}) Assessor`);
             });
             
             let csvRows = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(separator)];
@@ -4940,7 +4967,21 @@
                     if (isApplicable(u, comp)) {
                       const status = getProgressStatus(u.id, comp.id) || 't';
                       row.push(status.toUpperCase());
+                      
+                      const p = getProgressObj(u.id, comp.id);
+                      if (p && ['c', 'x'].includes(p.current_status)) {
+                        const dateVal = p.date_reviewed || p.date_signed_off || '';
+                        row.push(formatDate(dateVal) || '-');
+                        
+                        const assessorName = p.assessor_id ? (getAssessorName(p.assessor_id) || 'System') : 'Legacy / System';
+                        row.push(assessorName);
+                      } else {
+                        row.push('-');
+                        row.push('-');
+                      }
                     } else {
+                      row.push('-');
+                      row.push('-');
                       row.push('-');
                     }
                   });
@@ -4958,7 +4999,21 @@
                     if (isPublicApplicable(u, comp)) {
                       const status = getPublicProgressStatus(u.id, comp.id) || 't';
                       row.push(status.toUpperCase());
+                      
+                      const p = getPublicProgressObj(u.id, comp.id);
+                      if (p && ['c', 'x'].includes(p.current_status)) {
+                        const dateVal = p.date_reviewed || p.date_signed_off || '';
+                        row.push(formatDate(dateVal) || '-');
+                        
+                        const assessorName = p.assessor_id ? (getPublicAssessorName(p.assessor_id) || 'System') : 'Legacy / System';
+                        row.push(assessorName);
+                      } else {
+                        row.push('-');
+                        row.push('-');
+                      }
                     } else {
+                      row.push('-');
+                      row.push('-');
                       row.push('-');
                     }
                   });
@@ -6161,9 +6216,34 @@
           activeLibraryQuiz.value = { name: '', passing_score_percent: 80, questions: [], is_viva: isViva, is_pre_assessment: isPreAssessment };
         };
 
-        const standardQuizzes = computed(() => quizLibrary.value.filter(q => !q.is_viva && !q.is_pre_assessment));
-        const selfAssessments = computed(() => quizLibrary.value.filter(q => q.is_viva));
-        const preAssessments = computed(() => quizLibrary.value.filter(q => q.is_pre_assessment));
+        const quizSearchQuery = ref('');
+
+        const standardQuizzes = computed(() => {
+          let qz = quizLibrary.value.filter(q => !q.is_viva && !q.is_pre_assessment);
+          if (quizSearchQuery.value.trim()) {
+            const query = quizSearchQuery.value.toLowerCase().trim();
+            qz = qz.filter(q => q.name && q.name.toLowerCase().includes(query));
+          }
+          return qz;
+        });
+        
+        const selfAssessments = computed(() => {
+          let qz = quizLibrary.value.filter(q => q.is_viva);
+          if (quizSearchQuery.value.trim()) {
+            const query = quizSearchQuery.value.toLowerCase().trim();
+            qz = qz.filter(q => q.name && q.name.toLowerCase().includes(query));
+          }
+          return qz;
+        });
+        
+        const preAssessments = computed(() => {
+          let qz = quizLibrary.value.filter(q => q.is_pre_assessment);
+          if (quizSearchQuery.value.trim()) {
+            const query = quizSearchQuery.value.toLowerCase().trim();
+            qz = qz.filter(q => q.name && q.name.toLowerCase().includes(query));
+          }
+          return qz;
+        });
 
         const editLibraryQuiz = async (quizId) => {
             try {
@@ -6175,6 +6255,11 @@
                     const parsed = parseQuestionText(q.question_text);
                     q._text = parsed.text;
                     q._attachments = parsed.files || [];
+                    if (!quiz.is_pre_assessment && (!q.question_type || q.question_type === 'multiple_choice')) {
+                      q._correct_options = q.correct_option ? q.correct_option.split(',') : [];
+                    } else {
+                      q._correct_options = [];
+                    }
                   });
                 }
                 
@@ -6190,6 +6275,18 @@
             isEditingQuiz.value = false;
         };
 
+        const moveQuestion = (index, direction) => {
+          if (!activeLibraryQuiz.value || !activeLibraryQuiz.value.questions) return;
+          const questions = activeLibraryQuiz.value.questions;
+          const targetIndex = index + direction;
+          if (targetIndex < 0 || targetIndex >= questions.length) return;
+          
+          // Swap the questions
+          const temp = questions[index];
+          questions[index] = questions[targetIndex];
+          questions[targetIndex] = temp;
+        };
+
         const saveLibraryQuiz = async () => {
             if (!activeLibraryQuiz.value) return;
             try {
@@ -6200,6 +6297,14 @@
                       ? JSON.stringify({ text: q._text || '', files: q._attachments })
                       : (q._text || '');
                   }
+                  let correctOpt = q.correct_option;
+                  if (!activeLibraryQuiz.value.is_pre_assessment && (!q.question_type || q.question_type === 'multiple_choice')) {
+                    if (q._correct_options && q._correct_options.length > 0) {
+                      correctOpt = [...q._correct_options].sort().join(',');
+                    } else {
+                      correctOpt = '';
+                    }
+                  }
                   return {
                     ...(q.id ? { id: q.id } : {}),
                     question_text: textVal || '',
@@ -6208,7 +6313,7 @@
                     option_b: q.option_b || '',
                     option_c: q.option_c || '',
                     option_d: q.option_d || '',
-                    correct_option: q.correct_option || ''
+                    correct_option: correctOpt || ''
                   };
                 });
 
@@ -6366,7 +6471,22 @@
           if (qz && qz.questions.length > 0) {
             quizData.value = qz;
             const milestone = getMilestone(selectedCell.value.user.id, selectedCell.value.comp.id, 'quiz', quizId);
-            quizAnswers.value = milestone && milestone.answers ? { ...milestone.answers } : {};
+            
+            const initialAnswers = {};
+            qz.questions.forEach(q => {
+              if (q.is_multiselect) {
+                const existing = milestone && milestone.answers && milestone.answers[q.id];
+                if (existing) {
+                  initialAnswers[q.id] = Array.isArray(existing) ? existing : existing.split(',');
+                } else {
+                  initialAnswers[q.id] = [];
+                }
+              } else {
+                initialAnswers[q.id] = milestone && milestone.answers ? milestone.answers[q.id] : '';
+              }
+            });
+            
+            quizAnswers.value = initialAnswers;
             takingQuiz.value = true;
           } else {
             customAlert("This quiz has no questions configured.", "Warning");
@@ -6375,7 +6495,17 @@
         
         const submitQuiz = async () => {
           try {
-            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/submit-quiz`, { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ quiz_id: quizData.value.id, answers: quizAnswers.value }) });
+            const formattedAnswers = {};
+            for (const key in quizAnswers.value) {
+              const val = quizAnswers.value[key];
+              if (Array.isArray(val)) {
+                formattedAnswers[key] = [...val].sort().join(',');
+              } else {
+                formattedAnswers[key] = val;
+              }
+            }
+            
+            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/submit-quiz`, { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ quiz_id: quizData.value.id, answers: formattedAnswers }) });
             const result = await res.json();
             if (result.passed) {
               await customAlert(`You passed! Score: ${result.score}% (Required: ${result.passing_score}%)`, "Quiz Passed");
@@ -6871,7 +7001,7 @@
                  logbookCompetencies, getApprovedLogsCount, getCompPlanningLogs, isTrainerInAny,
                  vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal,
                  preAssessmentQueue, fetchPreAssessmentQueue, preAssessmentSummaries, fetchPreAssessmentSummaries, takingPreAssessment, preAssessmentData, preAssessmentAnswers, preAssessmentAssessorId, preAssessmentSubmitToAll, preAssessmentEligibleAssessors, canSubmitPreAssessment, showingPreAssessmentFor, togglePreAssessmentReview, getLatestPreAssessment, loadPreAssessmentForTaking, submitPreAssessmentSelf, submitPreAssessmentReview, activePreAssessmentReview, openPreAssessmentReview, submitPreAssessmentReviewModal, activePreAssessmentHistory, preAssessmentHistory, openPreAssessmentHistory, closePreAssessmentHistory, getPreAssessmentResponse, getPreAssessmentQuestionReview, groupedPreAssessmentQueue,
-                 createNewLibraryQuiz, standardQuizzes, selfAssessments, preAssessments,
+                 createNewLibraryQuiz, standardQuizzes, selfAssessments, preAssessments, quizSearchQuery, moveQuestion,
                  toggleSectionGamification, isGamificationEnabled, userBadgeStats, myBadges, toggleSectionLeaderboardType
         };
       }
