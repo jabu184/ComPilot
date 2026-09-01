@@ -4,6 +4,8 @@ const sqlite3 = require('sqlite3').verbose();
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
+const PDFDocument = require('pdfkit');
+const AdmZip = require('adm-zip');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -1407,13 +1409,26 @@ app.delete('/api/quizzes/library/:id', authenticateToken, requireAdmin, async (r
 
 app.get('/api/competency/:id/quiz', authenticateToken, async (req, res) => {
   try {
+    const user_id = req.user.id;
+    const progressRec = await query(req.db, `SELECT quizzes_completed FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, req.params.id]);
+    let quizzes_completed = {};
+    if (progressRec.length > 0) {
+      try {
+        quizzes_completed = JSON.parse(progressRec[0].quizzes_completed || '{}');
+        while(typeof quizzes_completed === 'string') quizzes_completed = JSON.parse(quizzes_completed);
+      } catch (e) {}
+    }
+
     const qzs = await query(req.db, `SELECT q.* FROM quizzes q JOIN competency_quizzes cq ON q.id = cq.quiz_id WHERE cq.competency_id = ?`, [req.params.id]);
     const result = [];
     for (let qz of qzs) {
       const questions = await query(req.db, `SELECT id, question_text, question_type, option_a, option_b, option_c, option_d, correct_option FROM quiz_questions WHERE quiz_id = ?`, [qz.id]);
+      
+      const hasTaken = quizzes_completed && quizzes_completed[qz.id];
+      
       const processedQuestions = questions.map(q => {
         const is_multiselect = q.correct_option && q.correct_option.includes(',');
-        return {
+        const item = {
           id: q.id,
           question_text: q.question_text,
           question_type: q.question_type,
@@ -1423,8 +1438,12 @@ app.get('/api/competency/:id/quiz', authenticateToken, async (req, res) => {
           option_d: q.option_d,
           is_multiselect: !!is_multiselect
         };
+        if (hasTaken) {
+          item.correct_option = q.correct_option;
+        }
+        return item;
       });
-      result.push({ ...qz, questions: processedQuestions }); // correct_option intentionally omitted for trainees
+      result.push({ ...qz, questions: processedQuestions }); // correct_option conditionally omitted for trainees
     }
     res.json(result);
   } catch (error) {
@@ -1464,11 +1483,8 @@ app.post('/api/competency/:id/submit-quiz', authenticateToken, async (req, res) 
         if (!quizzes_completed || typeof quizzes_completed !== 'object' || Array.isArray(quizzes_completed)) quizzes_completed = {};
       } catch(e) {}
       
-      const existing = quizzes_completed[quiz_id];
-      if (!existing || !existing.passed || passed) {
-        quizzes_completed[quiz_id] = { passed, score, answers };
-        await execute(req.db, `UPDATE staff_competency_progress SET quizzes_completed = ? WHERE user_id = ? AND competency_id = ?`, [JSON.stringify(quizzes_completed), user_id, req.params.id]);
-      }
+      quizzes_completed[quiz_id] = { passed, score, answers };
+      await execute(req.db, `UPDATE staff_competency_progress SET quizzes_completed = ? WHERE user_id = ? AND competency_id = ?`, [JSON.stringify(quizzes_completed), user_id, req.params.id]);
     }
     
     await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'QUIZ_ATTEMPT', ?, ?)`, [user_id, req.params.id, user_id, `Attempted quiz '${quiz.name}'. Score: ${score}%. Passed: ${passed}`]);
@@ -3354,6 +3370,423 @@ app.get('/api/admin/uploads/:section/users', authenticateToken, requireSuperuser
     res.json(result);
   } catch(e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/reports/all-training-records-zip', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const activeUsers = await query(sharedDb, "SELECT * FROM users WHERE is_active = 1 ORDER BY full_name ASC");
+    if (activeUsers.length === 0) {
+      return res.status(404).json({ error: "No active users found." });
+    }
+
+    const allUsersList = await query(sharedDb, "SELECT id, full_name, username FROM users");
+    const userMap = {};
+    allUsersList.forEach(u => { userMap[u.id] = u.full_name || u.username; });
+
+    const sections = await getSections();
+    const activeSections = sections.filter(s => s.active !== false);
+
+    // Cache competencies and progress for each section
+    const sectionData = {};
+    for (const sec of activeSections) {
+      const dbInstance = getDb(sec.name);
+      const comps = await query(dbInstance, "SELECT * FROM competencies ORDER BY display_order ASC, id ASC");
+      const progressList = await query(dbInstance, "SELECT * FROM staff_competency_progress");
+      
+      let auditLogs = [];
+      try {
+        auditLogs = await query(dbInstance, "SELECT * FROM competency_audit_log ORDER BY timestamp DESC");
+      } catch (e) { auditLogs = []; }
+
+      sectionData[sec.name] = {
+        competencies: comps,
+        progressList: progressList,
+        auditLogs: auditLogs
+      };
+    }
+
+    const zip = new AdmZip();
+
+    for (const u of activeUsers) {
+      const userActiveSections = [];
+      try {
+        const parsed = typeof u.active_in === 'string' ? JSON.parse(u.active_in) : u.active_in;
+        if (Array.isArray(parsed)) userActiveSections.push(...parsed);
+      } catch(e) {}
+
+      // Generate PDF for user
+      const pdfBuffer = await new Promise((resolve, reject) => {
+        const doc = new PDFDocument({ margin: 36, size: 'A4', bufferPages: true });
+        const chunks = [];
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        // Header
+        doc.rect(36, 36, 523, 40).fill('#1e3a8a');
+        doc.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold').text('IR(ME)R Clinical Competency & Training Record', 46, 45);
+        doc.fontSize(9).font('Helvetica').text(`System: Compilot Competency Matrix | Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}`, 46, 62);
+        
+        doc.y = 88;
+
+        // User Meta Box
+        doc.rect(36, 88, 523, 50).fillAndStroke('#f8fafc', '#cbd5e1');
+        doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold');
+        
+        doc.text('Staff Name:', 46, 96);
+        doc.font('Helvetica').text(u.full_name || '-', 115, 96);
+
+        doc.font('Helvetica-Bold').text('Designation:', 300, 96);
+        doc.font('Helvetica').text(u.designation || '-', 375, 96);
+
+        doc.font('Helvetica-Bold').text('Username:', 46, 112);
+        doc.font('Helvetica').text(u.username || '-', 115, 112);
+
+        doc.font('Helvetica-Bold').text('Date in Post:', 300, 112);
+        doc.font('Helvetica').text(u.date_in_post ? new Date(u.date_in_post).toLocaleDateString('en-GB') : 'Not specified', 375, 112);
+
+        doc.font('Helvetica-Bold').text('Active In:', 46, 126);
+        doc.font('Helvetica').text(userActiveSections.length > 0 ? userActiveSections.join(', ') : 'All Active Sections', 115, 126);
+
+        doc.y = 150;
+
+        // Iterate through all active sections
+        for (const sec of activeSections) {
+          const sData = sectionData[sec.name];
+          if (!sData) continue;
+
+          // Check if space needed for section header
+          if (doc.y > doc.page.height - 100) {
+            doc.addPage();
+          }
+
+          doc.moveDown(0.5);
+          const startSecY = doc.y;
+          doc.rect(36, startSecY, 523, 20).fill('#e2e8f0');
+          doc.fillColor('#1e293b').fontSize(10).font('Helvetica-Bold').text(`SECTION: ${sec.name.toUpperCase()}`, 44, startSecY + 5);
+          doc.y = startSecY + 25;
+
+          const userProgressMap = {};
+          sData.progressList.filter(p => p.user_id === u.id).forEach(p => {
+            userProgressMap[p.competency_id] = p;
+          });
+
+          // Table Header
+          const renderTableHeader = (headerY) => {
+            doc.rect(36, headerY, 523, 16).fill('#f1f5f9');
+            doc.fillColor('#334155').fontSize(8).font('Helvetica-Bold');
+            doc.text('Category', 40, headerY + 4, { width: 85 });
+            doc.text('Task Name', 125, headerY + 4, { width: 145 });
+            doc.text('Status', 270, headerY + 4, { width: 45, align: 'center' });
+            doc.text('Date', 320, headerY + 4, { width: 60 });
+            doc.text('Assessor', 380, headerY + 4, { width: 75 });
+            doc.text('Comment', 460, headerY + 4, { width: 95 });
+          };
+
+          renderTableHeader(doc.y);
+          doc.y += 18;
+
+          if (sData.competencies.length === 0) {
+            doc.fillColor('#64748b').fontSize(8).font('Helvetica-Oblique').text('No competencies configured in this section.', 44, doc.y + 3);
+            doc.y += 16;
+          } else {
+            for (let i = 0; i < sData.competencies.length; i++) {
+              const comp = sData.competencies[i];
+              const prog = userProgressMap[comp.id];
+              const status = prog ? (prog.current_status || 't').toUpperCase() : 'T';
+              const dateSigned = (prog && prog.date_signed_off) ? new Date(prog.date_signed_off).toLocaleDateString('en-GB') : '-';
+              const assessor = (prog && prog.assessor_id) ? (userMap[prog.assessor_id] || 'System') : '-';
+              const comment = (prog && prog.signoff_comment) ? prog.signoff_comment : '-';
+
+              if (doc.y > doc.page.height - 45) {
+                doc.addPage();
+                renderTableHeader(doc.y);
+                doc.y += 18;
+              }
+
+              const rowY = doc.y;
+              if (i % 2 === 1) {
+                doc.rect(36, rowY, 523, 16).fill('#f8fafc');
+              }
+
+              doc.fillColor('#1e293b').fontSize(7.5).font('Helvetica');
+              doc.text(comp.category || '-', 40, rowY + 3, { width: 85, lineBreak: false });
+              doc.text(comp.task_name || '-', 125, rowY + 3, { width: 145, lineBreak: false });
+              
+              // Status Badge
+              let badgeBg = '#fef08a';
+              let badgeTxt = '#854d0e';
+              if (status === 'M') { badgeBg = '#e9d5ff'; badgeTxt = '#6b21a8'; }
+              else if (status === 'A') { badgeBg = '#fed7aa'; badgeTxt = '#9a3412'; }
+              else if (status === 'C') { badgeBg = '#bbf7d0'; badgeTxt = '#166534'; }
+              else if (status === 'X') { badgeBg = '#bfdbfe'; badgeTxt = '#1e40af'; }
+              
+              doc.rect(280, rowY + 2, 25, 12).fill(badgeBg);
+              doc.fillColor(badgeTxt).fontSize(7).font('Helvetica-Bold').text(status, 280, rowY + 4, { width: 25, align: 'center' });
+
+              doc.fillColor('#334155').fontSize(7.5).font('Helvetica');
+              doc.text(dateSigned, 320, rowY + 3, { width: 60, lineBreak: false });
+              doc.text(assessor, 380, rowY + 3, { width: 75, lineBreak: false });
+              doc.text(comment, 460, rowY + 3, { width: 95, lineBreak: false });
+
+              doc.y = rowY + 16;
+            }
+          }
+        }
+
+        // Audit Trail Section
+        if (doc.y > doc.page.height - 120) {
+          doc.addPage();
+        }
+
+        doc.moveDown(1);
+        const auditHeaderY = doc.y;
+        doc.rect(36, auditHeaderY, 523, 18).fill('#0f172a');
+        doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold').text('ACTION LOGS & AUDIT TRAIL', 44, auditHeaderY + 5);
+        doc.y = auditHeaderY + 24;
+
+        // Gather user logs from all sections
+        const allUserLogs = [];
+        for (const sec of activeSections) {
+          const sData = sectionData[sec.name];
+          if (sData && sData.auditLogs) {
+            sData.auditLogs.filter(l => l.target_user_id === u.id).forEach(l => {
+              allUserLogs.push({ ...l, section: sec.name });
+            });
+          }
+        }
+        allUserLogs.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+        if (allUserLogs.length === 0) {
+          doc.fillColor('#64748b').fontSize(8).font('Helvetica-Oblique').text('No audit logs recorded for this user.', 44, doc.y);
+          doc.y += 15;
+        } else {
+          for (const log of allUserLogs.slice(0, 50)) {
+            if (doc.y > doc.page.height - 35) {
+              doc.addPage();
+            }
+            const logDate = log.timestamp ? new Date(log.timestamp).toLocaleDateString('en-GB') + ' ' + new Date(log.timestamp).toLocaleTimeString('en-GB') : '-';
+            const actionBy = log.actioned_by_id ? (userMap[log.actioned_by_id] || `User #${log.actioned_by_id}`) : 'System';
+            
+            doc.fillColor('#475569').fontSize(7.5).font('Helvetica-Bold').text(`[${log.section}] ${logDate} - ${log.action_type || 'UPDATE'}: `, 44, doc.y, { continued: true });
+            doc.font('Helvetica').text(`Actioned by ${actionBy}. ${log.previous_status ? 'Previous: ' + log.previous_status.toUpperCase() + ' | ' : ''}${log.new_status ? 'New: ' + log.new_status.toUpperCase() + ' | ' : ''}"${log.notes || ''}"`);
+            doc.y += 3;
+          }
+        }
+
+        // Add page numbers and footers across all buffered pages
+        const pages = doc.bufferedPageRange();
+        for (let i = 0; i < pages.count; i++) {
+          doc.switchToPage(i);
+          doc.rect(36, doc.page.height - 25, 523, 0.5).fill('#cbd5e1');
+          doc.fillColor('#64748b').fontSize(7.5).font('Helvetica').text(
+            `IR(ME)R 2017 Clinical Competency Record - ${u.full_name} (${u.username}) | Page ${i + 1} of ${pages.count}`,
+            36,
+            doc.page.height - 18,
+            { align: 'center', width: 523 }
+          );
+        }
+
+        doc.end();
+      });
+
+      const safeFilename = `${(u.full_name || 'User').replace(/[^a-zA-Z0-9_\-\.]/g, '_')}_${(u.username || u.id).replace(/[^a-zA-Z0-9_\-\.]/g, '_')}_Training_Record.pdf`;
+      zip.addFile(safeFilename, pdfBuffer);
+    }
+
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename=all_users_training_records_${new Date().toISOString().split('T')[0]}.zip`);
+    res.send(zip.toBuffer());
+  } catch (error) {
+    console.error("Error generating training records PDF ZIP:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/reports/overview-matrix-pdf/:section?', authenticateToken, requireAdmin, async (req, res) => {
+  const targetSection = req.params.section || 'all';
+  try {
+    const allSections = await getSections();
+    let sectionsToExport = [];
+    if (targetSection === 'all') {
+      sectionsToExport = allSections.filter(s => s.active !== false);
+    } else {
+      const found = allSections.find(s => s.name.toLowerCase() === targetSection.toLowerCase());
+      sectionsToExport = found ? [found] : [{ name: targetSection }];
+    }
+
+    if (sectionsToExport.length === 0) {
+      return res.status(404).json({ error: "No active sections found to export." });
+    }
+
+    const users = await query(sharedDb, "SELECT * FROM users WHERE is_active = 1 ORDER BY full_name ASC");
+
+    const pdfBuffer = await new Promise(async (resolve, reject) => {
+      const doc = new PDFDocument({ margin: 0, size: 'A4', layout: 'landscape', bufferPages: true });
+      const chunks = [];
+      doc.on('data', c => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const tableLeft = 20;
+      const tableWidth = 802;
+      const catColWidth = 100;
+      const taskColWidth = 190;
+      const remainingWidth = tableWidth - catColWidth - taskColWidth;
+      const pageSectionMap = {};
+
+      let isFirstSection = true;
+
+      for (const sec of sectionsToExport) {
+        const secName = sec.name;
+        const dbInstance = getDb(secName);
+        let comps = [];
+        let progress = [];
+        try {
+          comps = await query(dbInstance, "SELECT * FROM competencies ORDER BY display_order ASC, id ASC");
+          progress = await query(dbInstance, "SELECT * FROM staff_competency_progress");
+        } catch(e) {
+          console.warn(`Could not read database for section ${secName}:`, e.message);
+        }
+
+        const sectionUsers = users.filter(u => {
+          try {
+            const act = typeof u.active_in === 'string' ? JSON.parse(u.active_in) : u.active_in;
+            return Array.isArray(act) && act.includes(secName);
+          } catch(e) { return true; }
+        });
+
+        const progressMap = {};
+        progress.forEach(p => {
+          progressMap[p.user_id + '_' + p.competency_id] = p;
+        });
+
+        const MAX_USERS_PER_VIEW = 22;
+        const totalBatches = Math.ceil(sectionUsers.length / MAX_USERS_PER_VIEW) || 1;
+
+        for (let b = 0; b < totalBatches; b++) {
+          const batchUsers = sectionUsers.slice(b * MAX_USERS_PER_VIEW, (b + 1) * MAX_USERS_PER_VIEW);
+          const userColWidth = batchUsers.length > 0 ? remainingWidth / batchUsers.length : remainingWidth;
+
+          if (!isFirstSection || b > 0) {
+            doc.addPage();
+          }
+          isFirstSection = false;
+
+          const renderPageHeader = () => {
+            const curP = doc.bufferedPageRange().count - 1;
+            pageSectionMap[curP] = secName;
+
+            doc.rect(tableLeft, 20, tableWidth, 26).fill('#1e3a8a');
+            doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text(`IR(ME)R Clinical Competency Matrix - ${secName} Section`, tableLeft + 8, 25, { lineBreak: false });
+            const batchSubtitle = totalBatches > 1 
+              ? `Staff Group ${b + 1} of ${totalBatches} (${batchUsers[0]?.full_name || ''} to ${batchUsers[batchUsers.length - 1]?.full_name || ''}) | Total Staff: ${sectionUsers.length} | Generated: ${new Date().toLocaleDateString('en-GB')}`
+              : `All Active Staff (${batchUsers.length} Staff Members) | Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}`;
+            doc.fontSize(7.5).font('Helvetica').text(batchSubtitle, tableLeft + 8, 36, { lineBreak: false });
+
+            doc.rect(tableLeft, 48, tableWidth, 13).fill('#f8fafc');
+            doc.fillColor('#475569').fontSize(6).font('Helvetica-Bold').text('Status Key:  [T] Training   [M] Meets Requirements   [A] Assessment Pending   [C] Competent   [X] Competent to Train   [-] N/A', tableLeft + 6, 52, { lineBreak: false });
+          };
+
+          const renderTableHeader = (headerY) => {
+            doc.rect(tableLeft, headerY, tableWidth, 24).fill('#f1f5f9');
+            doc.fillColor('#1e293b').fontSize(7.5).font('Helvetica-Bold');
+            doc.text('Category', tableLeft + 4, headerY + 8, { width: catColWidth - 8, lineBreak: false, ellipsis: true });
+            doc.text('Competency Task', tableLeft + catColWidth + 4, headerY + 8, { width: taskColWidth - 8, lineBreak: false, ellipsis: true });
+            
+            batchUsers.forEach((u, uIdx) => {
+              const uX = tableLeft + catColWidth + taskColWidth + (uIdx * userColWidth);
+              const nameParts = (u.full_name || '').trim().split(' ');
+              const firstName = nameParts[0] || '';
+              const lastName = nameParts.slice(1).join(' ') || '';
+
+              doc.fillColor('#1e293b').fontSize(6).font('Helvetica-Bold').text(firstName, uX, headerY + 3, { width: userColWidth, align: 'center', lineBreak: false, ellipsis: true });
+              doc.fillColor('#1e293b').fontSize(5.5).font('Helvetica-Bold').text(lastName, uX, headerY + 10, { width: userColWidth, align: 'center', lineBreak: false, ellipsis: true });
+              doc.fillColor('#64748b').fontSize(4.5).font('Helvetica').text(u.designation || '', uX, headerY + 17, { width: userColWidth, align: 'center', lineBreak: false, ellipsis: true });
+            });
+          };
+
+          renderPageHeader();
+          renderTableHeader(63);
+          let currentY = 63 + 24;
+
+          if (comps.length === 0) {
+            doc.fillColor('#64748b').fontSize(8).font('Helvetica-Oblique').text('No competencies found for this section.', tableLeft + 8, currentY + 4, { lineBreak: false });
+          } else {
+            let lastCategory = '';
+            comps.forEach((comp, cIdx) => {
+              if (currentY > 560) {
+                doc.addPage();
+                renderPageHeader();
+                renderTableHeader(63);
+                currentY = 63 + 24;
+              }
+
+              const rowY = currentY;
+              if (cIdx % 2 === 1) {
+                doc.rect(tableLeft, rowY, tableWidth, 13).fill('#f8fafc');
+              }
+
+              const showCategory = comp.category !== lastCategory;
+              if (showCategory) lastCategory = comp.category;
+
+              doc.fillColor('#0f172a').fontSize(6.5).font(showCategory ? 'Helvetica-Bold' : 'Helvetica');
+              doc.text(showCategory ? comp.category : '', tableLeft + 4, rowY + 3, { width: catColWidth - 8, lineBreak: false, ellipsis: true });
+              
+              doc.fillColor('#334155').font('Helvetica');
+              doc.text(comp.task_name || '', tableLeft + catColWidth + 4, rowY + 3, { width: taskColWidth - 8, lineBreak: false, ellipsis: true });
+
+              batchUsers.forEach((u, uIdx) => {
+                const uX = tableLeft + catColWidth + taskColWidth + (uIdx * userColWidth);
+                const prog = progressMap[u.id + '_' + comp.id];
+                const status = prog ? (prog.current_status || 't').toUpperCase() : 'T';
+
+                let badgeBg = '#fef08a';
+                let badgeTxt = '#854d0e';
+                if (status === 'M') { badgeBg = '#e9d5ff'; badgeTxt = '#6b21a8'; }
+                else if (status === 'A') { badgeBg = '#fed7aa'; badgeTxt = '#9a3412'; }
+                else if (status === 'C') { badgeBg = '#bbf7d0'; badgeTxt = '#166534'; }
+                else if (status === 'X') { badgeBg = '#bfdbfe'; badgeTxt = '#1e40af'; }
+
+                const badgeWidth = Math.min(userColWidth - 3, 18);
+                const badgeX = uX + (userColWidth - badgeWidth) / 2;
+                doc.rect(badgeX, rowY + 1.5, badgeWidth, 9.5).fill(badgeBg);
+                doc.fillColor(badgeTxt).fontSize(6).font('Helvetica-Bold').text(status, badgeX, rowY + 2.5, { width: badgeWidth, align: 'center', lineBreak: false });
+              });
+
+              currentY = rowY + 13;
+            });
+          }
+        }
+      }
+
+      const pages = doc.bufferedPageRange();
+      for (let i = 0; i < pages.count; i++) {
+        doc.switchToPage(i);
+        const secLabel = pageSectionMap[i] || 'Overview';
+        doc.rect(tableLeft, 578, tableWidth, 0.5).fill('#cbd5e1');
+        doc.fillColor('#64748b').fontSize(6).font('Helvetica').text(
+          `Compilot Competency Matrix System - Formal Record under IR(ME)R 2017 | Section: ${secLabel} | Page ${i + 1} of ${pages.count}`,
+          tableLeft,
+          582,
+          { align: 'center', width: tableWidth, lineBreak: false }
+        );
+      }
+
+      doc.end();
+    });
+
+    const filename = targetSection === 'all' 
+      ? `competency_matrix_all_sections_${new Date().toISOString().split('T')[0]}.pdf`
+      : `competency_matrix_${targetSection.toLowerCase()}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error generating overview matrix PDF:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 

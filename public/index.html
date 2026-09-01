@@ -1309,9 +1309,6 @@
           <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-lg font-semibold text-blue-900">Database Management</h3>
-              <button @click="exportMatrixCSV" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-4 rounded text-sm transition shadow-sm flex items-center gap-1.5">
-                <span>📊 Export Matrix (CSV)</span>
-              </button>
             </div>
             
             <div class="mb-4">
@@ -1347,14 +1344,33 @@
 
             <div class="border border-gray-300 p-4 rounded bg-white shadow-sm mt-6">
               <h4 class="font-bold text-gray-800 mb-2">Backup / Restore All Data</h4>
-              <p class="text-xs text-gray-500 mb-4">Download a JSON backup of all database files, or restore all databases from a previous JSON backup. <span class="text-red-600 font-bold">Restoring will overwrite current data!</span></p>
+              <p class="text-xs text-gray-500 mb-4">Download backups and exports of matrix records, clinical training documents, and database files, or restore from a previous JSON backup. <span class="text-red-600 font-bold">Restoring will overwrite current data!</span></p>
               
-              <div class="flex flex-col md:flex-row items-center gap-4">
-                <button @click="backupDatabase('all')" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm whitespace-nowrap">Backup All Sections</button>
+              <!-- Database JSON Backup & Restore -->
+              <div class="flex flex-col md:flex-row items-center gap-4 mb-4">
+                <button @click="backupDatabase('all')" class="bg-green-600 hover:bg-green-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm whitespace-nowrap">Backup All Sections (JSON)</button>
                 <div class="h-8 border-l border-gray-300 hidden md:block"></div>
                 <div class="flex items-center gap-2 w-full md:w-auto">
                   <input type="file" @change="onBackupFileSelected" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 border border-gray-300 rounded p-1">
                   <button @click="restoreDatabase('all')" :disabled="!backupFile" class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm disabled:opacity-50 whitespace-nowrap">Restore All</button>
+                </div>
+              </div>
+
+              <!-- Emergency Exports & PDF Downloads -->
+              <div class="pt-4 border-t border-gray-200">
+                <div class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Export Data & Clinical Reports</div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button @click="exportMatrixCSV" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-sm flex items-center gap-1.5">
+                    <span>📊 Export Matrix (CSV)</span>
+                  </button>
+                  <button @click="downloadOverviewMatrixPDF" :disabled="isDownloadingMatrixPdf" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-sm flex items-center gap-1.5 disabled:opacity-50">
+                    <span v-if="isDownloadingMatrixPdf" class="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full inline-block"></span>
+                    <span>{{ isDownloadingMatrixPdf ? 'Generating PDF...' : '📄 Export Matrix (PDF)' }}</span>
+                  </button>
+                  <button @click="downloadAllTrainingRecordsZip" :disabled="isDownloadingTrainingRecordsZip" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-sm flex items-center gap-1.5 disabled:opacity-50">
+                    <span v-if="isDownloadingTrainingRecordsZip" class="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full inline-block"></span>
+                    <span>{{ isDownloadingTrainingRecordsZip ? 'Generating PDFs...' : '📦 All User Training Records (PDF ZIP)' }}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1646,12 +1662,13 @@
                       <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Not Started</span>
                     </template>
                     <template v-else>
+                      <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="viewQuizResults(qz.id)" class="bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded font-bold shadow-sm transition whitespace-nowrap mr-2">View Results</button>
                       <button v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="loadQuizForTaking(qz.id)" class="text-xs text-blue-600 hover:underline whitespace-nowrap">Retake</button>
                       <button v-else-if="selectedCell.user.id === user.id" @click="loadQuizForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">Take Quiz</button>
   
-                      <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
-                      <span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
-                      <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
+                      <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap ml-2">✓ Passed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
+                      <span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap ml-2">✗ Failed <span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined">({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}%)</span></span>
+                      <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap ml-2">✗ Pending</span>
                     </template>
                   </div>
                 </div>
@@ -1862,6 +1879,81 @@
                 </div>
                 <div class="flex gap-2"><button @click="submitQuiz" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded">Submit Answers</button><button @click="takingQuiz = false" class="bg-gray-400 hover:bg-gray-500 text-white text-sm font-bold px-4 py-2 rounded">Cancel</button></div>
               </div>
+                  
+                  <!-- Viewing Quiz Results -->
+                  <div v-if="viewingQuizResults && quizData?.id === qz.id" class="mt-1 mb-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
+                    <div class="flex justify-between items-center mb-3">
+                      <h4 class="font-bold text-gray-800">Quiz Results: {{ quizData?.name }}</h4>
+                      <span class="text-sm font-bold bg-white px-2.5 py-1 rounded shadow-sm border" :class="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'">
+                        Score: {{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score }}% 
+                        ({{ getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed ? 'Passed' : 'Failed' }})
+                      </span>
+                    </div>
+                    
+                    <div v-for="(q, idx) in quizData.questions" :key="q.id" class="mb-5 bg-white p-3 border rounded shadow-sm">
+                      <p class="font-semibold text-sm mb-2 text-gray-800 flex items-center justify-between">
+                        <span>{{idx+1}}. {{q.question_text}}</span>
+                        <span v-if="isAnswerCorrect(q)" class="text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 whitespace-nowrap">✓ Correct</span>
+                        <span v-else class="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200 whitespace-nowrap">✗ Incorrect</span>
+                      </p>
+                      
+                      <!-- Multiple Choice (Single/Multi-select) -->
+                      <div v-if="!q.question_type || q.question_type === 'multiple_choice'" class="flex flex-col gap-2 text-sm text-gray-700 pl-2">
+                        <div v-for="opt in ['A', 'B', 'C', 'D']" :key="opt" 
+                             class="p-1.5 rounded flex items-center gap-2 transition"
+                             :class="getOptionClass(q, opt)">
+                          <input :type="q.is_multiselect ? 'checkbox' : 'radio'" 
+                                 :name="'result_q'+q.id" 
+                                 :value="opt" 
+                                 :checked="isOptionSelected(q, opt)" 
+                                 disabled 
+                                 class="text-blue-600 disabled:opacity-80">
+                          <span>
+                            <strong>{{opt}})</strong> {{ getOptionText(q, opt) }}
+                            <span v-if="isOptionCorrect(q, opt) && isOptionSelected(q, opt)" class="ml-1.5 text-xs text-green-700 font-bold bg-green-100 px-1.5 py-0.5 rounded">(Your Selection - Correct)</span>
+                            <span v-else-if="isOptionCorrect(q, opt)" class="ml-1.5 text-xs text-green-700 font-bold bg-green-100 px-1.5 py-0.5 rounded">(Correct Answer)</span>
+                            <span v-else-if="isOptionSelected(q, opt)" class="ml-1.5 text-xs text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded">(Your Selection - Incorrect)</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- True / False -->
+                      <div v-else-if="q.question_type === 'true_false'" class="flex flex-col gap-2 text-sm text-gray-700 pl-2">
+                        <div v-for="opt in ['True', 'False']" :key="opt"
+                             class="p-1.5 rounded flex items-center gap-2 transition"
+                             :class="getOptionClass(q, opt)">
+                          <input type="radio" 
+                                 :name="'result_q'+q.id" 
+                                 :value="opt" 
+                                 :checked="isOptionSelected(q, opt)" 
+                                 disabled 
+                                 class="text-blue-600 disabled:opacity-80">
+                          <span>
+                            {{ opt }}
+                            <span v-if="isOptionCorrect(q, opt) && isOptionSelected(q, opt)" class="ml-1.5 text-xs text-green-700 font-bold bg-green-100 px-1.5 py-0.5 rounded">(Your Selection - Correct)</span>
+                            <span v-else-if="isOptionCorrect(q, opt)" class="ml-1.5 text-xs text-green-700 font-bold bg-green-100 px-1.5 py-0.5 rounded">(Correct Answer)</span>
+                            <span v-else-if="isOptionSelected(q, opt)" class="ml-1.5 text-xs text-red-700 font-bold bg-red-100 px-1.5 py-0.5 rounded">(Your Selection - Incorrect)</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Short Answer -->
+                      <div v-else-if="q.question_type === 'short_answer'" class="pl-2 space-y-1">
+                        <div class="text-sm font-medium">Your answer: 
+                          <span :class="isAnswerCorrect(q) ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'">
+                            "{{ quizAnswers[q.id] || '(No Answer)' }}"
+                          </span>
+                        </div>
+                        <div v-if="!isAnswerCorrect(q)" class="text-xs text-gray-600">
+                          Correct Answer: <span class="font-bold text-green-700">"{{ q.correct_option }}"</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                      <button @click="viewingQuizResults = false" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded shadow-sm">Close Results</button>
+                    </div>
+                  </div>
                 </template>
               </template>
               
@@ -2371,7 +2463,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v2.3
+        James Burnley v2.31
       </div>
     </div>
 
@@ -5038,6 +5130,57 @@
           }
         };
 
+        const isDownloadingMatrixPdf = ref(false);
+        const isDownloadingTrainingRecordsZip = ref(false);
+
+        const downloadOverviewMatrixPDF = async () => {
+          isDownloadingMatrixPdf.value = true;
+          try {
+            const res = await fetch(`/api/admin/reports/overview-matrix-pdf/all`, { headers: getHeaders() });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ error: 'Download failed' }));
+              throw new Error(err.error || 'Failed to generate overview matrix PDF');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `competency_matrix_all_sections_${new Date().toISOString().split('T')[0]}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            customAlert("Error downloading Overview Matrix PDF: " + e.message, "Error");
+          } finally {
+            isDownloadingMatrixPdf.value = false;
+          }
+        };
+
+        const downloadAllTrainingRecordsZip = async () => {
+          isDownloadingTrainingRecordsZip.value = true;
+          try {
+            const res = await fetch('/api/admin/reports/all-training-records-zip', { headers: getHeaders() });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ error: 'Download failed' }));
+              throw new Error(err.error || 'Failed to generate training records ZIP');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `all_users_training_records_${new Date().toISOString().split('T')[0]}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            customAlert("Error downloading Training Records ZIP: " + e.message, "Error");
+          } finally {
+            isDownloadingTrainingRecordsZip.value = false;
+          }
+        };
+
         const printTrainingRecord = async (targetUser) => {
           let userLogs = [];
           try {
@@ -6466,7 +6609,13 @@
           return { text: rawText, files: [] };
         };
         
-        const loadQuizForTaking = (quizId) => {
+        const viewingQuizResults = ref(false);
+
+        const viewQuizResults = (quizId) => {
+          takingQuiz.value = false;
+          takingViva.value = false;
+          takingPreAssessment.value = false;
+          
           const qz = cellQuizzes.value.find(q => q.id === quizId);
           if (qz && qz.questions.length > 0) {
             quizData.value = qz;
@@ -6483,6 +6632,80 @@
                 }
               } else {
                 initialAnswers[q.id] = milestone && milestone.answers ? milestone.answers[q.id] : '';
+              }
+            });
+            
+            quizAnswers.value = initialAnswers;
+            viewingQuizResults.value = true;
+          } else {
+            customAlert("This quiz has no questions configured.", "Warning");
+          }
+        };
+
+        const getFormattedAnswer = (ans) => {
+          if (!ans) return '';
+          if (Array.isArray(ans)) {
+            return [...ans].sort().join(',');
+          }
+          return ans.toString().split(',').sort().join(',');
+        };
+
+        const isAnswerCorrect = (q) => {
+          const ans = quizAnswers.value[q.id];
+          const correct = q.correct_option;
+          if (q.question_type === 'short_answer') {
+            return (ans || '').toString().trim().toLowerCase() === (correct || '').toString().trim().toLowerCase();
+          }
+          return getFormattedAnswer(ans) === getFormattedAnswer(correct);
+        };
+
+        const isOptionSelected = (q, opt) => {
+          const ans = quizAnswers.value[q.id];
+          if (!ans) return false;
+          if (Array.isArray(ans)) {
+            return ans.includes(opt);
+          }
+          return ans.toString().split(',').includes(opt);
+        };
+
+        const isOptionCorrect = (q, opt) => {
+          const correct = q.correct_option;
+          if (!correct) return false;
+          return correct.toString().split(',').includes(opt);
+        };
+
+        const getOptionClass = (q, opt) => {
+          const isCorrect = isOptionCorrect(q, opt);
+          const isSelected = isOptionSelected(q, opt);
+          if (isCorrect) {
+            return 'bg-green-50 border border-green-200';
+          }
+          if (isSelected && !isCorrect) {
+            return 'bg-red-50 border border-red-200';
+          }
+          return 'bg-transparent border border-transparent';
+        };
+
+        const getOptionText = (q, opt) => {
+          if (opt === 'A') return q.option_a;
+          if (opt === 'B') return q.option_b;
+          if (opt === 'C') return q.option_c;
+          if (opt === 'D') return q.option_d;
+          return '';
+        };
+
+        const loadQuizForTaking = (quizId) => {
+          viewingQuizResults.value = false;
+          const qz = cellQuizzes.value.find(q => q.id === quizId);
+          if (qz && qz.questions.length > 0) {
+            quizData.value = qz;
+            
+            const initialAnswers = {};
+            qz.questions.forEach(q => {
+              if (q.is_multiselect) {
+                initialAnswers[q.id] = [];
+              } else {
+                initialAnswers[q.id] = '';
               }
             });
             
@@ -6994,7 +7217,7 @@
                  publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass, getPublicProgressObj, getPublicAssessorName,
                  publicSelectedCell, openPublicModal, closePublicModal,
                  customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
-                 qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
+                 qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, downloadOverviewMatrixPDF, isDownloadingMatrixPdf, downloadAllTrainingRecordsZip, isDownloadingTrainingRecordsZip, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
                  selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
                  uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, expandedSectionUploads, loadingSectionUserStats, sectionUserStats, toggleSectionUploadsExpand, activeLogReview, submitLogReviewModal,
                  auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, groupedAssessorQueue, editingPlanLogId, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
@@ -7002,6 +7225,7 @@
                  vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal,
                  preAssessmentQueue, fetchPreAssessmentQueue, preAssessmentSummaries, fetchPreAssessmentSummaries, takingPreAssessment, preAssessmentData, preAssessmentAnswers, preAssessmentAssessorId, preAssessmentSubmitToAll, preAssessmentEligibleAssessors, canSubmitPreAssessment, showingPreAssessmentFor, togglePreAssessmentReview, getLatestPreAssessment, loadPreAssessmentForTaking, submitPreAssessmentSelf, submitPreAssessmentReview, activePreAssessmentReview, openPreAssessmentReview, submitPreAssessmentReviewModal, activePreAssessmentHistory, preAssessmentHistory, openPreAssessmentHistory, closePreAssessmentHistory, getPreAssessmentResponse, getPreAssessmentQuestionReview, groupedPreAssessmentQueue,
                  createNewLibraryQuiz, standardQuizzes, selfAssessments, preAssessments, quizSearchQuery, moveQuestion,
+                 viewingQuizResults, viewQuizResults, isAnswerCorrect, isOptionSelected, isOptionCorrect, getOptionClass, getOptionText,
                  toggleSectionGamification, isGamificationEnabled, userBadgeStats, myBadges, toggleSectionLeaderboardType
         };
       }
