@@ -480,6 +480,11 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
       if (!Array.isArray(rp)) rp = [];
     } catch(e) {}
 
+    if (!username) {
+      const uRes = await query(sharedDb, 'SELECT username FROM users WHERE id = ?', [user_id]);
+      if (uRes.length > 0) username = uRes[0].username;
+    }
+
     let progress = null;
     let rc = [];
     let qc = {};
@@ -497,8 +502,9 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
     let missingReason = '';
 
     if (comp.requires_instructions) {
+      const completedSet = new Set(rc.map(String));
       for (let r of rp) {
-        if (!rc.includes(r.id)) { requirementsMet = false; missingReason = `Reading prerequisite '${r.name}' not completed.`; break; }
+        if (!completedSet.has(String(r.id))) { requirementsMet = false; missingReason = `Reading prerequisite '${r.name}' not completed.`; break; }
       }
     }
     
@@ -511,8 +517,11 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
           } else if (qz.is_viva) {
             const passedVivas = await query(db, `SELECT id FROM viva_evaluations WHERE trainee_id = ? AND competency_id = ? AND quiz_id = ? AND status = 'Completed' AND is_passed = 1`, [user_id, competency_id, qz.id]);
             if (passedVivas.length === 0) { requirementsMet = false; missingReason = `Viva Assessment '${qz.name}' not passed.`; break; }
-          } else if (!qc[qz.id] || !qc[qz.id].passed) {
-            requirementsMet = false; missingReason = `Quiz '${qz.name}' not passed.`; break;
+          } else {
+            const qRecord = qc[qz.id] || qc[String(qz.id)];
+            if (!qRecord || !qRecord.passed) {
+              requirementsMet = false; missingReason = `Quiz '${qz.name}' not passed.`; break;
+            }
           }
         }
     }
@@ -539,7 +548,7 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
     if (reqs.length === 0 && comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) { reqs = [{ count: comp.required_qatrack_count, identifier: comp.qatrack_test_identifier }]; }
     let hasQATrackChecks = reqs.length > 0;
     
-    if (hasQATrackChecks) {
+    if (hasQATrackChecks && username) {
       for (const req of reqs) {
         const qaData = await fetchQATrackInstances(username, req.identifier);
         qatrack_records_detail[req.identifier] = qaData.count;
@@ -554,9 +563,30 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
 
     let initialized = false;
     const detailStr = JSON.stringify(qatrack_records_detail);
-    if (progressQuery.length === 0) { await execute(db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail) VALUES (?, ?, 't', ?)`, [user_id, competency_id, detailStr]); initialized = true; } else if (hasQATrackChecks) { await execute(db, `UPDATE staff_competency_progress SET qatrack_records_detail = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, user_id, competency_id]); }
+    if (progressQuery.length === 0) { 
+      const initStatus = requirementsMet ? 'm' : 't';
+      await execute(db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail) VALUES (?, ?, ?, ?)`, [user_id, competency_id, initStatus, detailStr]); 
+      initialized = true; 
+      if (requirementsMet) {
+        await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'PROMOTED_TO_M', ?, 't', 'm', 'System auto-promotion (Prerequisites met)')`, [user_id, competency_id, user_id]);
+        return { success: true, promoted: true, status: 'm' };
+      }
+    } else {
+      if (hasQATrackChecks) { 
+        await execute(db, `UPDATE staff_competency_progress SET qatrack_records_detail = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, user_id, competency_id]); 
+      }
       
-    if (progress.current_status === 't' && requirementsMet) { await execute(db, `UPDATE staff_competency_progress SET current_status = 'm' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]); await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'PROMOTED_TO_M', ?, 't', 'm', 'System auto-promotion (Prerequisites met)')`, [user_id, competency_id, user_id]); return { success: true, promoted: true }; } else if ((progress.current_status === 'm' || progress.current_status === 'a') && !requirementsMet) { await execute(db, `UPDATE staff_competency_progress SET current_status = 't' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]); await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'DEMOTED_TO_T', ?, ?, 't', 'System auto-demotion (Prerequisites no longer met)')`, [user_id, competency_id, user_id, progress.current_status]); return { success: true, demoted: true, reason: missingReason }; }
+      const currentStatus = (progress.current_status || 't').toLowerCase();
+      if (currentStatus === 't' && requirementsMet) { 
+        await execute(db, `UPDATE staff_competency_progress SET current_status = 'm' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]); 
+        await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'PROMOTED_TO_M', ?, 't', 'm', 'System auto-promotion (Prerequisites met)')`, [user_id, competency_id, user_id]); 
+        return { success: true, promoted: true, status: 'm' }; 
+      } else if (currentStatus === 'm' && !requirementsMet) { 
+        await execute(db, `UPDATE staff_competency_progress SET current_status = 't' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]); 
+        await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'DEMOTED_TO_T', ?, ?, 't', 'System auto-demotion (Prerequisites no longer met)')`, [user_id, competency_id, user_id, currentStatus]); 
+        return { success: true, demoted: true, reason: missingReason, status: 't' }; 
+      }
+    }
 
     return { success: true, promoted: false, reason: missingReason || 'Milestones incomplete.', initialized };
 };
@@ -732,7 +762,7 @@ const authenticateToken = (req, res, next) => {
 
 // Authorization Middleware: Require Admin flag
 const requireAdmin = (req, res, next) => {
-  if (req.user && req.user.is_admin) {
+  if (req.user && (req.user.is_admin || req.user.is_superuser)) {
     next();
   } else {
     res.status(403).json({ error: 'Forbidden: Requires Admin privileges.' });
@@ -1488,6 +1518,7 @@ app.post('/api/competency/:id/submit-quiz', authenticateToken, async (req, res) 
     }
     
     await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'QUIZ_ATTEMPT', ?, ?)`, [user_id, req.params.id, user_id, `Attempted quiz '${quiz.name}'. Score: ${score}%. Passed: ${passed}`]);
+    await syncCompetencyInternal(req.db, user_id, req.user.username, parseInt(req.params.id, 10));
     res.json({ score, passed, passing_score: quiz.passing_score_percent });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1718,7 +1749,7 @@ app.get('/api/competency/:id/evaluations', authenticateToken, async (req, res) =
 
 app.post('/api/competency/:id/evaluations', authenticateToken, async (req, res) => {
   const competency_id = parseInt(req.params.id, 10);
-  const user_id = parseInt(req.user.id, 10);
+  const user_id = (req.body.user_id && (req.user.is_admin || req.user.is_superuser || req.user.id == req.body.user_id)) ? parseInt(req.body.user_id, 10) : parseInt(req.user.id, 10);
   const { evaluation_type, score_a, score_b, score_c } = req.body;
 
   const sA = parseInt(score_a, 10);
@@ -1732,13 +1763,20 @@ app.post('/api/competency/:id/evaluations', authenticateToken, async (req, res) 
     await execute(req.db, `INSERT INTO self_evaluations (user_id, competency_id, evaluation_type, score_a, score_b, score_c) VALUES (?, ?, ?, ?, ?, ?)`, [user_id, competency_id, evaluation_type, sA, sB, sC]);
     
     let promotedToA = false;
-    if (evaluation_type === 'post' && sA >= 3 && sB >= 3 && sC >= 3) {
+    if (sA >= 3 && sB >= 3 && sC >= 3) {
       const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-      if (progressCheck.length > 0 && progressCheck[0].current_status === 'm') {
-        await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'a' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-        await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REQUESTED_ASSESSMENT', ?, 'm', 'a', 'User automatically requested assessment by passing post-training evaluation')`, [user_id, competency_id, user_id]);
+      const curStatus = progressCheck.length > 0 ? (progressCheck[0].current_status || 't').toLowerCase() : 't';
+      if (!['c', 'x'].includes(curStatus)) {
+        if (progressCheck.length === 0) {
+          await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status) VALUES (?, ?, 'a')`, [user_id, competency_id]);
+        } else {
+          await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'a' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+        }
+        await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REQUESTED_ASSESSMENT', ?, ?, 'a', ?)`, [user_id, competency_id, req.user.id, curStatus, `User automatically transitioned to Assessment Pending by completing ${evaluation_type}-training evaluation (scores >= 3)`]);
         promotedToA = true;
       }
+    } else if (evaluation_type === 'pre') {
+      await syncCompetencyInternal(req.db, user_id, null, competency_id);
     }
 
     res.json({ success: true, promotedToA });
@@ -2008,7 +2046,8 @@ app.post('/api/competency/milestone', authenticateToken, async (req, res) => {
       }
     }
     
-    res.json({ success: true });
+    const syncResult = await syncCompetencyInternal(req.db, user_id, req.user.username, competency_id);
+    res.json({ success: true, syncResult });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -2041,24 +2080,22 @@ app.post('/api/competency/sync', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/competency/request-assessment', authenticateToken, async (req, res) => {
-  const { competency_id } = req.body;
-  const user_id = req.user.id;
+  const competency_id = parseInt(req.body.competency_id, 10);
+  const user_id = (req.body.user_id && (req.user.is_admin || req.user.is_superuser || req.user.id == req.body.user_id)) ? parseInt(req.body.user_id, 10) : parseInt(req.user.id, 10);
   try {
     const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-    if (progressCheck.length > 0 && progressCheck[0].current_status === 'm') {
-      const compQuery = await query(req.db, `SELECT requires_post_eval FROM competencies WHERE id = ?`, [competency_id]);
-      if (compQuery.length > 0 && compQuery[0].requires_post_eval) {
-        const evaluations = await query(req.db, `SELECT * FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = 'post' ORDER BY submission_date DESC LIMIT 1`, [user_id, competency_id]);
-        if (evaluations.length === 0 || evaluations[0].score_a < 3 || evaluations[0].score_b < 3 || evaluations[0].score_c < 3) {
-          return res.status(400).json({ error: 'You must pass the Post-Training Self-Evaluation (score 3+ on all dimensions) before requesting assessment.' });
-        }
+    const curStatus = progressCheck.length > 0 ? (progressCheck[0].current_status || 't').toLowerCase() : 't';
+    
+    if (!['c', 'x'].includes(curStatus)) {
+      if (progressCheck.length === 0) {
+        await execute(req.db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status) VALUES (?, ?, 'a')`, [user_id, competency_id]);
+      } else {
+        await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'a' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
       }
-
-      await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'a' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REQUESTED_ASSESSMENT', ?, 'm', 'a', 'User requested assessment')`, [user_id, competency_id, user_id]);
+      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REQUESTED_ASSESSMENT', ?, ?, 'a', 'User requested assessment')`, [user_id, competency_id, req.user.id, curStatus]);
       res.json({ success: true });
     } else {
-      res.status(400).json({ error: 'Not eligible to request assessment' });
+      res.status(400).json({ error: 'Not eligible to request assessment: already signed off as competent.' });
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2066,13 +2103,14 @@ app.post('/api/competency/request-assessment', authenticateToken, async (req, re
 });
 
 app.post('/api/competency/revert-assessment', authenticateToken, async (req, res) => {
-  const { competency_id } = req.body;
-  const user_id = req.user.id;
+  const competency_id = parseInt(req.body.competency_id, 10);
+  const user_id = (req.body.user_id && (req.user.is_admin || req.user.is_superuser || req.user.id == req.body.user_id)) ? parseInt(req.body.user_id, 10) : parseInt(req.user.id, 10);
   try {
     const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-    if (progressCheck.length > 0 && progressCheck[0].current_status === 'a') {
+    const curStatus = progressCheck.length > 0 ? (progressCheck[0].current_status || '').toLowerCase() : '';
+    if (curStatus === 'a') {
       await execute(req.db, `UPDATE staff_competency_progress SET current_status = 'm' WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
-      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REVERTED_TO_M', ?, 'a', 'm', 'User manually reverted assessment request')`, [user_id, competency_id, user_id]);
+      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'REVERTED_TO_M', ?, 'a', 'm', 'User manually reverted assessment request')`, [user_id, competency_id, req.user.id]);
       res.json({ success: true });
     } else {
       res.status(400).json({ error: 'Cannot revert from current status' });
@@ -2160,9 +2198,10 @@ app.post('/api/competency/signoff', authenticateToken, async (req, res) => {
   }
 });
 
-// --- ADMIN OVERRIDES ---
-app.post('/api/progress/admin-force-status', authenticateToken, requireSuperuser, async (req, res) => {
-  const { user_id, competency_id, status, signoff_comment, date_override } = req.body;
+app.post('/api/progress/admin-force-status', authenticateToken, requireAdmin, async (req, res) => {
+  const user_id = parseInt(req.body.user_id, 10);
+  const competency_id = parseInt(req.body.competency_id, 10);
+  const { status, signoff_comment, date_override } = req.body;
   const admin_id = req.user.id;
 
   if (!['t', 'm', 'a', 'c', 'x'].includes(status)) {
@@ -2234,6 +2273,7 @@ app.post('/api/progress/admin-update', authenticateToken, requireSuperuser, asyn
       `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_OVERRIDE', ?, 'Admin updated prerequisites manually')`,
       [user_id, competency_id, admin_id]
     );
+    await syncCompetencyInternal(req.db, user_id, null, competency_id);
     res.json({ success: true, message: "Progress updated manually." });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2278,6 +2318,7 @@ app.post('/api/progress/admin-reset-quiz', authenticateToken, requireSuperuser, 
       `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_QUIZ_RESET', ?, 'Admin reset quiz progress')`,
       [user_id, competency_id, admin_id]
     );
+    await syncCompetencyInternal(req.db, user_id, null, competency_id);
     res.json({ success: true, message: "Quiz progress reset." });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2302,6 +2343,7 @@ app.post('/api/progress/admin-pass-quiz', authenticateToken, requireSuperuser, a
       await execute(req.db, `UPDATE staff_competency_progress SET quizzes_completed = ? WHERE user_id = ? AND competency_id = ?`, [JSON.stringify(qc), user_id, competency_id]);
     }
     await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_QUIZ_PASS', ?, 'Admin forced quiz as passed')`, [user_id, competency_id, admin_id]);
+    await syncCompetencyInternal(req.db, user_id, null, competency_id);
     res.json({ success: true, message: "Quiz marked as passed." });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2313,6 +2355,7 @@ app.post('/api/progress/admin-pass-eval', authenticateToken, requireSuperuser, a
     await execute(req.db, `DELETE FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = ?`, [user_id, competency_id, eval_type]);
     await execute(req.db, `INSERT INTO self_evaluations (user_id, competency_id, evaluation_type, score_a, score_b, score_c) VALUES (?, ?, ?, 5, 5, 5)`, [user_id, competency_id, eval_type]);
     await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_EVAL_PASS', ?, ?)`, [user_id, competency_id, admin_id, `Admin forced ${eval_type}-training evaluation as passed`]);
+    await syncCompetencyInternal(req.db, user_id, null, competency_id);
     res.json({ success: true, message: "Evaluation marked as completed." });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2353,6 +2396,7 @@ app.post('/api/progress/admin-reset-eval', authenticateToken, requireSuperuser, 
       `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'ADMIN_EVAL_RESET', ?, ?)`,
       [user_id, competency_id, admin_id, `Admin reset ${eval_type}-training evaluation`]
     );
+    await syncCompetencyInternal(req.db, user_id, null, competency_id);
     res.json({ success: true, message: "Evaluation reset." });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

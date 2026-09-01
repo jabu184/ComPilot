@@ -618,9 +618,13 @@
                 <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="newComp.requires_instructions" class="h-4 w-4 text-blue-600 rounded"> <span class="text-sm font-medium text-gray-700">Requires Prerequisite Tasks</span></label>
                 <div v-if="newComp.requires_instructions" class="mt-3 pt-3 border-t border-gray-100">
                   <label class="block text-sm font-medium text-gray-700 mb-1">Prerequisite Tasks</label>
-                  <div v-for="(rp, idx) in newComp.reading_prerequisites" :key="idx" class="flex gap-2 mb-2">
+                  <div v-for="(rp, idx) in newComp.reading_prerequisites" :key="idx" class="flex items-center gap-1.5 mb-2">
                     <input v-model="rp.name" class="block w-full rounded border px-3 py-1 text-sm" placeholder="e.g. Read Protocol">
-                    <button type="button" @click="newComp.reading_prerequisites.splice(idx, 1)" class="bg-red-100 hover:bg-red-200 text-red-600 font-bold px-3 py-1 rounded shadow-sm transition">X</button>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button type="button" :disabled="idx === 0" @click="moveReadingPrereq(idx, -1)" :class="idx === 0 ? 'opacity-30 cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'" class="font-bold px-2 py-1 rounded shadow-sm transition text-xs" title="Move Up">▲</button>
+                      <button type="button" :disabled="idx === newComp.reading_prerequisites.length - 1" @click="moveReadingPrereq(idx, 1)" :class="idx === newComp.reading_prerequisites.length - 1 ? 'opacity-30 cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'" class="font-bold px-2 py-1 rounded shadow-sm transition text-xs" title="Move Down">▼</button>
+                      <button type="button" @click="newComp.reading_prerequisites.splice(idx, 1)" class="bg-red-100 hover:bg-red-200 text-red-600 font-bold px-2.5 py-1 rounded shadow-sm transition text-xs" title="Remove">X</button>
+                    </div>
                   </div>
                   <button type="button" @click="newComp.reading_prerequisites.push({id: Date.now().toString() + Math.random().toString(), name: ''})" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded shadow-sm font-semibold transition">+ Add Prerequisite Task</button>
                 </div>
@@ -2058,9 +2062,9 @@
                   <div class="flex items-center gap-2">
                     <button v-if="selectedCell.user.id === user.id && (!latestPostEvaluation || (latestPostEvaluation.score_a < 3 || latestPostEvaluation.score_b < 3 || latestPostEvaluation.score_c < 3))" 
                             @click="takingEval = 'post'" 
-                            :disabled="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== 'm'"
-                            :class="['text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap', getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 cursor-pointer' : 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-70']"
-                            :title="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== 'm' ? 'You must complete all other prerequisites before taking this evaluation.' : ''">
+                            :disabled="!isTrainingPrerequisitesMet(selectedCell.user.id, selectedCell.comp.id)"
+                            :class="['text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap', isTrainingPrerequisitesMet(selectedCell.user.id, selectedCell.comp.id) ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 cursor-pointer' : 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-70']"
+                            :title="!isTrainingPrerequisitesMet(selectedCell.user.id, selectedCell.comp.id) ? 'You must complete all other prerequisites before taking this evaluation.' : ''">
                       {{ latestPostEvaluation ? 'Retake' : 'Start' }}
                     </button>
                     <span v-if="latestPostEvaluation && latestPostEvaluation.score_a >= 3 && latestPostEvaluation.score_b >= 3 && latestPostEvaluation.score_c >= 3" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed</span>
@@ -2100,10 +2104,9 @@
                 </div>
               </template>
 
-              <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm'" class="mt-2 bg-purple-50 border border-purple-200 p-3 rounded flex flex-col gap-2">
-                <p class="text-sm font-semibold text-purple-800">You have met all prerequisites. Are you ready for an assessment?</p>
-                <button v-if="!selectedCell.comp.requires_post_eval || (latestPostEvaluation && latestPostEvaluation.score_a >= 3 && latestPostEvaluation.score_b >= 3 && latestPostEvaluation.score_c >= 3)" @click="requestAssessment" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">Request Assessment</button>
-                <p v-else class="text-xs text-red-600 font-bold">You must complete and pass the Post-Training Evaluation to automatically request an assessment.</p>
+              <div v-if="selectedCell.user.id === user.id && (getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' || getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 't')" class="mt-2 bg-purple-50 border border-purple-200 p-3 rounded flex flex-col gap-2">
+                <p class="text-sm font-semibold text-purple-800">{{ getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' ? 'You have met all prerequisites. Are you ready for an assessment?' : 'Ready to request an assessment?' }}</p>
+                <button @click="requestAssessment" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">Request Assessment</button>
               </div>
               
               <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'a'" class="mt-2 bg-orange-50 border border-orange-200 p-3 rounded flex flex-col gap-2">
@@ -2144,7 +2147,7 @@
           </div>
           
           <!-- Admin Controls -->
-          <div v-if="user.is_superuser" class="mt-4 pt-4 border-t border-red-200">
+          <div v-if="user.is_superuser || user.is_admin" class="mt-4 pt-4 border-t border-red-200">
             <h4 class="font-semibold text-red-800 mb-2">Admin Overrides</h4>
             
             <div class="flex items-center gap-2 mb-3">
@@ -2463,7 +2466,7 @@
         <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v2.31
+        James Burnley v2.4
       </div>
     </div>
 
@@ -3417,10 +3420,13 @@
         });
 
         const myPostEvalDue = computed(() => {
-          if (!user.value) return [];
+          if (!user.value || !competencies.value) return [];
           return competencies.value.filter(c => {
-             if (!isApplicable(user.value, c) || getProgressStatus(user.value.id, c.id) !== 'm' || !c.requires_post_eval) return false;
-             const postEvals = myEvaluations.value
+             if (!isApplicable(user.value, c) || !c.requires_post_eval) return false;
+             const status = getProgressStatus(user.value.id, c.id);
+             if (['c', 'x', 'a'].includes(status)) return false;
+             if (!isTrainingPrerequisitesMet(user.value.id, c.id)) return false;
+             const postEvals = (myEvaluations.value || [])
                 .filter(e => e.competency_id === c.id && e.evaluation_type === 'post')
                 .sort((a, b) => new Date(b.submission_date) - new Date(a.submission_date));
              if (postEvals.length === 0) return true;
@@ -3430,11 +3436,14 @@
         });
 
         const myObjectivesMet = computed(() => {
-          if (!user.value) return [];
+          if (!user.value || !competencies.value) return [];
           return competencies.value.filter(c => {
-            if (!isApplicable(user.value, c) || getProgressStatus(user.value.id, c.id) !== 'm' || isRenewalDue(user.value.id, c.id)) return false;
+            if (!isApplicable(user.value, c) || isRenewalDue(user.value.id, c.id)) return false;
+            const status = getProgressStatus(user.value.id, c.id);
+            if (status !== 'm' && !isTrainingPrerequisitesMet(user.value.id, c.id)) return false;
+            if (['c', 'x', 'a'].includes(status)) return false;
             if (c.requires_post_eval) {
-               const postEvals = myEvaluations.value
+               const postEvals = (myEvaluations.value || [])
                   .filter(e => e.competency_id === c.id && e.evaluation_type === 'post')
                   .sort((a, b) => new Date(b.submission_date) - new Date(a.submission_date));
                if (postEvals.length === 0) return false;
@@ -4452,13 +4461,82 @@
 
         const getProgressStatus = (userId, compId) => {
           const p = progressMap.value[`${userId}_${compId}`];
-          if (p) return p.current_status;
+          const rawStatus = p && p.current_status ? String(p.current_status).toLowerCase() : '';
+          if (['a', 'c', 'x', 'm'].includes(rawStatus)) return rawStatus;
           
           const u = usersMap.value[userId];
           const c = competenciesMap.value[compId];
-          if (u && c && isApplicable(u, c)) return hasNoPrerequisites(c) ? 'm' : 't';
+          if (!u || !c || !isApplicable(u, c)) return '';
           
-          return '';
+          if (isTrainingPrerequisitesMet(userId, compId)) return 'm';
+          
+          return 't';
+        };
+
+        const isTrainingPrerequisitesMet = (userId, compId) => {
+          if (!userId || !compId) return false;
+          const comp = competenciesMap.value ? competenciesMap.value[compId] : (competencies.value || []).find(c => c.id === compId);
+          if (!comp) return false;
+          const p = getProgressObj(userId, compId);
+          if (p && ['m', 'a', 'c', 'x'].includes(String(p.current_status || '').toLowerCase())) return true;
+
+          // Check reading prerequisites
+          if (comp.requires_instructions && comp.reading_prerequisites && comp.reading_prerequisites.length > 0) {
+            let completedReadings = p && p.readings_completed ? p.readings_completed : [];
+            if (typeof completedReadings === 'string') {
+              try { completedReadings = JSON.parse(completedReadings); } catch(e) { completedReadings = []; }
+            }
+            const completedSet = new Set((completedReadings || []).map(String));
+            for (const r of comp.reading_prerequisites) {
+              if (!completedSet.has(String(r.id))) return false;
+            }
+          }
+
+          // Check quiz prerequisites
+          if (comp.requires_quiz && comp.quiz_ids && comp.quiz_ids.length > 0) {
+            let completedQuizzes = p && p.quizzes_completed ? p.quizzes_completed : {};
+            if (typeof completedQuizzes === 'string') {
+              try { completedQuizzes = JSON.parse(completedQuizzes); } catch(e) { completedQuizzes = {}; }
+            }
+            for (const qId of comp.quiz_ids) {
+              const qRecord = completedQuizzes[qId] || completedQuizzes[String(qId)];
+              if (!qRecord || !qRecord.passed) return false;
+            }
+          }
+
+          // Check prerequisite competencies
+          if (comp.requires_prerequisite_competencies && comp.prerequisite_competencies && comp.prerequisite_competencies.length > 0) {
+            for (const pcId of comp.prerequisite_competencies) {
+              const pcProg = progressMap.value ? progressMap.value[`${userId}_${pcId}`] : null;
+              const pcStatus = pcProg ? pcProg.current_status : '';
+              if (pcStatus !== 'c' && pcStatus !== 'x') return false;
+            }
+          }
+
+          // Check pre-training evaluation
+          if (comp.requires_pre_eval) {
+            const hasPre = (myEvaluations.value || []).some(e => e.competency_id === comp.id && e.evaluation_type === 'pre');
+            if (!hasPre) return false;
+          }
+
+          // Check QATrack requirements
+          if (comp.qatrack_requirements && comp.qatrack_requirements.length > 0) {
+            let qaDetails = p && p.qatrack_records_detail ? p.qatrack_records_detail : {};
+            if (typeof qaDetails === 'string') {
+              try { qaDetails = JSON.parse(qaDetails); } catch(e) { qaDetails = {}; }
+            }
+            for (const req of comp.qatrack_requirements) {
+              if ((qaDetails[req.identifier] || 0) < req.count) return false;
+            }
+          }
+
+          // Check case logs
+          if (comp.required_plan_count > 0) {
+            const approvedLogs = getApprovedLogsCount(comp.id);
+            if (approvedLogs < comp.required_plan_count) return false;
+          }
+
+          return true;
         };
 
         const getStatusBadgeClass = (userId, compId) => {
@@ -4510,6 +4588,17 @@
           showQaEvidenceFor.value = null;
           showingPlanLogs.value = false;
           showingVivaFor.value = null;
+
+          if (u.id === user.value.id) {
+            const currentStat = getProgressStatus(u.id, comp.id);
+            if (currentStat === 't' || currentStat === '') {
+              const synced = await syncProgress(comp.id);
+              if (synced) {
+                await fetchData();
+              }
+            }
+          }
+
           const p = getProgressObj(u.id, comp.id);
           const currentStatus = p ? p.current_status : (hasNoPrerequisites(comp) ? 'm' : 't');
           adminEdit.value = {
@@ -5896,7 +5985,7 @@
             headers: getHeaders(true),
             body: JSON.stringify(payload)
           });
-          await syncProgress(selectedCell.value.comp.id);
+          await syncProgress(selectedCell.value.comp.id, selectedCell.value.user.id);
           await fetchData();
         };
 
@@ -5905,14 +5994,17 @@
           if (!type) return;
           if (!(await customConfirm("Please note that these tests can only be completed once per attempt and your score will be recorded. Are you sure you are ready to submit?", "Submit Evaluation"))) return;
           try {
-            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/evaluations`, {
+            const targetUserId = selectedCell.value.user.id;
+            const targetCompId = selectedCell.value.comp.id;
+            const res = await fetch(`/api/competency/${targetCompId}/evaluations`, {
               method: 'POST',
               headers: getHeaders(true),
               body: JSON.stringify({ 
                 evaluation_type: type, 
                 score_a: parseInt(evaluationScores.value.a, 10) || 1,
                 score_b: parseInt(evaluationScores.value.b, 10) || 1,
-                score_c: parseInt(evaluationScores.value.c, 10) || 1
+                score_c: parseInt(evaluationScores.value.c, 10) || 1,
+                user_id: targetUserId
               })
             });
             if (!res.ok) {
@@ -5924,23 +6016,22 @@
             takingEval.value = null;
             evaluationScores.value = { a: 1, b: 1, c: 1 };
             
-            let shouldRefresh = false;
-            
             if (type === 'pre') {
-              shouldRefresh = await syncProgress(selectedCell.value.comp.id);
-            } else if (type === 'post' && resultData.promotedToA) {
-              shouldRefresh = true;
+              await syncProgress(targetCompId, targetUserId);
             }
             
             await fetchMyEvaluations();
-            if (shouldRefresh) await fetchData();
+            await fetchData();
             const currentUser = selectedCell.value.user;
-            const currentComp = competencies.value.find(c => c.id === selectedCell.value.comp.id) || selectedCell.value.comp;
+            const currentComp = competencies.value.find(c => c.id === targetCompId) || selectedCell.value.comp;
             await fetchEvaluations(currentUser, currentComp);
-            if (shouldRefresh) {
-              openModal(currentUser, currentComp);
+            openModal(currentUser, currentComp);
+            
+            if (resultData.promotedToA) {
+              customAlert("Self-evaluation submitted successfully. Your status has automatically transitioned to Assessment Pending (A).", "Assessment Requested");
+            } else {
+              customAlert("Self-evaluation submitted successfully.", "Success");
             }
-            customAlert("Self-evaluation submitted successfully.", "Success");
           } catch (err) {
             customAlert(err.message, "Error");
           }
@@ -5966,7 +6057,7 @@
           let ranSync = false;
           const syncPromises = myCompetencies.map(async (c) => {
             const status = getProgressStatus(user.value.id, c.id);
-            if (status === 't' || status === 'm' || status === 'a' || status === '') {
+            if (status === 't' || status === '') {
               ranSync = true;
               return await syncProgress(c.id);
             }
@@ -5981,7 +6072,10 @@
             const res = await fetch('/api/competency/request-assessment', {
               method: 'POST',
               headers: getHeaders(true),
-              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+              body: JSON.stringify({ 
+                competency_id: selectedCell.value.comp.id,
+                user_id: selectedCell.value.user.id
+              })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
@@ -5997,7 +6091,10 @@
             const res = await fetch('/api/competency/renew', {
               method: 'POST',
               headers: getHeaders(true),
-              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+              body: JSON.stringify({ 
+                competency_id: selectedCell.value.comp.id,
+                user_id: selectedCell.value.user.id
+              })
             });
             if (!res.ok) throw new Error((await res.json()).error);
             customAlert("Competency renewed successfully.", "Success");
@@ -6012,7 +6109,10 @@
             const res = await fetch('/api/competency/request-reassessment', {
               method: 'POST',
               headers: getHeaders(true),
-              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+              body: JSON.stringify({ 
+                competency_id: selectedCell.value.comp.id,
+                user_id: selectedCell.value.user.id
+              })
             });
             if (!res.ok) throw new Error((await res.json()).error);
             customAlert("Re-assessment requested.", "Success");
@@ -6026,7 +6126,10 @@
             const res = await fetch('/api/competency/revert-assessment', {
               method: 'POST',
               headers: getHeaders(true),
-              body: JSON.stringify({ competency_id: selectedCell.value.comp.id })
+              body: JSON.stringify({ 
+                competency_id: selectedCell.value.comp.id,
+                user_id: selectedCell.value.user.id
+              })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
@@ -6105,7 +6208,7 @@
               body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, readings_completed: rc })
             });
             if (!res1.ok) throw new Error((await res1.json()).error || 'Failed to update reading progress');
-            await syncProgress(selectedCell.value.comp.id);
+            await syncProgress(selectedCell.value.comp.id, selectedCell.value.user.id);
             await fetchData();
             openModal(selectedCell.value.user, selectedCell.value.comp);
           } catch (err) { customAlert(err.message, "Error"); }
@@ -6116,7 +6219,7 @@
           try {
             const res = await fetch('/api/progress/admin-pass-quiz', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, quiz_id: quizId }) });
             if (!res.ok) throw new Error((await res.json()).error);
-            await syncProgress(selectedCell.value.comp.id); await fetchData(); openModal(selectedCell.value.user, selectedCell.value.comp);
+            await syncProgress(selectedCell.value.comp.id, selectedCell.value.user.id); await fetchData(); openModal(selectedCell.value.user, selectedCell.value.comp);
           } catch (err) { customAlert(err.message, "Error"); }
         };
 
@@ -6126,7 +6229,7 @@
           try {
             const res = await fetch('/api/progress/admin-pass-eval', { method: 'POST', headers: getHeaders(true), body: JSON.stringify({ user_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, eval_type: evalType }) });
             if (!res.ok) throw new Error((await res.json()).error);
-            await syncProgress(selectedCell.value.comp.id); await fetchData(); openModal(selectedCell.value.user, selectedCell.value.comp);
+            await syncProgress(selectedCell.value.comp.id, selectedCell.value.user.id); await fetchData(); openModal(selectedCell.value.user, selectedCell.value.comp);
           } catch (err) { customAlert(err.message, "Error"); }
         };
 
@@ -6238,6 +6341,15 @@
           window.scrollTo({ top: 0, behavior: 'smooth' });
         };
         const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0 }; isEditingComp.value = false; };
+        
+        const moveReadingPrereq = (index, direction) => {
+          if (!newComp.value || !newComp.value.reading_prerequisites) return;
+          const list = newComp.value.reading_prerequisites;
+          const targetIndex = index + direction;
+          if (targetIndex < 0 || targetIndex >= list.length) return;
+          const item = list.splice(index, 1)[0];
+          list.splice(targetIndex, 0, item);
+        };
         
         const deleteComp = async (id) => {
           if (!(await customConfirm('Are you sure you want to delete this competency?', "Delete Competency"))) return;
@@ -7197,9 +7309,9 @@
           document.removeEventListener('click', handleDocumentClick);
         });
 
-        return { username, password, token, user, loginError, users, sortedUsers, availableIndividualUsers, displayedUsers, competencies, getProgressStatus, getStatusBadgeClass, getAssessorName, isRenewalDue,
+        return { username, password, token, user, loginError, users, sortedUsers, availableIndividualUsers, displayedUsers, competencies, getProgressStatus, isTrainingPrerequisitesMet, getStatusBadgeClass, getAssessorName, isRenewalDue,
                  login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable,
-                 currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, dragStartCompetency, dropCompetency, availableCategories,
+                 currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, moveReadingPrereq, dragStartCompetency, dropCompetency, availableCategories,
                  categoryOrder, dragStartCategory, dropCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
                  newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, radarChartCanvas,
                  compListFilterCat, filteredAndSortedCompetencies, 

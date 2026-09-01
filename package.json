@@ -1,6 +1,6 @@
 {
   "name": "competency-matrix-app",
-  "version": "1.0.0",
+  "version": "2.4.0",
   "description": "Clinical Training & IR(ME)R Competency Matrix App",
   "main": "server.js",
   "scripts": {
