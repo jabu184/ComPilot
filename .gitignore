@@ -18,4 +18,9 @@ Thumbs.db
 
 # Binaries and archives
 *.zip
-*.exe
+*.exe
+
+# Portable package (local verification only)
+portable/
+ComPilot_Portable_Offline.zip
+
