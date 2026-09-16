@@ -1291,10 +1291,7 @@ async function isEligibleToViewUserCompetency(db, reqUser, targetUserId, compete
 
 async function isEligibleAssessorForUserCompetency(db, reqUser, targetUserId, competencyId) {
   if (!reqUser || !targetUserId || !competencyId) return false;
-  if (reqUser.is_admin || reqUser.is_superuser) return true;
-  if (parseInt(reqUser.id, 10) === parseInt(targetUserId, 10)) return false;
-  const trainerCheck = await query(db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [reqUser.id, competencyId]);
-  return trainerCheck.length > 0 && ['x', 'x+'].includes(trainerCheck[0].current_status);
+  return !!(reqUser.is_admin || reqUser.is_superuser);
 }
 
 app.get('/api/progress', authenticateToken, async (req, res) => {
@@ -2433,7 +2430,7 @@ app.post('/api/progress/admin-force-status', authenticateToken, async (req, res)
 
   try {
     if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Administrator privileges or Assessor 'X' status for this competency." });
+      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
     }
 
     const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
@@ -2494,7 +2491,7 @@ app.post('/api/progress/admin-update', authenticateToken, async (req, res) => {
 
   try {
     if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Administrator privileges or Assessor 'X' status for this competency." });
+      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
     }
 
     const rcStr = JSON.stringify(readings_completed || []);
@@ -2528,7 +2525,7 @@ app.post('/api/progress/admin-reset-quiz', authenticateToken, async (req, res) =
   const admin_id = req.user.id;
   try {
     if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Administrator privileges or Assessor 'X' status for this competency." });
+      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
     }
 
     if (quiz_id) {
@@ -2581,7 +2578,7 @@ app.post('/api/progress/admin-pass-quiz', authenticateToken, async (req, res) =>
   const admin_id = req.user.id;
   try {
     if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Administrator privileges or Assessor 'X' status for this competency." });
+      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
     }
 
     const check = await query(req.db, `SELECT id, current_status, quizzes_completed FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
@@ -2616,7 +2613,7 @@ app.post('/api/progress/admin-pass-eval', authenticateToken, async (req, res) =>
   const admin_id = req.user.id;
   try {
     if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Administrator privileges or Assessor 'X' status for this competency." });
+      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
     }
 
     await execute(req.db, `DELETE FROM self_evaluations WHERE user_id = ? AND competency_id = ? AND evaluation_type = ?`, [user_id, competency_id, eval_type]);
@@ -2638,7 +2635,7 @@ app.post('/api/progress/admin-reset-eval', authenticateToken, async (req, res) =
   const admin_id = req.user.id;
   try {
     if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Administrator privileges or Assessor 'X' status for this competency." });
+      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
     }
 
     const check = await query(req.db, `SELECT id, current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);

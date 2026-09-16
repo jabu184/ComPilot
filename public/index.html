@@ -3761,8 +3761,7 @@
 
         const canAssessorOverride = computed(() => {
           if (!user.value || !selectedCell.value) return false;
-          if (user.value.is_superuser || user.value.is_admin) return true;
-          return selectedCell.value.user.id !== user.value.id && ['x', 'x+'].includes(getProgressStatus(user.value.id, selectedCell.value.comp.id));
+          return !!(user.value.is_superuser || user.value.is_admin);
         });
 
         const getSupervisionLabel = (score) => {
