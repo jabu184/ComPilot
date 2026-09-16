@@ -1585,12 +1585,37 @@ app.post('/api/pre-assessment/submit', authenticateToken, async (req, res) => {
 
 app.get('/api/assessor/pre-assessment-queue', authenticateToken, async (req, res) => {
   try {
-    const submissions = await query(req.db, `SELECT p.*, q.name as quiz_name, c.task_name, c.category FROM pre_assessment_submissions p JOIN quizzes q ON p.quiz_id = q.id JOIN competencies c ON p.competency_id = c.id WHERE (p.assigned_assessor_id = ? OR p.assigned_assessor_id = 0) AND p.status = 'Assessor_Pending' ORDER BY p.created_at ASC`, [req.user.id]);
+    const isAdmin = (req.user.is_admin || req.user.is_superuser) ? 1 : 0;
+    const submissions = await query(
+      req.db,
+      `SELECT p.*, q.name as quiz_name, c.task_name, c.category 
+       FROM pre_assessment_submissions p 
+       JOIN quizzes q ON p.quiz_id = q.id 
+       JOIN competencies c ON p.competency_id = c.id 
+       WHERE p.status = 'Assessor_Pending'
+         AND (
+           p.assigned_assessor_id = ?
+           OR p.assigned_assessor_id = 0
+           OR p.assigned_assessor_id IS NULL
+           OR (
+             p.trainee_id != ?
+             AND (
+               ? = 1
+               OR p.competency_id IN (
+                 SELECT competency_id FROM staff_competency_progress 
+                 WHERE user_id = ? AND current_status IN ('x', 'x+')
+               )
+             )
+           )
+         )
+       ORDER BY p.created_at ASC`,
+      [req.user.id, req.user.id, isAdmin, req.user.id]
+    );
     const users = await query(sharedDb, `SELECT id, full_name FROM users`);
     const userMap = {}; users.forEach(u => userMap[u.id] = u.full_name);
     for (let sub of submissions) {
       sub.trainee_name = userMap[sub.trainee_id] || 'Unknown';
-      sub.assessor_name = userMap[sub.assigned_assessor_id] || (sub.assigned_assessor_id === 0 ? 'Any eligible assessor' : 'Unknown');
+      sub.assessor_name = userMap[sub.assigned_assessor_id] || (sub.assigned_assessor_id === 0 || !sub.assigned_assessor_id ? 'Any eligible assessor' : 'Unknown');
       sub.questions = await query(req.db, `SELECT id, question_text FROM quiz_questions WHERE quiz_id = ?`, [sub.quiz_id]);
       try { sub.trainee_responses = JSON.parse(sub.trainee_responses || '{}'); } catch (e) { sub.trainee_responses = {}; }
     }
@@ -1922,14 +1947,25 @@ app.put('/api/planning-logs/:id', authenticateToken, async (req, res) => {
 });
 
 app.delete('/api/planning-logs/:id', authenticateToken, async (req, res) => {
-  const trainee_id = req.user.id;
+  const userId = req.user.id;
+  const isAdmin = req.user.is_admin || req.user.is_superuser;
   const logId = req.params.id;
   try {
-    const log = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ? AND trainee_id = ?`, [logId, trainee_id]);
+    let log;
+    if (isAdmin) {
+      log = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ?`, [logId]);
+    } else {
+      log = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ? AND trainee_id = ?`, [logId, userId]);
+    }
     if (log.length === 0) return res.status(404).json({ error: "Log not found" });
-    if (!['Draft', 'Pending_Review', 'Needs_Amendment'].includes(log[0].status)) return res.status(400).json({ error: "Cannot delete an assessed log." });
+    if (!isAdmin && !['Draft', 'Pending_Review', 'Needs_Amendment'].includes(log[0].status)) {
+      return res.status(400).json({ error: "Cannot delete an assessed log." });
+    }
     await execute(req.db, `DELETE FROM patient_plan_logs WHERE id = ?`, [logId]);
-    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'CASE_LOG_DELETED', ?, ?)`, [trainee_id, log[0].competency_id, trainee_id, `Deleted case log ${log[0].patient_reference}`]);
+    const auditNote = (isAdmin && log[0].trainee_id !== userId) 
+      ? `Admin deleted case log ${log[0].patient_reference}`
+      : `Deleted case log ${log[0].patient_reference}`;
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'CASE_LOG_DELETED', ?, ?)`, [log[0].trainee_id, log[0].competency_id, userId, auditNote]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1957,10 +1993,31 @@ app.get('/api/competency/:id/planning-logs', authenticateToken, async (req, res)
 
 app.get('/api/assessor/feedback-queue', authenticateToken, async (req, res) => {
   try {
-    const logs = await query(req.db, `SELECT p.*, c.task_name, c.category FROM patient_plan_logs p JOIN competencies c ON p.competency_id = c.id WHERE p.assigned_assessor_id = ? AND p.status = 'Pending_Review' ORDER BY p.created_at ASC`, [req.user.id]);
+    const logs = await query(
+      req.db,
+      `SELECT p.*, c.task_name, c.category 
+       FROM patient_plan_logs p 
+       JOIN competencies c ON p.competency_id = c.id 
+       WHERE p.status = 'Pending_Review'
+         AND (
+           p.assigned_assessor_id = ?
+           OR (
+             p.trainee_id != ?
+             AND p.competency_id IN (
+               SELECT competency_id FROM staff_competency_progress 
+               WHERE user_id = ? AND current_status IN ('x', 'x+')
+             )
+           )
+         )
+       ORDER BY p.created_at ASC`,
+      [req.user.id, req.user.id, req.user.id]
+    );
     const users = await query(sharedDb, `SELECT id, full_name FROM users`);
     const userMap = {}; users.forEach(u => userMap[u.id] = u.full_name);
-    logs.forEach(l => l.trainee_name = userMap[l.trainee_id] || 'Unknown');
+    logs.forEach(l => {
+      l.trainee_name = userMap[l.trainee_id] || 'Unknown';
+      l.assigned_assessor_name = userMap[l.assigned_assessor_id] || 'Unassigned';
+    });
     res.json(logs);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2100,11 +2157,35 @@ app.post('/api/viva/submit-self', authenticateToken, async (req, res) => {
 
 app.get('/api/assessor/viva-queue', authenticateToken, async (req, res) => {
   try {
-    const vivas = await query(req.db, `SELECT v.*, q.name as quiz_name, c.task_name, c.category FROM viva_evaluations v JOIN quizzes q ON v.quiz_id = q.id JOIN competencies c ON v.competency_id = c.id WHERE v.assigned_assessor_id = ? AND v.status = 'Assessor_Pending' ORDER BY v.created_at ASC`, [req.user.id]);
+    const isAdmin = (req.user.is_admin || req.user.is_superuser) ? 1 : 0;
+    const vivas = await query(
+      req.db,
+      `SELECT v.*, q.name as quiz_name, c.task_name, c.category 
+       FROM viva_evaluations v 
+       JOIN quizzes q ON v.quiz_id = q.id 
+       JOIN competencies c ON v.competency_id = c.id 
+       WHERE v.status = 'Assessor_Pending'
+         AND (
+           v.assigned_assessor_id = ?
+           OR (
+             v.trainee_id != ?
+             AND (
+               ? = 1
+               OR v.competency_id IN (
+                 SELECT competency_id FROM staff_competency_progress 
+                 WHERE user_id = ? AND current_status IN ('x', 'x+')
+               )
+             )
+           )
+         )
+       ORDER BY v.created_at ASC`,
+      [req.user.id, req.user.id, isAdmin, req.user.id]
+    );
     const users = await query(sharedDb, `SELECT id, full_name FROM users`);
     const userMap = {}; users.forEach(u => userMap[u.id] = u.full_name);
     for (let v of vivas) {
       v.trainee_name = userMap[v.trainee_id] || 'Unknown';
+      v.assigned_assessor_name = userMap[v.assigned_assessor_id] || (v.assigned_assessor_id === 0 ? 'Any eligible assessor' : 'Unassigned');
       v.questions = await query(req.db, `SELECT id, question_text FROM quiz_questions WHERE quiz_id = ?`, [v.quiz_id]);
     }
     res.json(vivas);
@@ -2117,7 +2198,11 @@ app.put('/api/viva/submit-review/:id', authenticateToken, async (req, res) => {
   try {
     const viva = await query(req.db, `SELECT * FROM viva_evaluations WHERE id = ?`, [vivaId]);
     if (viva.length === 0) return res.status(404).json({ error: "Viva not found" });
-    if (viva[0].assigned_assessor_id !== req.user.id && !req.user.is_superuser) return res.status(403).json({ error: "Unauthorized" });
+    const trainerCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [req.user.id, viva[0].competency_id]);
+    const isEligibleTrainer = trainerCheck.length > 0 && ['x', 'x+'].includes(trainerCheck[0].current_status);
+    if (viva[0].assigned_assessor_id !== req.user.id && !req.user.is_superuser && !req.user.is_admin && !isEligibleTrainer) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
     
     const status = is_passed === 1 ? 'Completed' : 'Needs_Retake';
     await execute(req.db, `UPDATE viva_evaluations SET assessor_answers = ?, is_passed = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, 
@@ -3028,7 +3113,7 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
     });
 
     const categoryStats = {};
-    const timeStats = { overall: [], byCategory: {} };
+    const timeStats = { overall: [], byCategory: {}, byCompetency: {} };
     const evalStats = {
       section: [],
       overall: []
@@ -3166,6 +3251,43 @@ app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => 
             cumulativeCompleted: cumulative,
             overallPercent: totalAllApplicable > 0 ? Math.round((cumulative / totalAllApplicable) * 100) : 0
           });
+        });
+
+        timeStats.byCompetency = {};
+        competencies.forEach(c => {
+          let totalCompApplicable = 0;
+          users.forEach(u => {
+            let activeIn = [];
+            try { activeIn = JSON.parse(u.active_in || '[]'); } catch(e){}
+            if (activeIn.includes(dbName)) {
+              let tu = [];
+              try { tu = JSON.parse(c.target_users || '[]'); } catch(e) {}
+              if ((compTargetGroups[c.id] || []).includes(u.designation) || tu.includes(u.id)) {
+                totalCompApplicable++;
+              }
+            }
+          });
+
+          const validCompProgress = progress.filter(p => p.competency_id === c.id && p.date_signed_off && ['c', 'x'].includes(p.current_status));
+          const timeMapComp = {};
+          validCompProgress.forEach(p => {
+            const dateStr = p.date_signed_off.split('T')[0];
+            if (!timeMapComp[dateStr]) timeMapComp[dateStr] = 0;
+            timeMapComp[dateStr]++;
+          });
+
+          const sortedDatesComp = Object.keys(timeMapComp).sort();
+          let cumulativeComp = 0;
+          const compPoints = [];
+          sortedDatesComp.forEach(date => {
+            cumulativeComp += timeMapComp[date];
+            compPoints.push({
+              date,
+              cumulativeCompleted: cumulativeComp,
+              percent: totalCompApplicable > 0 ? Math.round((cumulativeComp / totalCompApplicable) * 100) : 0
+            });
+          });
+          timeStats.byCompetency[c.id] = compPoints;
         });
       }
     }
