@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Competency Matrix App</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
   <script>
@@ -13,11 +16,11 @@
     };
   </script>
   <!-- Load Tailwind CSS -->
-  <script src="js/tailwindcss.js"></script>
+  <script src="js/tailwindcss.js?v=2.42"></script>
   <!-- Load Vue.js -->
-  <script src="js/vue.global.prod.js"></script>
+  <script src="js/vue.global.prod.js?v=2.42"></script>
   <!-- Load Chart.js -->
-  <script src="js/chart.js"></script>
+  <script src="js/chart.js?v=2.42"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans p-8">
   <div id="app" class="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-6">
@@ -2191,7 +2194,7 @@
                 </div>
                 <div v-if="showingPlanLogs" class="flex flex-col gap-1.5 mt-1">
                   <!-- Case Log Progression Graph -->
-                  <div v-if="scoredPlanningLogs.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-1 shadow-sm">
+                  <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-1 shadow-sm">
                     <div class="flex justify-between items-center mb-1.5 flex-wrap gap-2">
                       <span class="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
                         <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2216,19 +2219,22 @@
                         <span class="text-[11px] text-gray-500 font-medium hidden sm:inline">Target: Level 3</span>
                       </div>
                     </div>
-                    <div class="relative h-56 w-full bg-white rounded border border-gray-100 p-3 shadow-inner">
-                      <canvas id="planLogsProgressionChartCanvas"></canvas>
+                    <template v-if="scoredPlanningLogs.length > 0">
+                      <div class="relative h-56 w-full bg-white rounded border border-gray-100 p-3 shadow-inner">
+                        <canvas id="planLogsProgressionChartCanvas"></canvas>
+                      </div>
+                      <div class="text-[11px] text-gray-500 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 mt-2 pt-1.5 border-t border-gray-200/60">
+                        <span><strong class="text-gray-700 font-semibold">1:</strong> Observation</span>
+                        <span><strong class="text-gray-700 font-semibold">2:</strong> Direct</span>
+                        <span class="text-green-700 font-medium"><strong class="font-bold">3:</strong> Indirect (Met)</span>
+                        <span><strong class="text-gray-700 font-semibold">4:</strong> Independent</span>
+                        <span><strong class="text-gray-700 font-semibold">5:</strong> Support Others</span>
+                      </div>
+                    </template>
+                    <div v-else class="h-28 flex flex-col items-center justify-center bg-white rounded border border-gray-100 text-xs text-gray-400 italic p-3 text-center">
+                      <span>No scored case logs recorded yet to display supervision progression graph.</span>
+                      <span class="text-[11px] text-gray-400 not-italic mt-1">Logs will plot on the graph once reviewed and scored (Level 1–5) by a trainer or assessor.</span>
                     </div>
-                    <div class="text-[11px] text-gray-500 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 mt-2 pt-1.5 border-t border-gray-200/60">
-                      <span><strong class="text-gray-700 font-semibold">1:</strong> Observation</span>
-                      <span><strong class="text-gray-700 font-semibold">2:</strong> Direct</span>
-                      <span class="text-green-700 font-medium"><strong class="font-bold">3:</strong> Indirect (Met)</span>
-                      <span><strong class="text-gray-700 font-semibold">4:</strong> Independent</span>
-                      <span><strong class="text-gray-700 font-semibold">5:</strong> Support Others</span>
-                    </div>
-                  </div>
-                  <div v-else-if="planningLogs.length > 0" class="text-xs text-gray-500 italic p-2.5 bg-gray-50 rounded border border-gray-200 mb-1">
-                    No scored case logs recorded yet to display supervision progression.
                   </div>
                   <div v-for="log in planningLogs" :key="log.id" class="bg-gray-50 rounded border border-gray-200 text-xs overflow-hidden transition shadow-sm">
                     <!-- Compact Row (Click to toggle expand) -->
@@ -3165,7 +3171,7 @@
         const eligibleAssessors = ref([]);
         const newPlanLog = ref({ patient_reference: '', log_date: new Date().toISOString().split('T')[0], trainee_comments: '', assigned_assessor_id: '' });
         const showingPlanLogs = ref(false);
-        const planLogsChartMode = ref('date');
+        const planLogsChartMode = ref('sequential');
         const expandedCaseLogIds = ref({});
         const activeLogReview = ref(null);
         const editingPlanLogId = ref(null);
@@ -5280,6 +5286,7 @@
           signoffComment.value = '';
           showQaEvidenceFor.value = null;
           showingPlanLogs.value = false;
+          planLogsChartMode.value = 'sequential';
           expandedCaseLogIds.value = {};
           showingVivaFor.value = null;
 
@@ -5313,6 +5320,7 @@
           }await fetchEvaluations(u, comp);
           if (comp.allow_file_uploads) await fetchFiles(u.id, comp.id);
           if (comp.required_plan_count > 0) {
+            showingPlanLogs.value = true;
             await fetchPlanningLogs(u.id, comp.id);
           }
           
@@ -5322,6 +5330,9 @@
           takingEval.value = null;
           nextTick(() => {
             renderRadarChart();
+            if (comp.required_plan_count > 0) {
+              renderPlanLogsProgressionChart();
+            }
           });
         };
         const closeModal = () => { 
@@ -5329,6 +5340,7 @@
           takingQuiz.value = false; 
           takingPreAssessment.value = false;
           showingPlanLogs.value = false;
+          planLogsChartMode.value = 'sequential';
           expandedCaseLogIds.value = {};
           showingVivaFor.value = null;
           showQaEvidenceFor.value = null; 
