@@ -1710,10 +1710,10 @@
                 <div class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
                   <span class="text-gray-800 font-medium text-sm">Pre-Training Evaluation</span>
                   <div class="flex items-center gap-2">
-                    <button v-if="selectedCell.user.id === user.id && !latestPreEvaluation" 
-                            @click="takingEval = 'pre'" 
+                    <button v-if="selectedCell.user.id === user.id" 
+                            @click="startEvaluation('pre')" 
                             class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
-                      Start
+                      {{ latestPreEvaluation ? 'Retake' : 'Start' }}
                     </button>
                     <span v-if="latestPreEvaluation" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Completed</span>
                     <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
@@ -1724,21 +1724,21 @@
                   <h4 class="font-bold text-gray-800 mb-3 border-b pb-2">Pre-Training Questionnaire</h4>
                   
                   <div class="mb-4 bg-white p-3 border rounded">
-                    <label class="block text-sm font-semibold text-gray-800 mb-1">A: Practical Execution</label>
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">A: Practical Execution <span v-if="latestPreEvaluation" class="text-xs font-normal text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded ml-2">Current Response: Level {{ latestPreEvaluation.score_a }}</span></label>
                     <p class="text-xs text-gray-600 mb-2">How would you rate your current ability to safely and independently execute the practical steps of this task?</p>
                     <input type="range" min="1" max="5" v-model.number="evaluationScores.a" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                     <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.a }} -</span> {{ evalTexts.a[evaluationScores.a] }}</div>
                   </div>
 
                   <div class="mb-4 bg-white p-3 border rounded">
-                    <label class="block text-sm font-semibold text-gray-800 mb-1">B: Theoretical & Protocol Knowledge</label>
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">B: Theoretical & Protocol Knowledge <span v-if="latestPreEvaluation" class="text-xs font-normal text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded ml-2">Current Response: Level {{ latestPreEvaluation.score_b }}</span></label>
                     <p class="text-xs text-gray-600 mb-2">How confident are you in your understanding of the underlying theory, physics principles, and local IR(ME)R protocols governing this task?</p>
                     <input type="range" min="1" max="5" v-model.number="evaluationScores.b" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                     <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.b }} -</span> {{ evalTexts.b[evaluationScores.b] }}</div>
                   </div>
 
                   <div class="mb-4 bg-white p-3 border rounded">
-                    <label class="block text-sm font-semibold text-gray-800 mb-1">C: Independent Troubleshooting</label>
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">C: Independent Troubleshooting <span v-if="latestPreEvaluation" class="text-xs font-normal text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded ml-2">Current Response: Level {{ latestPreEvaluation.score_c }}</span></label>
                     <p class="text-xs text-gray-600 mb-2">How confident are you in your ability to independently troubleshoot unexpected issues, equipment faults, or measurement tolerances during this task?</p>
                     <input type="range" min="1" max="5" v-model.number="evaluationScores.c" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                     <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.c }} -</span> {{ evalTexts.c[evaluationScores.c] }}</div>
@@ -2181,7 +2181,7 @@
                 <div class="flex items-center justify-between" :class="showingPlanLogs ? 'border-b pb-1' : ''">
                   <span class="text-gray-800 font-medium text-sm">Case Logs</span>
                   <div class="flex items-center gap-2">
-                    <button @click="showingPlanLogs = !showingPlanLogs" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded font-bold shadow-sm transition whitespace-nowrap">
+                    <button @click="showingPlanLogs = !showingPlanLogs; nextTick(() => renderPlanLogsProgressionChart())" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded font-bold shadow-sm transition whitespace-nowrap">
                       {{ showingPlanLogs ? 'Hide Logs' : 'View Logs' }}
                     </button>
                     <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ planningLogs.filter(l => l.status === 'Completed' && l.score >= 3).length }} / {{ selectedCell.comp.required_plan_count }} Met</span>
@@ -2190,6 +2190,46 @@
                   </div>
                 </div>
                 <div v-if="showingPlanLogs" class="flex flex-col gap-1.5 mt-1">
+                  <!-- Case Log Progression Graph -->
+                  <div v-if="scoredPlanningLogs.length > 0" class="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-1 shadow-sm">
+                    <div class="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+                      <span class="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                        Supervision Level Progression
+                      </span>
+                      <div class="flex items-center gap-3">
+                        <!-- Toggle By Date / Sequential -->
+                        <div class="flex items-center bg-gray-200/90 p-0.5 rounded text-[11px] font-medium shadow-inner">
+                          <button type="button" @click="planLogsChartMode = 'date'; renderPlanLogsProgressionChart()" 
+                            :class="planLogsChartMode === 'date' ? 'bg-white text-blue-700 shadow-sm font-bold' : 'text-gray-600 hover:text-gray-900'"
+                            class="px-2 py-0.5 rounded transition">
+                            By Date
+                          </button>
+                          <button type="button" @click="planLogsChartMode = 'sequential'; renderPlanLogsProgressionChart()" 
+                            :class="planLogsChartMode === 'sequential' ? 'bg-white text-blue-700 shadow-sm font-bold' : 'text-gray-600 hover:text-gray-900'"
+                            class="px-2 py-0.5 rounded transition">
+                            Sequential
+                          </button>
+                        </div>
+                        <span class="text-[11px] text-gray-500 font-medium hidden sm:inline">Target: Level 3</span>
+                      </div>
+                    </div>
+                    <div class="relative h-56 w-full bg-white rounded border border-gray-100 p-3 shadow-inner">
+                      <canvas id="planLogsProgressionChartCanvas"></canvas>
+                    </div>
+                    <div class="text-[11px] text-gray-500 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 mt-2 pt-1.5 border-t border-gray-200/60">
+                      <span><strong class="text-gray-700 font-semibold">1:</strong> Observation</span>
+                      <span><strong class="text-gray-700 font-semibold">2:</strong> Direct</span>
+                      <span class="text-green-700 font-medium"><strong class="font-bold">3:</strong> Indirect (Met)</span>
+                      <span><strong class="text-gray-700 font-semibold">4:</strong> Independent</span>
+                      <span><strong class="text-gray-700 font-semibold">5:</strong> Support Others</span>
+                    </div>
+                  </div>
+                  <div v-else-if="planningLogs.length > 0" class="text-xs text-gray-500 italic p-2.5 bg-gray-50 rounded border border-gray-200 mb-1">
+                    No scored case logs recorded yet to display supervision progression.
+                  </div>
                   <div v-for="log in planningLogs" :key="log.id" class="bg-gray-50 rounded border border-gray-200 text-xs overflow-hidden transition shadow-sm">
                     <!-- Compact Row (Click to toggle expand) -->
                     <div @click="toggleExpandedCaseLog(log.id)" class="flex justify-between items-center p-2 cursor-pointer hover:bg-gray-100 transition select-none">
@@ -2240,38 +2280,40 @@
                 <div class="flex items-center justify-between bg-white border border-gray-200 shadow-sm p-3 rounded-md">
                   <span class="text-gray-800 font-medium text-sm">Post-Training Evaluation</span>
                   <div class="flex items-center gap-2">
-                    <button v-if="selectedCell.user.id === user.id && (!latestPostEvaluation || (latestPostEvaluation.score_a < 3 || latestPostEvaluation.score_b < 3 || latestPostEvaluation.score_c < 3))" 
-                            @click="takingEval = 'post'" 
+                    <button v-if="selectedCell.user.id === user.id" 
+                            @click="startEvaluation('post')" 
                             :disabled="!isTrainingPrerequisitesMet(selectedCell.user.id, selectedCell.comp.id)"
                             :class="['text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap', isTrainingPrerequisitesMet(selectedCell.user.id, selectedCell.comp.id) ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 cursor-pointer' : 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-70']"
                             :title="!isTrainingPrerequisitesMet(selectedCell.user.id, selectedCell.comp.id) ? 'You must complete all other prerequisites before taking this evaluation.' : ''">
                       {{ latestPostEvaluation ? 'Retake' : 'Start' }}
                     </button>
-                    <span v-if="latestPostEvaluation && latestPostEvaluation.score_a >= 3 && latestPostEvaluation.score_b >= 3 && latestPostEvaluation.score_c >= 3" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Passed</span>
-                    <span v-else-if="latestPostEvaluation && (latestPostEvaluation.score_a < 3 || latestPostEvaluation.score_b < 3 || latestPostEvaluation.score_c < 3)" class="text-red-600 font-bold text-sm bg-red-50 px-2 py-1 rounded whitespace-nowrap">✗ Failed</span>
+                    <span v-if="latestPostEvaluation" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Completed</span>
                     <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
                   </div>
+                </div>
+                <div v-if="selectedCell.user.id === user.id && latestPostEvaluation && (latestPostEvaluation.score_a < 3 || latestPostEvaluation.score_b < 3 || latestPostEvaluation.score_c < 3)" class="text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1 rounded border border-amber-200 mt-1">
+                  Note: Scores of 3 or higher on all questions are required to request an assessment. You can retake this evaluation at any time.
                 </div>
 
                 <div v-if="takingEval === 'post'" class="mt-2 p-4 bg-gray-50 border rounded-lg shadow-inner">
                   <h4 class="font-bold text-gray-800 mb-3 border-b pb-2">Post-Training Questionnaire</h4>
                   
                   <div class="mb-4 bg-white p-3 border rounded">
-                    <label class="block text-sm font-semibold text-gray-800 mb-1">A: Practical Execution</label>
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">A: Practical Execution <span v-if="latestPostEvaluation" class="text-xs font-normal text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded ml-2">Current Response: Level {{ latestPostEvaluation.score_a }}</span></label>
                     <p class="text-xs text-gray-600 mb-2">How would you rate your current ability to safely and independently execute the practical steps of this task?</p>
                     <input type="range" min="1" max="5" v-model.number="evaluationScores.a" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                     <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.a }} -</span> {{ evalTexts.a[evaluationScores.a] }}</div>
                   </div>
 
                   <div class="mb-4 bg-white p-3 border rounded">
-                    <label class="block text-sm font-semibold text-gray-800 mb-1">B: Theoretical & Protocol Knowledge</label>
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">B: Theoretical & Protocol Knowledge <span v-if="latestPostEvaluation" class="text-xs font-normal text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded ml-2">Current Response: Level {{ latestPostEvaluation.score_b }}</span></label>
                     <p class="text-xs text-gray-600 mb-2">How confident are you in your understanding of the underlying theory, physics principles, and local IR(ME)R protocols governing this task?</p>
                     <input type="range" min="1" max="5" v-model.number="evaluationScores.b" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                     <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.b }} -</span> {{ evalTexts.b[evaluationScores.b] }}</div>
                   </div>
 
                   <div class="mb-4 bg-white p-3 border rounded">
-                    <label class="block text-sm font-semibold text-gray-800 mb-1">C: Independent Troubleshooting</label>
+                    <label class="block text-sm font-semibold text-gray-800 mb-1">C: Independent Troubleshooting <span v-if="latestPostEvaluation" class="text-xs font-normal text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded ml-2">Current Response: Level {{ latestPostEvaluation.score_c }}</span></label>
                     <p class="text-xs text-gray-600 mb-2">How confident are you in your ability to independently troubleshoot unexpected issues, equipment faults, or measurement tolerances during this task?</p>
                     <input type="range" min="1" max="5" v-model.number="evaluationScores.c" class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                     <div class="text-sm font-medium text-blue-800 bg-blue-50 p-2 rounded border border-blue-100 mt-2"><span class="font-bold">{{ evaluationScores.c }} -</span> {{ evalTexts.c[evaluationScores.c] }}</div>
@@ -2284,9 +2326,19 @@
                 </div>
               </template>
 
-              <div v-if="selectedCell.user.id === user.id && (getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' || getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 't')" class="mt-2 bg-purple-50 border border-purple-200 p-3 rounded flex flex-col gap-2">
-                <p class="text-sm font-semibold text-purple-800">{{ getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' ? 'You have met all prerequisites. Are you ready for an assessment?' : 'Ready to request an assessment?' }}</p>
+              <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm'" class="mt-2 bg-purple-50 border border-purple-200 p-3 rounded flex flex-col gap-2">
+                <p class="text-sm font-semibold text-purple-800">You have met all prerequisites. Are you ready for an assessment?</p>
                 <button @click="requestAssessment" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">Request Assessment</button>
+              </div>
+
+              <div v-else-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 't'" class="mt-2 bg-gray-50 border border-gray-200 p-3 rounded flex items-center justify-between text-xs text-gray-600">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                  </svg>
+                  All prerequisites must be completed before an assessment can be requested.
+                </span>
+                <span class="font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded whitespace-nowrap">Training In Progress</span>
               </div>
               
               <div v-if="selectedCell.user.id === user.id && getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'a'" class="mt-2 bg-orange-50 border border-orange-200 p-3 rounded flex flex-col gap-2">
@@ -3113,6 +3165,7 @@
         const eligibleAssessors = ref([]);
         const newPlanLog = ref({ patient_reference: '', log_date: new Date().toISOString().split('T')[0], trainee_comments: '', assigned_assessor_id: '' });
         const showingPlanLogs = ref(false);
+        const planLogsChartMode = ref('date');
         const expandedCaseLogIds = ref({});
         const activeLogReview = ref(null);
         const editingPlanLogId = ref(null);
@@ -3753,6 +3806,20 @@
           const evals = cellEvaluations.value.filter(e => e.evaluation_type === 'post');
           return evals.length > 0 ? evals[0] : null;
         });
+
+        const startEvaluation = (type) => {
+          const existingEval = type === 'pre' ? latestPreEvaluation.value : latestPostEvaluation.value;
+          if (existingEval) {
+            evaluationScores.value = {
+              a: Number(existingEval.score_a) || 1,
+              b: Number(existingEval.score_b) || 1,
+              c: Number(existingEval.score_c) || 1
+            };
+          } else {
+            evaluationScores.value = { a: 1, b: 1, c: 1 };
+          }
+          takingEval.value = type;
+        };
 
         const isAssessorForSelected = computed(() => {
           if (!user.value || !selectedCell.value) return false;
@@ -5064,13 +5131,29 @@
         const getProgressStatus = (userId, compId) => {
           const p = progressMap.value[`${userId}_${compId}`];
           const rawStatus = p && p.current_status ? String(p.current_status).toLowerCase() : '';
-          if (['a', 'c', 'x', 'm'].includes(rawStatus)) return rawStatus;
+          if (['a', 'c', 'x'].includes(rawStatus)) return rawStatus;
           
           const u = usersMap.value[userId];
           const c = competenciesMap.value[compId];
           if (!u || !c || !isApplicable(u, c)) return '';
           
-          if (isTrainingPrerequisitesMet(userId, compId)) return 'm';
+          const isPostEvalPassed = () => {
+            if (!c.requires_post_eval) return true;
+            const evalList = (userId === user.value?.id ? myEvaluations.value : (cellEvaluations.value || []));
+            const postEvals = (evalList || [])
+              .filter(e => e.competency_id === c.id && e.evaluation_type === 'post')
+              .sort((a, b) => new Date(b.submission_date) - new Date(a.submission_date));
+            if (postEvals.length === 0) return false;
+            const latest = postEvals[0];
+            return latest.score_a >= 3 && latest.score_b >= 3 && latest.score_c >= 3;
+          };
+
+          if (rawStatus === 'm') {
+            if (!isPostEvalPassed()) return 't';
+            return 'm';
+          }
+          
+          if (isTrainingPrerequisitesMet(userId, compId) && isPostEvalPassed()) return 'm';
           
           return 't';
         };
@@ -5253,6 +5336,10 @@
             radarChartInstance.destroy();
             radarChartInstance = null;
           }
+          if (planLogsProgressionChartInstance) {
+            planLogsProgressionChartInstance.destroy();
+            planLogsProgressionChartInstance = null;
+          }
         };
 
         let radarChartInstance = null;
@@ -5308,6 +5395,218 @@
             nextTick(() => {
               renderRadarChart();
             });
+          }
+        });
+
+        const scoredPlanningLogs = computed(() => {
+          if (!planningLogs.value || !planningLogs.value.length) return [];
+          return planningLogs.value
+            .filter(l => l.score !== null && l.score !== undefined && Number(l.score) >= 1)
+            .slice()
+            .sort((a, b) => new Date(a.created_at || a.log_date || 0) - new Date(b.created_at || b.log_date || 0));
+        });
+
+        let planLogsProgressionChartInstance = null;
+        const renderPlanLogsProgressionChart = () => {
+          if (planLogsProgressionChartInstance) {
+            planLogsProgressionChartInstance.destroy();
+            planLogsProgressionChartInstance = null;
+          }
+
+          if (!showingPlanLogs.value) return;
+
+          const canvas = document.getElementById('planLogsProgressionChartCanvas');
+          if (!canvas) return;
+
+          const logs = scoredPlanningLogs.value;
+          if (!logs || logs.length === 0) return;
+
+          const isDateMode = planLogsChartMode.value === 'date';
+
+          let dataPoints = [];
+          let minX, maxX;
+
+          if (isDateMode) {
+            // By Date: Proportional calendar date timestamp
+            dataPoints = logs.map(l => {
+              const dStr = (l.log_date || l.created_at || '').split('T')[0].split(' ')[0];
+              const [y, m, d] = dStr ? dStr.split('-').map(Number) : [2026, 1, 1];
+              const baseTime = new Date(y, m - 1, d, 12, 0, 0).getTime();
+              return {
+                x: baseTime,
+                y: Number(l.score),
+                log: l
+              };
+            });
+
+            // If multiple logs share both the exact same date AND same score, add a micro-spread (30 mins) so both dots are visible
+            const sameDateScoreCounts = {};
+            dataPoints.forEach(p => {
+              const key = `${p.x}_${p.y}`;
+              sameDateScoreCounts[key] = (sameDateScoreCounts[key] || 0) + 1;
+            });
+            const sameDateScoreIdx = {};
+            dataPoints.forEach(p => {
+              const key = `${p.x}_${p.y}`;
+              const total = sameDateScoreCounts[key];
+              if (total > 1) {
+                const curIdx = sameDateScoreIdx[key] || 0;
+                sameDateScoreIdx[key] = curIdx + 1;
+                p.x = p.x + (curIdx - (total - 1) / 2) * 1800000;
+              }
+            });
+
+            const xValues = dataPoints.map(p => p.x);
+            const rawMinX = Math.min(...xValues);
+            const rawMaxX = Math.max(...xValues);
+            const rangeX = rawMaxX - rawMinX;
+            const paddingX = rangeX === 0 ? 86400000 : Math.max(86400000 * 0.7, rangeX * 0.08);
+            minX = rawMinX - paddingX;
+            maxX = rawMaxX + paddingX;
+          } else {
+            // Sequential: Equal horizontal step for each log in order 1..N
+            dataPoints = logs.map((l, index) => ({
+              x: index + 1,
+              y: Number(l.score),
+              log: l
+            }));
+            minX = 0.5;
+            maxX = dataPoints.length + 0.5;
+          }
+
+          const pointBgColors = dataPoints.map(p => p.y >= 3 ? '#10B981' : '#F59E0B');
+          const pointBorderColors = dataPoints.map(p => p.y >= 3 ? '#059669' : '#D97706');
+
+          const ctx = canvas.getContext('2d');
+          planLogsProgressionChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+              datasets: [
+                {
+                  label: 'Supervision Level',
+                  data: dataPoints,
+                  borderColor: '#3B82F6',
+                  backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                  borderWidth: 2,
+                  fill: false,
+                  tension: 0.15,
+                  pointRadius: 6,
+                  pointHoverRadius: 8,
+                  pointBackgroundColor: pointBgColors,
+                  pointBorderColor: pointBorderColors,
+                  pointBorderWidth: 2,
+                  clip: false
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              layout: {
+                padding: {
+                  top: 14,
+                  bottom: 14,
+                  left: 14,
+                  right: 14
+                }
+              },
+              interaction: {
+                mode: 'nearest',
+                intersect: false
+              },
+              plugins: {
+                legend: {
+                  display: false
+                },
+                tooltip: {
+                  callbacks: {
+                    title: function(items) {
+                      if (!items.length) return '';
+                      const raw = items[0].raw;
+                      const log = raw && raw.log ? raw.log : null;
+                      if (!log) return '';
+                      const logIndex = logs.indexOf(log);
+                      const prefix = logIndex !== -1 ? `Log #${logIndex + 1} • ` : '';
+                      return `${prefix}Submitted: ${formatDate(log.created_at, true) || formatDate(log.log_date) || 'Unknown'}`;
+                    },
+                    label: function(context) {
+                      const raw = context.raw;
+                      const log = raw && raw.log ? raw.log : null;
+                      if (!log) return '';
+                      const lines = [
+                        `Supervision: ${getSupervisionLabel(log.score)}`,
+                        `Status: ${Number(log.score) >= 3 ? 'Met (≥ Level 3)' : 'Developing (< Level 3)'}`,
+                        `Patient Ref: ${log.patient_reference || 'N/A'}`
+                      ];
+                      if (log.assigned_assessor_id) {
+                        lines.push(`Assessor: ${getAssessorName(log.assigned_assessor_id)}`);
+                      }
+                      return lines;
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: {
+                  type: 'linear',
+                  min: 0.5,
+                  max: 5.5,
+                  ticks: {
+                    stepSize: 1,
+                    precision: 0,
+                    callback: function(val) {
+                      return [1, 2, 3, 4, 5].includes(val) ? val : '';
+                    },
+                    font: {
+                      size: 11,
+                      weight: 'bold'
+                    },
+                    color: '#374151'
+                  },
+                  grid: {
+                    color: function(context) {
+                      if (context.tick && context.tick.value === 3) {
+                        return 'rgba(16, 185, 129, 0.45)';
+                      }
+                      return 'rgba(229, 231, 235, 0.8)';
+                    },
+                    lineWidth: function(context) {
+                      return (context.tick && context.tick.value === 3) ? 2 : 1;
+                    }
+                  },
+                  title: {
+                    display: true,
+                    text: 'Supervision Level',
+                    color: '#4B5563',
+                    font: { size: 11, weight: 'bold' }
+                  }
+                },
+                x: {
+                  type: 'linear',
+                  min: minX,
+                  max: maxX,
+                  grid: {
+                    display: false
+                  },
+                  ticks: {
+                    display: false
+                  }
+                }
+              }
+            }
+          });
+        };
+
+        watch([showingPlanLogs, planningLogs, planLogsChartMode], () => {
+          if (showingPlanLogs.value) {
+            nextTick(() => {
+              renderPlanLogsProgressionChart();
+            });
+          } else {
+            if (planLogsProgressionChartInstance) {
+              planLogsProgressionChartInstance.destroy();
+              planLogsProgressionChartInstance = null;
+            }
           }
         });
 
@@ -6842,9 +7141,7 @@
             takingEval.value = null;
             evaluationScores.value = { a: 1, b: 1, c: 1 };
             
-            if (type === 'pre') {
-              await syncProgress(targetCompId, targetUserId);
-            }
+            await syncProgress(targetCompId, targetUserId);
             
             await fetchMyEvaluations();
             await fetchData();
@@ -6853,11 +7150,7 @@
             await fetchEvaluations(currentUser, currentComp);
             openModal(currentUser, currentComp);
             
-            if (resultData.promotedToA) {
-              customAlert("Self-evaluation submitted successfully. Your status has automatically transitioned to Assessment Pending (A).", "Assessment Requested");
-            } else {
-              customAlert("Self-evaluation submitted successfully.", "Success");
-            }
+            customAlert("Self-evaluation submitted successfully.", "Success");
           } catch (err) {
             customAlert(err.message, "Error");
           }
@@ -8165,7 +8458,7 @@
                  login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable, canAccessUserCompetency,
                  currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, moveReadingPrereq, dragStartCompetency, dropCompetency, availableCategories, overviewAvailableCategories,
                  categoryOrder, dragStartCategory, dropCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
-                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, canAssessorOverride, getSupervisionLabel, radarChartCanvas,
+                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, startEvaluation, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, canAssessorOverride, getSupervisionLabel, radarChartCanvas,
                  compListFilterCat, filteredAndSortedCompetencies, 
                  newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort,
                  quizLibrary, activeLibraryQuiz, isEditingQuiz, createNewLibraryQuiz, editLibraryQuiz, cancelEditLibraryQuiz, saveLibraryQuiz, deleteLibraryQuiz, cellQuizzes, takingQuiz, quizData, quizAnswers, loadQuizForTaking, submitQuiz, quizStats,
@@ -8185,7 +8478,7 @@
                   qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, exportReportScope, downloadOverviewMatrixPDF, isDownloadingMatrixPdf, downloadAllTrainingRecordsZip, isDownloadingTrainingRecordsZip, downloadCompetencyTemplatesZip, isDownloadingCompetencyTemplatesZip, downloadUserCompetencyFormsZip, isDownloadingUserCompetencyFormsZip, downloadMasterBackupBundleZip, isDownloadingMasterBundleZip, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
                   selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
                   uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, expandedSectionUploads, loadingSectionUserStats, sectionUserStats, toggleSectionUploadsExpand, activeLogReview, openLogReviewModal, submitLogReviewModal, saveDraftLogReviewModal, saveDraftLogReview, adminDeleteLogReview,
-                  auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
+                  auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
                    logbookCompetencies, allLogbookCompetencies, hasLogbookCompetencies, logbookActiveTrainingOnly, activeTrainingCompsCount, totalLogbookCompsCount, logbookStatusFilters, toggleLogbookStatusFilter, isLogbookFilterDefault, logbookStatusCounts, getApprovedLogsCount, getSubmissionsCount, getCompPlanningLogs, isTrainerInAny, isCompetentToTrainAny,
                  vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal,
                  preAssessmentQueue, fetchPreAssessmentQueue, preAssessmentSummaries, fetchPreAssessmentSummaries, takingPreAssessment, preAssessmentData, preAssessmentAnswers, preAssessmentAssessorId, preAssessmentSubmitToAll, preAssessmentEligibleAssessors, canSubmitPreAssessment, showingPreAssessmentFor, togglePreAssessmentReview, getLatestPreAssessment, loadPreAssessmentForTaking, submitPreAssessmentSelf, submitPreAssessmentReview, activePreAssessmentReview, openPreAssessmentReview, submitPreAssessmentReviewModal, activePreAssessmentHistory, preAssessmentHistory, openPreAssessmentHistory, closePreAssessmentHistory, getPreAssessmentResponse, getPreAssessmentQuestionReview, groupedPreAssessmentQueue,
