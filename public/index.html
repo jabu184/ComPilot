@@ -432,9 +432,16 @@
                       <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold text-xs bg-gray-50 px-2 py-1 rounded border border-gray-200 shadow-sm">{{ log.status === 'Needs_Amendment' ? 'Developing' : log.status.replace('_', ' ') }}</span>
                     </div>
                   </div>
-                  <div class="text-xs text-gray-500 mb-2">
+                  <div class="text-xs text-gray-500 mb-2 flex items-center gap-1.5 flex-wrap">
                     <span v-if="log.status !== 'Draft'">Sent to <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong> on {{ formatDate(log.created_at, true) }}</span>
                     <span v-else>Draft saved on {{ formatDate(log.created_at, true) }}</span>
+                    <template v-if="log.reviewed_at">
+                      <span class="text-gray-300">•</span>
+                      <span>Completed: <strong class="text-gray-800">{{ formatDate(log.reviewed_at, true) }}</strong></span>
+                      <span v-if="formatDuration(log.created_at, log.reviewed_at)" class="text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
+                        ⏱ {{ formatDuration(log.created_at, log.reviewed_at) }} turnaround
+                      </span>
+                    </template>
                   </div>
                   <p class="text-gray-700 mt-1 mb-2 italic whitespace-pre-wrap">{{ log.trainee_comments }}</p>
                   <div v-if="log.assessor_comments" class="border-t border-gray-100 pt-2 mt-2 bg-blue-50/50 p-2.5 rounded border border-blue-100">
@@ -2239,11 +2246,14 @@
                   <div v-for="log in planningLogs" :key="log.id" class="bg-gray-50 rounded border border-gray-200 text-xs overflow-hidden transition shadow-sm">
                     <!-- Compact Row (Click to toggle expand) -->
                     <div @click="toggleExpandedCaseLog(log.id)" class="flex justify-between items-center p-2 cursor-pointer hover:bg-gray-100 transition select-none">
-                      <span class="font-medium text-gray-700 flex items-center gap-1.5">
+                      <span class="font-medium text-gray-700 flex items-center gap-1.5 flex-wrap">
                         <span class="text-gray-400 text-[9px] transform transition-transform duration-150 inline-block" :class="expandedCaseLogIds[log.id] ? 'rotate-90' : ''">▶</span>
                         <strong class="text-gray-900">Ref: {{ log.patient_reference }}</strong>
                         <span v-if="log.log_date" class="text-gray-500 font-normal">({{ formatDate(log.log_date) }})</span>
-                        <span class="text-gray-500 font-normal ml-1">• Reviewed By: {{ getAssessorName(log.assigned_assessor_id) }}</span>
+                        <span v-if="log.assigned_assessor_id" class="text-gray-500 font-normal ml-1">
+                          • {{ log.status === 'Completed' ? 'Completed by' : (log.status === 'Needs_Amendment' ? 'Reviewed by' : 'Assigned to') }}: {{ getAssessorName(log.assigned_assessor_id) }}
+                        </span>
+                        <span v-if="log.reviewed_at" class="text-gray-500 font-normal ml-0.5">({{ formatDate(log.reviewed_at, true) }})</span>
                       </span>
                       <span class="flex items-center gap-2">
                         <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold">
@@ -2254,8 +2264,17 @@
 
                     <!-- Collapsible Full Details -->
                     <div v-if="expandedCaseLogIds[log.id]" class="p-3 bg-white border-t border-gray-200 flex flex-col gap-2.5">
-                      <div class="flex justify-between items-center text-[11px] text-gray-500 border-b border-gray-100 pb-1.5">
-                        <span>Submitted on: <strong>{{ formatDate(log.created_at, true) }}</strong></span>
+                      <div class="flex justify-between items-center text-[11px] text-gray-500 border-b border-gray-100 pb-1.5 flex-wrap gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span>Submitted: <strong>{{ formatDate(log.created_at, true) }}</strong></span>
+                          <template v-if="log.reviewed_at">
+                            <span class="text-gray-300">•</span>
+                            <span>Completed: <strong class="text-gray-800">{{ formatDate(log.reviewed_at, true) }}</strong></span>
+                            <span v-if="formatDuration(log.created_at, log.reviewed_at)" class="text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
+                              ⏱ {{ formatDuration(log.created_at, log.reviewed_at) }} turnaround
+                            </span>
+                          </template>
+                        </div>
                         <button v-if="isAssessorForSelected || user.is_admin || user.is_superuser" @click.stop="openLogReviewModal(log)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-xs shadow-sm transition">
                           Review / Comment
                         </button>
@@ -2716,6 +2735,10 @@
         <div class="mb-4 text-sm bg-gray-50 p-3 rounded border border-gray-200">
           <strong>Ref:</strong> {{ activeLogReview.patient_reference }} <span v-if="activeLogReview.log_date" class="text-gray-500 ml-1">({{ formatDate(activeLogReview.log_date) }})</span><br>
           <strong>Submitted:</strong> {{ formatDate(activeLogReview.created_at, true) }}
+          <template v-if="activeLogReview.reviewed_at">
+            <br><strong>Completed:</strong> {{ formatDate(activeLogReview.reviewed_at, true) }}
+            <span v-if="formatDuration(activeLogReview.created_at, activeLogReview.reviewed_at)" class="text-blue-700 text-xs font-semibold ml-1">({{ formatDuration(activeLogReview.created_at, activeLogReview.reviewed_at) }} turnaround)</span>
+          </template>
         </div>
         <div class="mb-4">
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Trainee Reflective Notes</label>
@@ -5553,6 +5576,11 @@
                       if (log.assigned_assessor_id) {
                         lines.push(`Assessor: ${getAssessorName(log.assigned_assessor_id)}`);
                       }
+                      if (log.reviewed_at) {
+                        lines.push(`Completed: ${formatDate(log.reviewed_at, true)}`);
+                        const duration = formatDuration(log.created_at, log.reviewed_at);
+                        if (duration) lines.push(`Turnaround: ${duration}`);
+                      }
                       return lines;
                     }
                   }
@@ -5842,6 +5870,30 @@
             return `${day}-${month}-${year}`;
           } catch (e) {
             return dateString;
+          }
+        };
+
+        const formatDuration = (startStr, endStr) => {
+          if (!startStr || !endStr) return '';
+          try {
+            const start = new Date(startStr);
+            const end = new Date(endStr);
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
+            const diffMs = end.getTime() - start.getTime();
+            if (diffMs < 0) return '';
+            const diffMins = Math.round(diffMs / 60000);
+            if (diffMins < 1) return '< 1 min';
+            if (diffMins < 60) return `${diffMins} min${diffMins === 1 ? '' : 's'}`;
+            const diffHours = Math.floor(diffMins / 60);
+            const remMins = diffMins % 60;
+            if (diffHours < 24) {
+              return remMins > 0 ? `${diffHours} hr${diffHours === 1 ? '' : 's'} ${remMins} min` : `${diffHours} hr${diffHours === 1 ? '' : 's'}`;
+            }
+            const diffDays = Math.floor(diffHours / 24);
+            const remHours = diffHours % 24;
+            return remHours > 0 ? `${diffDays} day${diffDays === 1 ? '' : 's'} ${remHours} hr${remHours === 1 ? '' : 's'}` : `${diffDays} day${diffDays === 1 ? '' : 's'}`;
+          } catch (e) {
+            return '';
           }
         };
 
@@ -8487,7 +8539,7 @@
                   publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass, getPublicProgressObj, getPublicAssessorName,
                   publicSelectedCell, openPublicModal, closePublicModal,
                   customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
-                  qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, exportReportScope, downloadOverviewMatrixPDF, isDownloadingMatrixPdf, downloadAllTrainingRecordsZip, isDownloadingTrainingRecordsZip, downloadCompetencyTemplatesZip, isDownloadingCompetencyTemplatesZip, downloadUserCompetencyFormsZip, isDownloadingUserCompetencyFormsZip, downloadMasterBackupBundleZip, isDownloadingMasterBundleZip, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
+                  qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, formatDuration, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, exportReportScope, downloadOverviewMatrixPDF, isDownloadingMatrixPdf, downloadAllTrainingRecordsZip, isDownloadingTrainingRecordsZip, downloadCompetencyTemplatesZip, isDownloadingCompetencyTemplatesZip, downloadUserCompetencyFormsZip, isDownloadingUserCompetencyFormsZip, downloadMasterBackupBundleZip, isDownloadingMasterBundleZip, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
                   selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
                   uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, expandedSectionUploads, loadingSectionUserStats, sectionUserStats, toggleSectionUploadsExpand, activeLogReview, openLogReviewModal, submitLogReviewModal, saveDraftLogReviewModal, saveDraftLogReview, adminDeleteLogReview,
                   auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
