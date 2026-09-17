@@ -432,16 +432,9 @@
                       <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold text-xs bg-gray-50 px-2 py-1 rounded border border-gray-200 shadow-sm">{{ log.status === 'Needs_Amendment' ? 'Developing' : log.status.replace('_', ' ') }}</span>
                     </div>
                   </div>
-                  <div class="text-xs text-gray-500 mb-2 flex items-center gap-1.5 flex-wrap">
+                  <div class="text-xs text-gray-500 mb-2">
                     <span v-if="log.status !== 'Draft'">Sent to <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong> on {{ formatDate(log.created_at, true) }}</span>
                     <span v-else>Draft saved on {{ formatDate(log.created_at, true) }}</span>
-                    <template v-if="log.reviewed_at">
-                      <span class="text-gray-300">•</span>
-                      <span>Completed: <strong class="text-gray-800">{{ formatDate(log.reviewed_at, true) }}</strong></span>
-                      <span v-if="formatDuration(log.created_at, log.reviewed_at)" class="text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
-                        ⏱ {{ formatDuration(log.created_at, log.reviewed_at) }} turnaround
-                      </span>
-                    </template>
                   </div>
                   <p class="text-gray-700 mt-1 mb-2 italic whitespace-pre-wrap">{{ log.trainee_comments }}</p>
                   <div v-if="log.assessor_comments" class="border-t border-gray-100 pt-2 mt-2 bg-blue-50/50 p-2.5 rounded border border-blue-100">
@@ -450,6 +443,15 @@
                       <span v-if="log.score" class="text-xs font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">Supervision: {{ getSupervisionLabel(log.score) }}</span>
                     </div>
                     <div class="text-xs text-gray-800 whitespace-pre-wrap font-mono">{{ log.assessor_comments }}</div>
+                  </div>
+                  <div v-if="(user.is_admin || user.is_superuser || isTrainerInAny) && log.reviewed_at" class="border-t border-gray-100 pt-1.5 mt-2 flex flex-wrap items-center justify-between text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="font-semibold text-gray-700">Completed on:</span>
+                      <strong class="text-gray-800">{{ formatDate(log.reviewed_at, true) }}</strong>
+                      <span v-if="formatDuration(log.created_at, log.reviewed_at)" class="text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
+                        ⏱ {{ formatDuration(log.created_at, log.reviewed_at) }} turnaround
+                      </span>
+                    </div>
                   </div>
                   <div v-if="log.status === 'Draft' || log.status === 'Pending_Review' || log.status === 'Needs_Amendment'" class="border-t border-gray-100 pt-2 mt-2 flex gap-2">
                     <button @click="editPlanLog(log)" class="text-xs text-blue-600 font-semibold hover:underline">Edit / Reassign Trainer</button>
@@ -2253,7 +2255,6 @@
                         <span v-if="log.assigned_assessor_id" class="text-gray-500 font-normal ml-1">
                           • {{ log.status === 'Completed' ? 'Completed by' : (log.status === 'Needs_Amendment' ? 'Reviewed by' : 'Assigned to') }}: {{ getAssessorName(log.assigned_assessor_id) }}
                         </span>
-                        <span v-if="log.reviewed_at" class="text-gray-500 font-normal ml-0.5">({{ formatDate(log.reviewed_at, true) }})</span>
                       </span>
                       <span class="flex items-center gap-2">
                         <span :class="{'text-gray-600': log.status==='Draft', 'text-yellow-600': log.status==='Pending_Review', 'text-green-600': log.status==='Completed', 'text-amber-600': log.status==='Needs_Amendment'}" class="font-bold">
@@ -2265,16 +2266,7 @@
                     <!-- Collapsible Full Details -->
                     <div v-if="expandedCaseLogIds[log.id]" class="p-3 bg-white border-t border-gray-200 flex flex-col gap-2.5">
                       <div class="flex justify-between items-center text-[11px] text-gray-500 border-b border-gray-100 pb-1.5 flex-wrap gap-2">
-                        <div class="flex items-center gap-2 flex-wrap">
-                          <span>Submitted: <strong>{{ formatDate(log.created_at, true) }}</strong></span>
-                          <template v-if="log.reviewed_at">
-                            <span class="text-gray-300">•</span>
-                            <span>Completed: <strong class="text-gray-800">{{ formatDate(log.reviewed_at, true) }}</strong></span>
-                            <span v-if="formatDuration(log.created_at, log.reviewed_at)" class="text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
-                              ⏱ {{ formatDuration(log.created_at, log.reviewed_at) }} turnaround
-                            </span>
-                          </template>
-                        </div>
+                        <span>Submitted on: <strong>{{ formatDate(log.created_at, true) }}</strong></span>
                         <button v-if="isAssessorForSelected || user.is_admin || user.is_superuser" @click.stop="openLogReviewModal(log)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-xs shadow-sm transition">
                           Review / Comment
                         </button>
@@ -2295,6 +2287,20 @@
                         <div class="text-xs text-gray-800 whitespace-pre-wrap font-mono">{{ log.assessor_comments }}</div>
                       </div>
                       <div v-else class="text-[11px] text-gray-400 italic">No trainer feedback recorded yet.</div>
+
+                      <!-- Assessor Review & Completion Audit (Only visible when logged in as an Assessor) -->
+                      <div v-if="(isAssessorForSelected || user.is_admin || user.is_superuser) && log.reviewed_at" class="border-t border-gray-100 pt-2 mt-0.5 flex flex-wrap items-center justify-between text-[11px] text-gray-500 bg-gray-50/90 px-2.5 py-1.5 rounded">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="font-semibold text-gray-700">Completed on:</span>
+                          <strong class="text-gray-800">{{ formatDate(log.reviewed_at, true) }}</strong>
+                          <span v-if="formatDuration(log.created_at, log.reviewed_at)" class="text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
+                            ⏱ {{ formatDuration(log.created_at, log.reviewed_at) }} turnaround
+                          </span>
+                        </div>
+                        <span v-if="log.assigned_assessor_id" class="text-gray-500">
+                          Assessor: <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong>
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div v-if="planningLogs.length === 0" class="text-xs text-gray-500 italic p-1.5">No case logs submitted.</div>
@@ -5576,7 +5582,7 @@
                       if (log.assigned_assessor_id) {
                         lines.push(`Assessor: ${getAssessorName(log.assigned_assessor_id)}`);
                       }
-                      if (log.reviewed_at) {
+                      if ((isAssessorForSelected.value || user.value.is_admin || user.value.is_superuser) && log.reviewed_at) {
                         lines.push(`Completed: ${formatDate(log.reviewed_at, true)}`);
                         const duration = formatDuration(log.created_at, log.reviewed_at);
                         if (duration) lines.push(`Turnaround: ${duration}`);
