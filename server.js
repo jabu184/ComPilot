@@ -345,6 +345,19 @@ const initDb = (db) => {
         });
     });
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN qatrack_records_detail TEXT DEFAULT '{}'", () => {});
+    db.run("ALTER TABLE staff_competency_progress ADD COLUMN qatrack_timings TEXT DEFAULT '[]'", () => {});
+    db.run(`CREATE TABLE IF NOT EXISTS qatrack_timings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      test_identifier TEXT NOT NULL,
+      work_started TEXT,
+      work_completed TEXT,
+      duration_minutes REAL,
+      date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, competency_id, test_identifier, work_completed)
+    )`, () => {});
     db.run("ALTER TABLE competencies ADD COLUMN allow_file_uploads INTEGER DEFAULT 0", () => {});
     db.run(`CREATE TABLE IF NOT EXISTS file_uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -543,16 +556,49 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
     let qatrack_records_detail = {};
     try { qatrack_records_detail = JSON.parse(progress.qatrack_records_detail || '{}'); } catch(e) {}
 
+    let qatrack_timings_all = [];
+    try {
+      qatrack_timings_all = JSON.parse(progress.qatrack_timings || '[]');
+      if (!Array.isArray(qatrack_timings_all)) qatrack_timings_all = [];
+    } catch(e) {}
+
     let reqs = [];
     try { reqs = JSON.parse(comp.qatrack_requirements || '[]'); } catch(e) {}
     if (reqs.length === 0 && comp.required_qatrack_count > 0 && comp.qatrack_test_identifier) { reqs = [{ count: comp.required_qatrack_count, identifier: comp.qatrack_test_identifier }]; }
     let hasQATrackChecks = reqs.length > 0;
     
     if (hasQATrackChecks && username) {
+      let freshTimings = [];
       for (const req of reqs) {
         const qaData = await fetchQATrackInstances(username, req.identifier);
         qatrack_records_detail[req.identifier] = qaData.count;
         if (qaData.count == null || qaData.count < req.count) { requirementsMet = false; if (!missingReason) missingReason = `QATrack+ missing data for ${req.identifier}: Found ${qaData.count || 0}, requires ${req.count}.`; }
+
+        // Calculate and extract timing records from work_started & work_completed
+        const results = qaData.results || [];
+        for (const item of results) {
+          const ws = item.work_started;
+          const wc = item.work_completed;
+          let dur = null;
+          if (ws && wc) {
+            const tStart = new Date(ws).getTime();
+            const tEnd = new Date(wc).getTime();
+            if (!isNaN(tStart) && !isNaN(tEnd) && tEnd >= tStart) {
+              dur = Math.round(((tEnd - tStart) / 60000) * 10) / 10;
+            }
+          }
+          freshTimings.push({
+            identifier: req.identifier,
+            work_started: ws,
+            work_completed: wc,
+            duration_minutes: dur,
+            date: wc || ws
+          });
+        }
+      }
+      if (freshTimings.length > 0) {
+        freshTimings.sort((a, b) => new Date(b.date) - new Date(a.date));
+        qatrack_timings_all = freshTimings;
       }
     }
 
@@ -571,17 +617,34 @@ const syncCompetencyInternal = async (db, user_id, username, competency_id) => {
 
     let initialized = false;
     const detailStr = JSON.stringify(qatrack_records_detail);
+    const timingsStr = JSON.stringify(qatrack_timings_all);
     if (progressQuery.length === 0) { 
       const initStatus = requirementsMet ? 'm' : 't';
-      await execute(db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail) VALUES (?, ?, ?, ?)`, [user_id, competency_id, initStatus, detailStr]); 
+      await execute(db, `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, qatrack_records_detail, qatrack_timings) VALUES (?, ?, ?, ?, ?)`, [user_id, competency_id, initStatus, detailStr, timingsStr]); 
       initialized = true; 
+      if (hasQATrackChecks && qatrack_timings_all.length > 0) {
+        try {
+          await execute(db, `DELETE FROM qatrack_timings WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+          for (const t of qatrack_timings_all) {
+            await execute(db, `INSERT OR REPLACE INTO qatrack_timings (user_id, competency_id, test_identifier, work_started, work_completed, duration_minutes, date) VALUES (?, ?, ?, ?, ?, ?, ?)`, [user_id, competency_id, t.identifier, t.work_started, t.work_completed, t.duration_minutes, t.date]);
+          }
+        } catch (err) {}
+      }
       if (requirementsMet) {
         await execute(db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'PROMOTED_TO_M', ?, 't', 'm', 'System auto-promotion (Prerequisites met)')`, [user_id, competency_id, user_id]);
         return { success: true, promoted: true, status: 'm' };
       }
     } else {
       if (hasQATrackChecks) { 
-        await execute(db, `UPDATE staff_competency_progress SET qatrack_records_detail = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, user_id, competency_id]); 
+        await execute(db, `UPDATE staff_competency_progress SET qatrack_records_detail = ?, qatrack_timings = ? WHERE user_id = ? AND competency_id = ?`, [detailStr, timingsStr, user_id, competency_id]); 
+        if (qatrack_timings_all.length > 0) {
+          try {
+            await execute(db, `DELETE FROM qatrack_timings WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
+            for (const t of qatrack_timings_all) {
+              await execute(db, `INSERT OR REPLACE INTO qatrack_timings (user_id, competency_id, test_identifier, work_started, work_completed, duration_minutes, date) VALUES (?, ?, ?, ?, ?, ?, ?)`, [user_id, competency_id, t.identifier, t.work_started, t.work_completed, t.duration_minutes, t.date]);
+            }
+          } catch (err) {}
+        }
       }
       
       const currentStatus = (progress.current_status || 't').toLowerCase();
@@ -799,7 +862,8 @@ const getQATrackConfig = async () => {
     if (s.key === 'qatrack_api_url' && s.value) apiUrl = s.value;
     if (s.key === 'qatrack_api_token' && s.value) apiToken = s.value;
   });
-  apiUrl = apiUrl.replace(/\/+$/, '');
+  apiUrl = apiUrl.trim().replace(/\/+$/, '');
+  apiToken = apiToken.trim();
   return { apiUrl, apiToken };
 };
 
@@ -1789,7 +1853,12 @@ app.get('/api/competency/:id/qatrack-evidence', authenticateToken, async (req, r
         required: req.count,
         found: qaData.count,
         evidence: recentEvidence,
-        all_dates: allDates
+        all_dates: allDates,
+        all_records: sortedResults.map(r => ({
+          work_started: r.work_started,
+          work_completed: r.work_completed,
+          date: r.work_completed
+        }))
       });
     }
 
@@ -2734,22 +2803,26 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
       return targetGroups.includes(u.designation) || targetUsers.includes(u.id);
     });
 
-    // Get QATrack counts from progress
-    const progressRows = await query(req.db, 'SELECT user_id, qatrack_records_detail, current_status FROM staff_competency_progress WHERE competency_id = ?', [competencyId]);
+    // Get QATrack counts and timings from progress
+    const progressRows = await query(req.db, 'SELECT user_id, qatrack_records_detail, qatrack_timings, current_status FROM staff_competency_progress WHERE competency_id = ?', [competencyId]);
     const progressMap = {};
     const statusMap = {};
+    const timingsMap = {};
     progressRows.forEach(row => {
       let detail = {};
       try { detail = JSON.parse(row.qatrack_records_detail || '{}'); } catch(e) {}
+      let timings = [];
+      try { timings = JSON.parse(row.qatrack_timings || '[]'); if (!Array.isArray(timings)) timings = []; } catch(e) {}
       progressMap[row.user_id] = detail;
       statusMap[row.user_id] = row.current_status;
+      timingsMap[row.user_id] = timings;
     });
 
     const competencyQuizzes = await query(req.db, 'SELECT quiz_id FROM competency_quizzes WHERE competency_id = ?', [competencyId]);
     const quizzesByComp = { [competencyId]: competencyQuizzes.map(q => q.quiz_id) };
     const defaultStatus = computeDefaultStatus(competency, quizzesByComp);
 
-    // Get case log counts
+    // Get case log counts and detailed records
     const caseLogRows = await query(req.db, 'SELECT trainee_id, COUNT(*) as total_logs, SUM(CASE WHEN status = \'Completed\' THEN 1 ELSE 0 END) as approved_logs FROM patient_plan_logs WHERE competency_id = ? GROUP BY trainee_id', [competencyId]);
     const caseLogMap = {};
     caseLogRows.forEach(row => {
@@ -2757,6 +2830,13 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
         total: row.total_logs || 0,
         approved: row.approved_logs || 0
       };
+    });
+
+    const completedCaseLogs = await query(req.db, 'SELECT id, trainee_id, status, created_at, reviewed_at, log_date, patient_reference FROM patient_plan_logs WHERE competency_id = ? AND status = \'Completed\'', [competencyId]);
+    const caseLogsDetailMap = {};
+    completedCaseLogs.forEach(row => {
+      if (!caseLogsDetailMap[row.trainee_id]) caseLogsDetailMap[row.trainee_id] = [];
+      caseLogsDetailMap[row.trainee_id].push(row);
     });
 
     // Build summary list
@@ -2770,6 +2850,7 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
       });
 
       const caseLogs = caseLogMap[user.id] || { total: 0, approved: 0 };
+      const userLogs = caseLogsDetailMap[user.id] || [];
       const leaderboardCount = hasCaseLogs ? caseLogs.approved : qaTotalCount;
       const status = statusMap[user.id] || defaultStatus;
 
@@ -2782,6 +2863,8 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
         caseLogTotal: caseLogs.total,
         caseLogApproved: caseLogs.approved,
         requiredCaseLogs: competency.required_plan_count || 0,
+        logs: userLogs,
+        qatrackTimings: timingsMap[user.id] || [],
         status
       };
     });
@@ -2882,7 +2965,8 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
     const userRecordsMap = {};
     applicableUsers.forEach(u => { userRecordsMap[u.id] = 0; });
 
-    // 1. Fetch Completed Logbook (Case Log) counts
+    // 1. Fetch Completed Logbook (Case Log) counts and records
+    const caseLogsDetailMap = {};
     if (caseComps.length > 0) {
       const caseCompIds = caseComps.map(c => c.id);
       const caseLogRows = await query(req.db, `SELECT trainee_id, COUNT(*) as count FROM patient_plan_logs WHERE status = 'Completed' AND competency_id IN (${caseCompIds.map(() => '?').join(',')}) GROUP BY trainee_id`, caseCompIds);
@@ -2891,12 +2975,18 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
           userRecordsMap[row.trainee_id] += (row.count || 0);
         }
       });
+      const completedCaseLogs = await query(req.db, `SELECT id, trainee_id, competency_id, status, created_at, reviewed_at, log_date, patient_reference FROM patient_plan_logs WHERE status = 'Completed' AND competency_id IN (${caseCompIds.map(() => '?').join(',')})`, caseCompIds);
+      completedCaseLogs.forEach(row => {
+        if (!caseLogsDetailMap[row.trainee_id]) caseLogsDetailMap[row.trainee_id] = [];
+        caseLogsDetailMap[row.trainee_id].push(row);
+      });
     }
 
-    // 2. Fetch QATrack records
+    // 2. Fetch QATrack records & timings
+    const userTimingsMap = {};
     if (qaComps.length > 0) {
       const qaCompIds = qaComps.map(c => c.id);
-      const progressRows = await query(req.db, `SELECT user_id, competency_id, qatrack_records_detail FROM staff_competency_progress WHERE competency_id IN (${qaCompIds.map(() => '?').join(',')})`, qaCompIds);
+      const progressRows = await query(req.db, `SELECT user_id, competency_id, qatrack_records_detail, qatrack_timings FROM staff_competency_progress WHERE competency_id IN (${qaCompIds.map(() => '?').join(',')})`, qaCompIds);
       progressRows.forEach(row => {
         let detail = {};
         try { detail = JSON.parse(row.qatrack_records_detail || '{}'); } catch(e) {}
@@ -2909,6 +2999,11 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
         if (userRecordsMap[row.user_id] !== undefined) {
           userRecordsMap[row.user_id] += sum;
         }
+
+        let timings = [];
+        try { timings = JSON.parse(row.qatrack_timings || '[]'); if (!Array.isArray(timings)) timings = []; } catch(e) {}
+        if (!userTimingsMap[row.user_id]) userTimingsMap[row.user_id] = [];
+        userTimingsMap[row.user_id].push(...timings);
       });
     }
 
@@ -2920,6 +3015,8 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
         fullName: user.full_name,
         designation: user.designation,
         qaTotalCount,
+        logs: caseLogsDetailMap[user.id] || [],
+        qatrackTimings: userTimingsMap[user.id] || [],
         status: userOverallStatus[user.id] || null
       };
     });
@@ -3019,7 +3116,8 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
     const userRecordsMap = {};
     applicableUsers.forEach(u => { userRecordsMap[u.id] = 0; });
 
-    // 1. Fetch Completed Logbook (Case Log) counts
+    // 1. Fetch Completed Logbook (Case Log) counts and records
+    const caseLogsDetailMap = {};
     if (caseComps.length > 0) {
       const caseCompIds = caseComps.map(c => c.id);
       const caseLogRows = await query(req.db, `SELECT trainee_id, COUNT(*) as count FROM patient_plan_logs WHERE status = 'Completed' AND competency_id IN (${caseCompIds.map(() => '?').join(',')}) GROUP BY trainee_id`, caseCompIds);
@@ -3028,12 +3126,18 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
           userRecordsMap[row.trainee_id] += (row.count || 0);
         }
       });
+      const completedCaseLogs = await query(req.db, `SELECT id, trainee_id, competency_id, status, created_at, reviewed_at, log_date, patient_reference FROM patient_plan_logs WHERE status = 'Completed' AND competency_id IN (${caseCompIds.map(() => '?').join(',')})`, caseCompIds);
+      completedCaseLogs.forEach(row => {
+        if (!caseLogsDetailMap[row.trainee_id]) caseLogsDetailMap[row.trainee_id] = [];
+        caseLogsDetailMap[row.trainee_id].push(row);
+      });
     }
 
-    // 2. Fetch QATrack records
+    // 2. Fetch QATrack records & timings
+    const userTimingsMap = {};
     if (qaComps.length > 0) {
       const qaCompIds = qaComps.map(c => c.id);
-      const progressRows = await query(req.db, `SELECT user_id, competency_id, qatrack_records_detail FROM staff_competency_progress WHERE competency_id IN (${qaCompIds.map(() => '?').join(',')})`, qaCompIds);
+      const progressRows = await query(req.db, `SELECT user_id, competency_id, qatrack_records_detail, qatrack_timings FROM staff_competency_progress WHERE competency_id IN (${qaCompIds.map(() => '?').join(',')})`, qaCompIds);
       progressRows.forEach(row => {
         let detail = {};
         try { detail = JSON.parse(row.qatrack_records_detail || '{}'); } catch(e) {}
@@ -3046,6 +3150,11 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
         if (userRecordsMap[row.user_id] !== undefined) {
           userRecordsMap[row.user_id] += sum;
         }
+
+        let timings = [];
+        try { timings = JSON.parse(row.qatrack_timings || '[]'); if (!Array.isArray(timings)) timings = []; } catch(e) {}
+        if (!userTimingsMap[row.user_id]) userTimingsMap[row.user_id] = [];
+        userTimingsMap[row.user_id].push(...timings);
       });
     }
 
@@ -3057,6 +3166,8 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
         fullName: user.full_name,
         designation: user.designation,
         qaTotalCount,
+        logs: caseLogsDetailMap[user.id] || [],
+        qatrackTimings: userTimingsMap[user.id] || [],
         status: userOverallStatus[user.id] || null
       };
     });

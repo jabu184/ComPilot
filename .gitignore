@@ -19,8 +19,14 @@ Thumbs.db
 # Binaries and archives
 *.zip
 *.exe
+*.tar.gz
+*.run
 
-# Portable package (local verification only)
+# Portable packages (local verification only)
 portable/
+ComPilot_Portable_Linux/
 ComPilot_Portable_Offline.zip
+ComPilot_Portable_Linux.zip
+ComPilot_Linux_Offline.run
+ComPilot_Portable_Linux.tar.gz
 
