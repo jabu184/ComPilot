@@ -12,73 +12,106 @@ const PORT = process.env.PORT || 3003;
 const SECRET_KEY = 'super-secret-key-for-development'; // Replace in production
 
 const sharedDbPath = path.resolve(__dirname, 'shared.db');
-const sharedDb = new sqlite3.Database(sharedDbPath, (err) => {
+let sharedDb;
+const initSharedDb = (db, cb) => {
+  db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, full_name TEXT, email TEXT, designation TEXT, is_admin INTEGER DEFAULT 0, is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, password TEXT DEFAULT '', active_in TEXT DEFAULT '["QA", "Planning", "Brachytherapy", "SABR"]', date_in_post TEXT DEFAULT NULL, must_change_password INTEGER DEFAULT 0)`, () => {
+      db.get("SELECT count(*) as count FROM users", (err, row) => {
+        if (row && row.count === 0) {
+          const qaDbPath = path.resolve(__dirname, 'QA.db');
+          if (fs.existsSync(qaDbPath)) {
+            console.log("Migrating users from QA.db to shared.db...");
+            db.run(`ATTACH DATABASE '${qaDbPath}' AS qa`, () => {
+              db.run(`INSERT INTO users (id, username, full_name, email, designation, is_admin, is_active, password, active_in, date_in_post) SELECT id, username, full_name, email, designation, is_admin, is_active, password, '["QA", "Planning", "Brachytherapy", "SABR"]', NULL FROM qa.users`, (err) => {
+                if (err) {
+                  db.run(`INSERT INTO users (id, username, full_name, email, designation, is_admin, is_active, active_in, date_in_post) SELECT id, username, full_name, email, designation, is_admin, is_active, '["QA", "Planning", "Brachytherapy", "SABR"]', NULL FROM qa.users`, () => {
+                    db.run("UPDATE users SET is_superuser = 1 WHERE is_admin = 1", () => {});
+                  });
+                } else {
+                  db.run("UPDATE users SET is_superuser = 1 WHERE is_admin = 1", () => {});
+                }
+              });
+              db.run(`INSERT INTO user_groups (name) SELECT name FROM qa.user_groups`, () => {
+                db.run(`DETACH DATABASE qa`);
+              });
+            });
+          } else {
+            db.run(`INSERT INTO users (id, username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post) VALUES 
+              (1, 'admin', 'System Administrator', 'admin@example.com', 'MPE', 1, 1, 1, 'woody', '["QA", "Planning", "Brachytherapy", "SABR"]', NULL)
+            `);
+          }
+        } else {
+           db.run("ALTER TABLE users ADD COLUMN is_superuser INTEGER DEFAULT 0", () => {
+             db.run("UPDATE users SET is_superuser = 1 WHERE username = 'admin'", () => {});
+           });
+           db.run("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''", () => {});
+           db.run('ALTER TABLE users ADD COLUMN active_in TEXT DEFAULT \'["QA", "Planning", "Brachytherapy", "SABR"]\'', () => {});
+           db.run("ALTER TABLE users ADD COLUMN date_in_post TEXT DEFAULT NULL", () => {});
+           db.run("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0", () => {});
+        }
+      });
+    });
+    db.run("CREATE TABLE IF NOT EXISTS user_groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, display_order INTEGER DEFAULT 0)", () => {
+      db.get("SELECT count(*) as count FROM user_groups", (err, row) => {
+        if (row && row.count === 0 && !fs.existsSync(path.resolve(__dirname, 'QA.db'))) {
+          db.run("INSERT INTO user_groups (name, display_order) VALUES ('MPE', 0), ('Clinical Scientist', 1), ('Trainee Clinical Scientist', 2), ('Dosimetrist', 3)");
+        } else {
+          db.run("ALTER TABLE user_groups ADD COLUMN display_order INTEGER DEFAULT 0", () => {});
+        }
+      });
+    });
+    db.run("CREATE TABLE IF NOT EXISTS global_settings (key TEXT PRIMARY KEY, value TEXT)", () => {
+      db.get("SELECT count(*) as count FROM global_settings", (err, row) => {
+        if (row && row.count === 0) {
+          db.run("INSERT INTO global_settings (key, value) VALUES ('default_renewal_period', '36')");
+          const defaultSections = JSON.stringify([{name: 'QA', active: true, leaderboardType: 'qa'}, {name: 'Planning', active: true, leaderboardType: 'logbook'}, {name: 'Brachytherapy', active: true, leaderboardType: 'logbook'}, {name: 'SABR', active: true, leaderboardType: 'logbook'}]);
+          db.run("INSERT INTO global_settings (key, value) VALUES ('sections', ?)", [defaultSections]);
+        } else {
+          db.get("SELECT value FROM global_settings WHERE key = 'sections'", (err, r) => {
+            if (!r) {
+              const defaultSections = JSON.stringify([{name: 'QA', active: true, leaderboardType: 'qa'}, {name: 'Planning', active: true, leaderboardType: 'logbook'}, {name: 'Brachytherapy', active: true, leaderboardType: 'logbook'}, {name: 'SABR', active: true, leaderboardType: 'logbook'}]);
+              db.run("INSERT INTO global_settings (key, value) VALUES ('sections', ?)", [defaultSections]);
+            }
+          });
+        }
+        if (cb) cb();
+      });
+    });
+  });
+};
+
+const ensureUserColumns = async (db) => {
+  try {
+    const cols = await query(db, "PRAGMA table_info(users)");
+    const colNames = (cols || []).map(c => c.name);
+    if (!colNames.includes('must_change_password')) {
+      await execute(db, "ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0");
+    }
+    if (!colNames.includes('is_superuser')) {
+      await execute(db, "ALTER TABLE users ADD COLUMN is_superuser INTEGER DEFAULT 0");
+      await execute(db, "UPDATE users SET is_superuser = 1 WHERE username = 'admin'");
+    }
+    if (!colNames.includes('password')) {
+      await execute(db, "ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''");
+    }
+    if (!colNames.includes('active_in')) {
+      await execute(db, 'ALTER TABLE users ADD COLUMN active_in TEXT DEFAULT \'["QA", "Planning", "Brachytherapy", "SABR"]\'');
+    }
+    if (!colNames.includes('date_in_post')) {
+      await execute(db, "ALTER TABLE users ADD COLUMN date_in_post TEXT DEFAULT NULL");
+    }
+  } catch(e) {
+    console.warn("ensureUserColumns warning:", e.message);
+  }
+};
+
+sharedDb = new sqlite3.Database(sharedDbPath, (err) => {
   if (err) {
     console.error('Error connecting to shared database:', err.message);
   } else {
     console.log('Connected to the shared SQLite database: shared.db');
-    sharedDb.serialize(() => {
-      sharedDb.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, full_name TEXT, email TEXT, designation TEXT, is_admin INTEGER DEFAULT 0, is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, password TEXT DEFAULT '', active_in TEXT DEFAULT '["QA", "Planning", "Brachytherapy", "SABR"]', date_in_post TEXT DEFAULT NULL)`, () => {
-        sharedDb.get("SELECT count(*) as count FROM users", (err, row) => {
-          if (row && row.count === 0) {
-            const qaDbPath = path.resolve(__dirname, 'QA.db');
-            if (fs.existsSync(qaDbPath)) {
-              console.log("Migrating users from QA.db to shared.db...");
-              sharedDb.run(`ATTACH DATABASE '${qaDbPath}' AS qa`, () => {
-                sharedDb.run(`INSERT INTO users (id, username, full_name, email, designation, is_admin, is_active, password, active_in, date_in_post) SELECT id, username, full_name, email, designation, is_admin, is_active, password, '["QA", "Planning", "Brachytherapy", "SABR"]', NULL FROM qa.users`, (err) => {
-                  if (err) {
-                    sharedDb.run(`INSERT INTO users (id, username, full_name, email, designation, is_admin, is_active, active_in, date_in_post) SELECT id, username, full_name, email, designation, is_admin, is_active, '["QA", "Planning", "Brachytherapy", "SABR"]', NULL FROM qa.users`, () => {
-                      sharedDb.run("UPDATE users SET is_superuser = 1 WHERE is_admin = 1", () => {});
-                    });
-                  } else {
-                    sharedDb.run("UPDATE users SET is_superuser = 1 WHERE is_admin = 1", () => {});
-                  }
-                });
-                sharedDb.run(`INSERT INTO user_groups (name) SELECT name FROM qa.user_groups`, () => {
-                  sharedDb.run(`DETACH DATABASE qa`);
-                });
-              });
-            } else {
-              sharedDb.run(`INSERT INTO users (id, username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post) VALUES 
-                (1, 'admin', 'System Administrator', 'admin@example.com', 'MPE', 1, 1, 1, 'woody', '["QA", "Planning", "Brachytherapy", "SABR"]', NULL)
-              `);
-            }
-          } else {
-             sharedDb.run("ALTER TABLE users ADD COLUMN is_superuser INTEGER DEFAULT 0", () => {
-               sharedDb.run("UPDATE users SET is_superuser = 1 WHERE is_admin = 1", () => {});
-             });
-             sharedDb.run("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''", () => {});
-             sharedDb.run("ALTER TABLE users ADD COLUMN active_in TEXT DEFAULT '[\"QA\", \"Planning\", \"Brachytherapy\", \"SABR\"]'", () => {});
-             sharedDb.run("ALTER TABLE users ADD COLUMN date_in_post TEXT DEFAULT NULL", () => {});
-          }
-        });
-      });
-      sharedDb.run("CREATE TABLE IF NOT EXISTS user_groups (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, display_order INTEGER DEFAULT 0)", () => {
-        sharedDb.get("SELECT count(*) as count FROM user_groups", (err, row) => {
-          if (row && row.count === 0 && !fs.existsSync(path.resolve(__dirname, 'QA.db'))) {
-            sharedDb.run("INSERT INTO user_groups (name, display_order) VALUES ('MPE', 0), ('Clinical Scientist', 1), ('Trainee Clinical Scientist', 2), ('Dosimetrist', 3)");
-          } else {
-            sharedDb.run("ALTER TABLE user_groups ADD COLUMN display_order INTEGER DEFAULT 0", () => {});
-          }
-        });
-      });
-      sharedDb.run("CREATE TABLE IF NOT EXISTS global_settings (key TEXT PRIMARY KEY, value TEXT)", () => {
-        sharedDb.get("SELECT count(*) as count FROM global_settings", (err, row) => {
-          if (row && row.count === 0) {
-            sharedDb.run("INSERT INTO global_settings (key, value) VALUES ('default_renewal_period', '36')");
-            const defaultSections = JSON.stringify([{name: 'QA', active: true, leaderboardType: 'qa'}, {name: 'Planning', active: true, leaderboardType: 'logbook'}, {name: 'Brachytherapy', active: true, leaderboardType: 'logbook'}, {name: 'SABR', active: true, leaderboardType: 'logbook'}]);
-            sharedDb.run("INSERT INTO global_settings (key, value) VALUES ('sections', ?)", [defaultSections]);
-          } else {
-            // Ensure sections key exists for legacy DBs
-            sharedDb.get("SELECT value FROM global_settings WHERE key = 'sections'", (err, r) => {
-              if (!r) {
-                const defaultSections = JSON.stringify([{name: 'QA', active: true, leaderboardType: 'qa'}, {name: 'Planning', active: true, leaderboardType: 'logbook'}, {name: 'Brachytherapy', active: true, leaderboardType: 'logbook'}, {name: 'SABR', active: true, leaderboardType: 'logbook'}]);
-                sharedDb.run("INSERT INTO global_settings (key, value) VALUES ('sections', ?)", [defaultSections]);
-              }
-            });
-          }
-        });
-      });
+    initSharedDb(sharedDb, () => {
+      ensureUserColumns(sharedDb);
     });
   }
 });
@@ -96,7 +129,7 @@ app.get('/', (req, res) => {
 
 // --- DATABASE CONNECTION ---
 const dbs = {};
-const initDb = (db) => {
+const initDb = (db, cb) => {
   db.serialize(() => {
     // CREATE BASE TABLES IF THEY DO NOT EXIST (Needed for dynamically created databases)
     db.run(`CREATE TABLE IF NOT EXISTS competencies (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, task_name TEXT, required_qatrack_count INTEGER DEFAULT 0, qatrack_test_identifier TEXT, requires_instructions INTEGER DEFAULT 1, requires_quiz INTEGER DEFAULT 0, requires_prerequisite_competencies INTEGER DEFAULT 0, prerequisite_competencies TEXT DEFAULT '[]', display_order INTEGER DEFAULT 0, reading_prerequisites TEXT DEFAULT '[]', renewal_period_months INTEGER DEFAULT 36, requires_pre_eval INTEGER DEFAULT 0, requires_post_eval INTEGER DEFAULT 0, qatrack_requirements TEXT DEFAULT '[]', allow_file_uploads INTEGER DEFAULT 0, required_plan_count INTEGER DEFAULT 0)`, () => {
@@ -122,10 +155,10 @@ const initDb = (db) => {
       });
     });
 
-    db.run(`CREATE TABLE IF NOT EXISTS quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, competency_id INTEGER, passing_score_percent INTEGER DEFAULT 80, name TEXT DEFAULT 'Competency Quiz', is_viva INTEGER DEFAULT 0, is_pre_assessment INTEGER DEFAULT 0)`, () => {
+    db.run(`CREATE TABLE IF NOT EXISTS quizzes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, passing_score_percent INTEGER DEFAULT 80, is_viva INTEGER DEFAULT 0, is_pre_assessment INTEGER DEFAULT 0)`, () => {
       db.get("SELECT count(*) as count FROM quizzes", (err, row) => {
         if (row && row.count === 0) {
-          db.run(`INSERT INTO quizzes (id, competency_id, passing_score_percent, name) VALUES (1, 1, 100, 'Induction Quiz')`, (err) => { if(err) console.warn('InitDB Seed Quizzes:', err.message); });
+          db.run(`INSERT INTO quizzes (id, name, passing_score_percent) VALUES (1, 'Induction Quiz', 100)`, (err) => { if(err) console.warn('InitDB Seed Quizzes:', err.message); });
         }
       });
     });
@@ -377,7 +410,46 @@ const initDb = (db) => {
       const hasLogDate = cols && cols.some(c => c.name === 'log_date');
       if (!hasLogDate) db.run("ALTER TABLE patient_plan_logs ADD COLUMN log_date TEXT", () => {});
     });
+    if (cb) cb();
   });
+};
+
+const ensureDbColumns = async (db) => {
+  try {
+    const compCols = (await query(db, "PRAGMA table_info(competencies)")).map(c => c.name);
+    if (!compCols.includes('renewal_period_months')) await execute(db, "ALTER TABLE competencies ADD COLUMN renewal_period_months INTEGER DEFAULT 36");
+    if (!compCols.includes('requires_pre_eval')) await execute(db, "ALTER TABLE competencies ADD COLUMN requires_pre_eval INTEGER DEFAULT 0");
+    if (!compCols.includes('requires_post_eval')) await execute(db, "ALTER TABLE competencies ADD COLUMN requires_post_eval INTEGER DEFAULT 0");
+    if (!compCols.includes('required_plan_count')) await execute(db, "ALTER TABLE competencies ADD COLUMN required_plan_count INTEGER DEFAULT 0");
+    if (!compCols.includes('display_order')) await execute(db, "ALTER TABLE competencies ADD COLUMN display_order INTEGER DEFAULT 0");
+    if (!compCols.includes('qatrack_requirements')) await execute(db, "ALTER TABLE competencies ADD COLUMN qatrack_requirements TEXT DEFAULT '[]'");
+    if (!compCols.includes('reading_prerequisites')) await execute(db, "ALTER TABLE competencies ADD COLUMN reading_prerequisites TEXT DEFAULT '[]'");
+    if (!compCols.includes('allow_file_uploads')) await execute(db, "ALTER TABLE competencies ADD COLUMN allow_file_uploads INTEGER DEFAULT 0");
+    if (!compCols.includes('target_users')) await execute(db, "ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'");
+    if (!compCols.includes('description')) await execute(db, "ALTER TABLE competencies ADD COLUMN description TEXT");
+    
+    const progCols = (await query(db, "PRAGMA table_info(staff_competency_progress)")).map(c => c.name);
+    if (!progCols.includes('qatrack_timings')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN qatrack_timings TEXT DEFAULT '[]'");
+    if (!progCols.includes('qatrack_records_detail')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN qatrack_records_detail TEXT DEFAULT '{}'");
+    if (!progCols.includes('signoff_comment')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN signoff_comment TEXT");
+    if (!progCols.includes('date_reviewed')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN date_reviewed TEXT");
+    if (!progCols.includes('reviewer_id')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER");
+
+    await execute(db, `CREATE TABLE IF NOT EXISTS qatrack_timings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      test_identifier TEXT NOT NULL,
+      work_started TEXT,
+      work_completed TEXT,
+      duration_minutes REAL,
+      date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, competency_id, test_identifier, work_completed)
+    )`);
+  } catch(e) {
+    console.warn("ensureDbColumns warning:", e.message);
+  }
 };
 
 const getDb = (name) => {
@@ -389,7 +461,9 @@ const getDb = (name) => {
         console.error(`Error connecting to database ${safeName}:`, err.message);
       } else {
         console.log(`Connected to the SQLite database: ${safeName}.db`);
-        initDb(dbs[safeName]);
+        initDb(dbs[safeName], () => {
+          ensureDbColumns(dbs[safeName]);
+        });
       }
     });
   }
@@ -764,10 +838,11 @@ app.post('/api/login', async (req, res) => {
     }
 
     try { user.active_in = JSON.parse(user.active_in || '[]'); } catch(e) { user.active_in = []; }
+    user.must_change_password = user.must_change_password ? 1 : 0;
     delete user.password;
 
     const token = jwt.sign(
-      { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, active_in: user.active_in, dbName }, 
+      { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, must_change_password: user.must_change_password, active_in: user.active_in, dbName }, 
       SECRET_KEY, 
       { expiresIn: '8h' }
     );
@@ -801,10 +876,11 @@ app.post('/api/switch-db', (req, res) => {
       }
 
       user.active_in = activeIn;
+      user.must_change_password = user.must_change_password ? 1 : 0;
       delete user.password;
 
       const newToken = jwt.sign(
-        { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, active_in: user.active_in, dbName: newDbName }, 
+        { id: user.id, username: user.username, designation: user.designation, is_admin: user.is_admin, is_superuser: user.is_superuser, must_change_password: user.must_change_password, active_in: user.active_in, dbName: newDbName }, 
         SECRET_KEY, 
         { expiresIn: '8h' }
       );
@@ -993,10 +1069,11 @@ app.put('/api/groups/:id', authenticateToken, requireSuperuser, async (req, res)
 
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
-    const users = await query(sharedDb, 'SELECT id, username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post FROM users');
+    const users = await query(sharedDb, 'SELECT id, username, full_name, email, designation, is_admin, is_superuser, is_active, password, must_change_password, active_in, date_in_post FROM users');
     users.forEach(user => {
       try { user.active_in = JSON.parse(user.active_in || '[]'); } catch(e) { user.active_in = []; }
-      delete user.password;
+      user.must_change_password = user.must_change_password ? 1 : 0;
+      user.password = user.password ? '••••••••' : '';
     });
     res.json(users);
   } catch (error) {
@@ -1192,22 +1269,56 @@ app.delete('/api/competencies/:id', authenticateToken, requireAdmin, async (req,
 
 // --- USER MANAGEMENT ---
 app.post('/api/users', authenticateToken, requireSuperuser, async (req, res) => {
-  const { username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post } = req.body;
+  const { username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post, must_change_password } = req.body;
   try {
-    await execute(sharedDb, `INSERT INTO users (username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [username, full_name, email, designation, is_admin ? 1 : 0, is_superuser ? 1 : 0, is_active !== false ? 1 : 0, password || '', JSON.stringify(active_in || []), date_in_post || null]);
-    res.json({ success: true });
+    const pwd = (password && password !== '••••••••') ? password : '';
+    const result = await execute(sharedDb, `INSERT INTO users (username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [username, full_name, email, designation, is_admin ? 1 : 0, is_superuser ? 1 : 0, is_active !== false ? 1 : 0, pwd, JSON.stringify(active_in || []), date_in_post || null, must_change_password ? 1 : 0]);
+    res.json({ success: true, id: result.lastID });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 app.put('/api/users/:id', authenticateToken, requireSuperuser, async (req, res) => {
-  const { username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post } = req.body;
+  const { username, full_name, email, designation, is_admin, is_superuser, is_active, password, active_in, date_in_post, must_change_password } = req.body;
   try {
-    await execute(sharedDb, `UPDATE users SET username=?, full_name=?, email=?, designation=?, is_admin=?, is_superuser=?, is_active=?, password=?, active_in=?, date_in_post=? WHERE id=?`, [username, full_name, email, designation, is_admin ? 1 : 0, is_superuser ? 1 : 0, is_active !== false ? 1 : 0, password || '', JSON.stringify(active_in || []), date_in_post || null, req.params.id]);
+    const existing = await query(sharedDb, 'SELECT password, must_change_password FROM users WHERE id = ?', [req.params.id]);
+    if (existing.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    let passwordToSet = existing[0].password;
+    if (password !== undefined && password !== null && password !== '' && password !== '••••••••') {
+      passwordToSet = password;
+    }
+    const mustChangeVal = must_change_password !== undefined ? (must_change_password ? 1 : 0) : (existing[0].must_change_password || 0);
+
+    await execute(sharedDb, `UPDATE users SET username=?, full_name=?, email=?, designation=?, is_admin=?, is_superuser=?, is_active=?, password=?, active_in=?, date_in_post=?, must_change_password=? WHERE id=?`, [username, full_name, email, designation, is_admin ? 1 : 0, is_superuser ? 1 : 0, is_active !== false ? 1 : 0, passwordToSet, JSON.stringify(active_in || []), date_in_post || null, mustChangeVal, req.params.id]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/users/:id/force-password-update', authenticateToken, requireSuperuser, async (req, res) => {
+  const { force } = req.body;
+  const val = (force === undefined || force) ? 1 : 0;
+  try {
+    await execute(sharedDb, `UPDATE users SET must_change_password = ? WHERE id = ?`, [val, req.params.id]);
+    res.json({ success: true, must_change_password: val });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/user/update-password', authenticateToken, async (req, res) => {
+  const { new_password } = req.body;
+  if (!new_password || !new_password.trim()) {
+    return res.status(400).json({ error: 'New password cannot be empty.' });
+  }
+  try {
+    await execute(sharedDb, `UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?`, [new_password.trim(), req.user.id]);
+    res.json({ success: true, message: 'Password updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1978,9 +2089,9 @@ app.post('/api/planning-logs/submit', authenticateToken, async (req, res) => {
       const check = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [assessor_id, competency_id]);
       if (check.length === 0 || !['x', 'x+'].includes(check[0].current_status)) return res.status(400).json({ error: "Selected assessor is not eligible for this competency." });
     }
-    await execute(req.db, `INSERT INTO patient_plan_logs (trainee_id, competency_id, patient_reference, log_date, trainee_comments, assigned_assessor_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)`, [trainee_id, competency_id, patient_reference, log_date || null, trainee_comments || '', assessor_id, status]);
+    const result = await execute(req.db, `INSERT INTO patient_plan_logs (trainee_id, competency_id, patient_reference, log_date, trainee_comments, assigned_assessor_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)`, [trainee_id, competency_id, patient_reference, log_date || null, trainee_comments || '', assessor_id, status]);
     await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, ?, ?, ?)`, [trainee_id, competency_id, is_draft ? 'CASE_LOG_DRAFTED' : 'CASE_LOG_SUBMITTED', trainee_id, is_draft ? `Saved draft case log for patient ${patient_reference}` : `Submitted case log for patient ${patient_reference} to assessor ID ${assessor_id}`]);
-    res.json({ success: true });
+    res.json({ success: true, id: result.lastID });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2003,6 +2114,70 @@ app.put('/api/planning-logs/:id', authenticateToken, async (req, res) => {
     await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, ?, ?, ?)`, [trainee_id, log[0].competency_id, is_draft ? 'CASE_LOG_DRAFT_UPDATED' : 'CASE_LOG_SUBMITTED', trainee_id, is_draft ? `Updated draft case log ${patient_reference}` : `Submitted case log ${patient_reference} to assessor ID ${assessor_id}`]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/planning-logs/:id/reassign', authenticateToken, async (req, res) => {
+  const { assigned_assessor_id, assessor_comments, handover_notes } = req.body;
+  const newAssessorId = parseInt(assigned_assessor_id, 10);
+  const logId = req.params.id;
+  try {
+    const logs = await query(req.db, `SELECT * FROM patient_plan_logs WHERE id = ?`, [logId]);
+    if (logs.length === 0) return res.status(404).json({ error: "Log not found" });
+    const log = logs[0];
+
+    if (!newAssessorId) {
+      return res.status(400).json({ error: "A valid new trainer must be selected." });
+    }
+    if (newAssessorId === log.trainee_id) {
+      return res.status(400).json({ error: "Cannot reassign a case log to the trainee themselves." });
+    }
+
+    const isAdmin = req.user.is_admin || req.user.is_superuser;
+    const isCurrentAssessor = log.assigned_assessor_id === req.user.id;
+    let isEligibleTrainer = false;
+    if (!isAdmin && !isCurrentAssessor) {
+      const trainerCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [req.user.id, log.competency_id]);
+      isEligibleTrainer = trainerCheck.length > 0 && ['x', 'x+'].includes(trainerCheck[0].current_status);
+    }
+
+    if (!isAdmin && !isCurrentAssessor && !isEligibleTrainer) {
+      return res.status(403).json({ error: "Unauthorized to reassign this case log." });
+    }
+
+    const targetCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [newAssessorId, log.competency_id]);
+    if (targetCheck.length === 0 || !['x', 'x+'].includes(targetCheck[0].current_status)) {
+      return res.status(400).json({ error: "Selected trainer is not eligible to train this competency." });
+    }
+
+    const targetUser = await query(sharedDb, `SELECT full_name, username FROM users WHERE id = ?`, [newAssessorId]);
+    const targetName = targetUser.length > 0 ? (targetUser[0].full_name || targetUser[0].username) : `ID ${newAssessorId}`;
+
+    const prevTrainerUser = await query(sharedDb, `SELECT full_name, username FROM users WHERE id = ?`, [log.assigned_assessor_id]);
+    const prevTrainerName = prevTrainerUser.length > 0 ? (prevTrainerUser[0].full_name || prevTrainerUser[0].username) : (req.user.full_name || req.user.username || `Trainer ID ${log.assigned_assessor_id}`);
+
+    let finalComments = log.assessor_comments || '';
+    const candidateComment = (assessor_comments || handover_notes || '').trim();
+    if (candidateComment) {
+      finalComments = updateAssessorCommentsTrail(finalComments, prevTrainerName, candidateComment, true, null);
+    } else if (finalComments && !finalComments.includes('[')) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB');
+      const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      finalComments = `[Saved by ${prevTrainerName} on ${dateStr}, ${timeStr}]:\n${finalComments.trim()}`;
+    }
+
+    await execute(req.db, `UPDATE patient_plan_logs SET assigned_assessor_id = ?, assessor_comments = ? WHERE id = ?`, [newAssessorId, finalComments || null, logId]);
+    await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'CASE_LOG_REASSIGNED', ?, ?)`, [
+      log.trainee_id,
+      log.competency_id,
+      req.user.id,
+      `Reassigned case log ${log.patient_reference || `ID ${logId}`} to ${targetName}`
+    ]);
+
+    res.json({ success: true, assigned_assessor_id: newAssessorId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete('/api/planning-logs/:id', authenticateToken, async (req, res) => {
@@ -2085,7 +2260,7 @@ function updateAssessorCommentsTrail(existingText, trainerName, newContent, isDr
   const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-  const regex = /\[(?:Draft by|Review by|Saved by|Completed by|Comment by)?\s*([^\]]+?)\s+on\s+([0-9\/\-:\s,apmAPM]+?)(?:\s*-\s*Score:[^\]]+)?\]:\n?/g;
+  const regex = /\[(?:Draft by|Review by|Saved by|Completed by|Comment by)?\s*([^\]]+?)\s+on\s+([0-9\/\-:\s,apmAPM]+?)(?:\s*-\s*(?:Score|Supervision):[^\]]+)?\]:\n?/g;
   const entries = [];
   let match;
   let lastIndex = 0;
@@ -2118,26 +2293,39 @@ function updateAssessorCommentsTrail(existingText, trainerName, newContent, isDr
       1: '1. Observation',
       2: '2. Direct Supervision',
       3: '3. Indirect Supervision',
-      4: '4. Independent Practice',
-      5: '5. Able to support others'
+      4: '4. Independent Practice'
     };
     const levelText = supervisionLabels[score] || `Level ${score}`;
     myHeader = `[Completed by ${trainerName} on ${dateStr}, ${timeStr} - Supervision: ${levelText}]:`;
   }
 
   const cleanNewContent = (newContent || '').trim();
-  const otherEntries = entries.filter(e => e.trainer.toLowerCase() !== trainerName.toLowerCase());
-  
+
+  // If the last entry in the trail was written by the same trainer, update that last block in place.
+  // If the last entry was written by another trainer (or there are no prior entries), append a new block.
+  const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+  const lastIsSameTrainer = lastEntry && lastEntry.trainer.toLowerCase() === trainerName.toLowerCase();
+
+  let finalEntries = [];
+  if (lastIsSameTrainer) {
+    // Preserve all prior entries
+    finalEntries = entries.slice(0, entries.length - 1);
+    if (cleanNewContent) {
+      finalEntries.push({ trainer: trainerName, header: myHeader, content: cleanNewContent });
+    }
+  } else {
+    finalEntries = [...entries];
+    if (cleanNewContent) {
+      finalEntries.push({ trainer: trainerName, header: myHeader, content: cleanNewContent });
+    }
+  }
+
   const formattedBlocks = [];
-  otherEntries.forEach(e => {
+  finalEntries.forEach(e => {
     if (e.content) {
       formattedBlocks.push(`${e.header}\n${e.content}`);
     }
   });
-  
-  if (cleanNewContent) {
-    formattedBlocks.push(`${myHeader}\n${cleanNewContent}`);
-  }
 
   return formattedBlocks.join('\n\n');
 }
@@ -2166,15 +2354,14 @@ app.put('/api/planning-logs/review/:id', authenticateToken, async (req, res) => 
 
       return res.json({ success: true, is_draft: true, status: log[0].status, assessor_comments: finalComments });
     } else {
-      if (!score) return res.status(400).json({ error: "Supervision level is required to complete review." });
+      if (!score || score < 1 || score > 4) return res.status(400).json({ error: "Valid supervision level (1-4) is required to complete review." });
       const status = score >= 3 ? 'Completed' : 'Needs_Amendment';
       const finalComments = updateAssessorCommentsTrail(log[0].assessor_comments, trainerName, assessor_comments, false, score);
       const supervisionLabels = {
         1: '1. Observation',
         2: '2. Direct Supervision',
         3: '3. Indirect Supervision',
-        4: '4. Independent Practice',
-        5: '5. Able to support others'
+        4: '4. Independent Practice'
       };
       const levelText = supervisionLabels[score] || `Level ${score}`;
 
@@ -2746,7 +2933,7 @@ app.post('/api/progress/admin-reset-eval', authenticateToken, async (req, res) =
 });
 
 // --- AUDIT LOG ADMIN ENDPOINT ---
-app.get('/api/admin/audit-logs', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/admin/audit-logs', authenticateToken, requireSuperuser, async (req, res) => {
   const limit = req.query.limit ? parseInt(req.query.limit, 10) : 200;
   try {
     const logs = await query(req.db, `SELECT a.*, c.task_name FROM competency_audit_log a LEFT JOIN competencies c ON a.competency_id = c.id ORDER BY a.timestamp DESC LIMIT ?`, [limit]);
@@ -3189,7 +3376,7 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
   }
 });
 
-app.get('/api/statistics', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/api/statistics', authenticateToken, requireSuperuser, async (req, res) => {
   try {
     const users = await query(sharedDb, 'SELECT id, username, full_name, designation, active_in, date_in_post FROM users WHERE is_active = 1');
     const currentDbName = req.headers['x-database'] || 'QA';
@@ -3480,15 +3667,52 @@ app.post('/api/admin/restore/:scope', authenticateToken, requireSuperuser, async
   const { backup } = req.body;
   if (!backup) return res.status(400).json({error: 'No backup data provided'});
   try {
-    const sections = await getSections();
-    const validDbs = ['shared', ...sections.map(s => s.name)];
-    for (const [db, base64Data] of Object.entries(backup)) {
-      if (!validDbs.includes(db)) continue;
-      const dbPath = path.resolve(__dirname, `${db}.db`);
-      fs.writeFileSync(dbPath, Buffer.from(base64Data, 'base64'));
+    let backupData = backup;
+    if (backupData.backup && typeof backupData.backup === 'object') {
+      backupData = backupData.backup;
     }
+
+    const entries = Object.entries(backupData);
+    if (entries.length === 0) {
+      return res.status(400).json({ error: 'No valid database files found in backup payload' });
+    }
+
+    // 1. If shared database is present, restore it first
+    const sharedEntry = entries.find(([k]) => k.toLowerCase() === 'shared' || k.toLowerCase() === 'shared.db');
+    if (sharedEntry && sharedEntry[1]) {
+      await new Promise(r => sharedDb.close(r));
+      fs.writeFileSync(sharedDbPath, Buffer.from(sharedEntry[1], 'base64'));
+      sharedDb = new sqlite3.Database(sharedDbPath);
+      await new Promise(r => initSharedDb(sharedDb, r));
+      await ensureUserColumns(sharedDb);
+    }
+
+    // 2. Restore section databases
+    for (const [rawDbName, base64Data] of entries) {
+      const cleanName = rawDbName.replace(/\.db$/i, '').trim();
+      if (cleanName.toLowerCase() === 'shared' || !base64Data) continue;
+      const safeName = cleanName.replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!safeName) continue;
+
+      if (dbs[safeName]) {
+        await new Promise(r => dbs[safeName].close(r));
+        delete dbs[safeName];
+      }
+
+      const dbPath = path.resolve(__dirname, `${safeName}.db`);
+      fs.writeFileSync(dbPath, Buffer.from(base64Data, 'base64'));
+
+      // Reconnect and run full migrations
+      const newDb = getDb(safeName);
+      await new Promise(r => initDb(newDb, r));
+      await ensureDbColumns(newDb);
+    }
+
     res.json({ success: true });
-  } catch(e) { res.status(500).json({error: e.message}); }
+  } catch(e) {
+    console.error("Restore error:", e);
+    res.status(500).json({error: e.message});
+  }
 });
 
 app.post('/api/admin/upload-frontend', authenticateToken, requireSuperuser, async (req, res) => {

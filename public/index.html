@@ -509,12 +509,28 @@
                       <span v-else>Draft saved on {{ formatDate(log.created_at, true) }}</span>
                     </div>
                     <p class="text-gray-700 mt-1 mb-2 italic whitespace-pre-wrap">{{ log.trainee_comments }}</p>
-                    <div v-if="log.assessor_comments" class="border-t border-gray-100 pt-2 mt-2 bg-blue-50/50 p-2.5 rounded border border-blue-100">
-                      <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs font-bold text-blue-900">Trainer Feedback & Notes Trail:</span>
-                        <span v-if="log.score" class="text-xs font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">Supervision: {{ getSupervisionLabel(log.score) }}</span>
+                    <div v-if="log.assessor_comments" class="border-t border-gray-100 pt-2 mt-2 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
+                      <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                          Trainer Feedback & Notes Trail
+                        </span>
+                        <span v-if="log.score" class="text-xs font-bold text-blue-800 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full">Supervision: {{ getSupervisionLabel(log.score) }}</span>
                       </div>
-                      <div class="text-xs text-gray-800 whitespace-pre-wrap font-mono">{{ log.assessor_comments }}</div>
+                      <div class="space-y-2">
+                        <div v-for="(block, bIdx) in parseCommentBlocks(log.assessor_comments)" :key="bIdx" class="bg-white p-2.5 rounded border border-gray-200 shadow-sm text-xs">
+                          <div class="flex flex-wrap items-center justify-between gap-1 mb-1 pb-1 border-b border-gray-100 text-[11px]">
+                            <span class="font-bold text-blue-900 flex items-center gap-1">
+                              <span>👤</span> {{ block.trainer }}
+                            </span>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                              <span v-if="block.supervision" class="font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px]">{{ block.supervision }}</span>
+                              <span v-if="block.date" class="text-gray-500 font-medium bg-gray-100 px-1.5 py-0.2 rounded text-[10px]">🕒 {{ block.date }}</span>
+                            </div>
+                          </div>
+                          <div class="text-gray-800 whitespace-pre-wrap leading-relaxed">{{ block.content }}</div>
+                        </div>
+                      </div>
                     </div>
                     <div v-if="(user.is_admin || user.is_superuser || isTrainerInAny) && log.reviewed_at" class="border-t border-gray-100 pt-1.5 mt-2 flex flex-wrap items-center justify-between text-xs text-gray-500 bg-gray-50 px-2.5 py-1 rounded">
                       <div class="flex items-center gap-1.5 flex-wrap">
@@ -537,9 +553,25 @@
               <!-- Expanded Logbook Add/Edit -->
               <div v-if="activeLogbookCompId === comp.id && activeLogbookMode === 'add'" class="mt-2 bg-blue-50/50 p-4 rounded border border-blue-100 shadow-inner">
                 <h5 class="font-semibold text-blue-900 text-sm mb-3">{{ editingPlanLogId ? 'Edit Case Log / Reassign Trainer' : 'Add New Case Log' }}</h5>
-                <div v-if="editingPlanLogAssessorComments" class="mb-3 bg-amber-50 p-2.5 rounded border border-amber-200">
-                  <div class="text-xs font-bold text-amber-900 mb-1">Recorded Trainer Feedback Trail:</div>
-                  <div class="text-xs text-gray-800 whitespace-pre-wrap font-mono">{{ editingPlanLogAssessorComments }}</div>
+                <div v-if="editingPlanLogAssessorComments" class="mb-3 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200">
+                  <div class="text-xs font-bold text-amber-900 mb-2 flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Recorded Trainer Feedback Trail
+                  </div>
+                  <div class="space-y-2">
+                    <div v-for="(block, bIdx) in parseCommentBlocks(editingPlanLogAssessorComments)" :key="bIdx" class="bg-white p-2.5 rounded border border-amber-200/80 shadow-sm text-xs">
+                      <div class="flex flex-wrap items-center justify-between gap-1 mb-1 pb-1 border-b border-gray-100 text-[11px]">
+                        <span class="font-bold text-blue-900 flex items-center gap-1">
+                          <span>👤</span> {{ block.trainer }}
+                        </span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span v-if="block.supervision" class="font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px]">{{ block.supervision }}</span>
+                          <span v-if="block.date" class="text-gray-500 font-medium bg-gray-100 px-1.5 py-0.2 rounded text-[10px]">🕒 {{ block.date }}</span>
+                        </div>
+                      </div>
+                      <div class="text-gray-800 whitespace-pre-wrap leading-relaxed">{{ block.content }}</div>
+                    </div>
+                  </div>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-3 mb-3">
                   <input v-model="newPlanLog.patient_reference" placeholder="Anonymized Case Ref / Patient No." class="w-full sm:w-2/3 border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:ring-blue-500">
@@ -732,8 +764,18 @@
                 <li v-for="log in logs" :key="log.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
                   <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
                     <span>{{ log.category }} - {{ log.task_name }} <span class="text-gray-500 italic ml-1">({{ log.patient_reference }}<template v-if="log.log_date">, {{ formatDate(log.log_date) }}</template>)</span></span>
-                    <span v-if="log.assigned_assessor_id === user.id" class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">Assigned to you</span>
-                    <span v-else class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 self-start sm:self-auto">Assigned: {{ log.assigned_assessor_name }}</span>
+                    <template v-if="log.assigned_assessor_id === user.id">
+                      <span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">Assigned to you</span>
+                      <button @click.stop="openReassignLogModal(log)" type="button" class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition shadow-xs self-start sm:self-auto cursor-pointer" title="Reassign this log to another trainer">
+                        <span>🔁 Reassign</span>
+                      </button>
+                    </template>
+                    <template v-else>
+                      <span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 self-start sm:self-auto">Assigned: {{ log.assigned_assessor_name }}</span>
+                      <button v-if="user.is_admin || user.is_superuser" @click.stop="openReassignLogModal(log)" type="button" class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 transition shadow-xs self-start sm:self-auto cursor-pointer" title="Reassign this log as Admin">
+                        <span>🔁 Reassign</span>
+                      </button>
+                    </template>
                   </div>
                   <button @click="openLogReviewModal(log)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded font-semibold transition text-xs shadow-sm whitespace-nowrap ml-2">Comment & Score</button>
                 </li>
@@ -750,8 +792,8 @@
             <button v-if="user.is_admin" @click="adminSubTab = 'competencies'" :class="adminSubTab === 'competencies' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Competencies</button>
             <button v-if="user.is_admin" @click="adminSubTab = 'quizzes'" :class="adminSubTab === 'quizzes' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Quizzes</button>
             <button v-if="user.is_admin || user.is_superuser" @click="adminSubTab = 'categories'" :class="adminSubTab === 'categories' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Categories</button>
-            <button v-if="user.is_admin" @click="adminSubTab = 'statistics'" :class="adminSubTab === 'statistics' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Statistics</button>
-            <button v-if="user.is_admin || user.is_superuser" @click="adminSubTab = 'audit'" :class="adminSubTab === 'audit' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Audit Logs</button>
+            <button v-if="user.is_superuser" @click="adminSubTab = 'statistics'" :class="adminSubTab === 'statistics' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Statistics</button>
+            <button v-if="user.is_superuser" @click="adminSubTab = 'audit'" :class="adminSubTab === 'audit' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Audit Logs</button>
             <button v-if="user.is_superuser" @click="adminSubTab = 'users'" :class="adminSubTab === 'users' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Users</button>
             <button v-if="user.is_superuser" @click="adminSubTab = 'superadmin'" :class="adminSubTab === 'superadmin' ? 'text-indigo-700 font-bold border-b-2 border-indigo-700' : 'text-gray-500 hover:text-indigo-500'">Configuration</button>
           </div>
@@ -1121,7 +1163,10 @@
             <h3 class="text-lg font-semibold mb-4">{{ isEditingUser ? 'Edit User' : 'Add New User' }}</h3>
             <form @submit.prevent="saveUser" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Username</label><input v-model="newUserData.username" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
-              <div><label class="block text-sm font-medium text-gray-700 mb-1">Password</label><input v-model="newUserData.password" type="text" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2" placeholder="Leave blank for none"></div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input type="password" v-model="newUserData.password" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2" placeholder="Leave blank for none">
+              </div>
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label><input v-model="newUserData.full_name" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input v-model="newUserData.email" required type="email" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
               <div><label class="block text-sm font-medium text-gray-700 mb-1">Date in Post</label><input v-model="newUserData.date_in_post" type="date" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2"></div>
@@ -1140,7 +1185,7 @@
                   </label>
                 </div>
               </div>
-              <div class="sm:col-span-2 flex items-center gap-6 mt-2">
+              <div class="sm:col-span-2 flex flex-wrap items-center gap-6 mt-2">
                 <label class="flex items-center space-x-2 cursor-pointer">
                   <input type="checkbox" v-model="newUserData.is_admin" class="h-4 w-4 text-blue-600 rounded"> 
                   <span class="text-sm font-medium text-gray-700">Assessor</span>
@@ -1152,6 +1197,10 @@
                 <label class="flex items-center space-x-2 cursor-pointer">
                   <input type="checkbox" v-model="newUserData.is_active" class="h-4 w-4 text-green-600 rounded"> 
                   <span class="text-sm font-medium text-gray-700">Active</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer bg-amber-50 px-2.5 py-1 rounded border border-amber-200">
+                  <input type="checkbox" v-model="newUserData.must_change_password" class="h-4 w-4 text-amber-600 rounded"> 
+                  <span class="text-sm font-medium text-amber-900">Force user to update password</span>
                 </label>
               </div>
               <div class="sm:col-span-2 flex gap-2 mt-2">
@@ -1204,7 +1253,12 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="u in displayedAdminUsers" :key="u.id" :class="{ 'bg-gray-50': u.is_active === 0 }">
-                <td class="px-3 py-2 text-sm" :class="{ 'opacity-50': u.is_active === 0 }">{{ u.username }}</td>
+                <td class="px-3 py-2 text-sm" :class="{ 'opacity-50': u.is_active === 0 }">
+                  <div class="flex items-center gap-1.5">
+                    <span>{{ u.username }}</span>
+                    <span v-if="u.must_change_password" title="Must change password on next login" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">Pwd Reset</span>
+                  </div>
+                </td>
                 <td class="px-3 py-2 text-sm" :class="{ 'opacity-50': u.is_active === 0 }">{{ u.full_name }}</td>
                 <td class="px-3 py-2 text-sm" :class="{ 'opacity-50': u.is_active === 0 }">{{ u.designation }}</td>
                 <td v-for="s in globalSettings.sections" :key="'td-'+s.name" class="px-3 py-2 text-sm text-center" :class="{ 'opacity-50': u.is_active === 0 }"><span v-if="(u.active_in || []).includes(s.name)" class="text-green-600 font-bold">✓</span></td>
@@ -1220,7 +1274,7 @@
                     <button @click.stop="toggleUserMenu(u.id)" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1.5 rounded text-xs font-semibold transition border border-gray-300 flex items-center gap-1 shadow-sm">
                       Actions <span class="text-[9px]">▼</span>
                     </button>
-                    <div v-if="activeUserMenuId === u.id" class="origin-top-right absolute right-0 mt-1 w-36 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-30 divide-y divide-gray-100 text-left">
+                    <div v-if="activeUserMenuId === u.id" class="origin-top-right absolute right-0 mt-1 w-44 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-30 divide-y divide-gray-100 text-left">
                       <div class="py-1">
                         <button v-if="u.is_active !== 0" @click.stop="syncUserQATrack(u); activeUserMenuId = null" :disabled="isSyncingUser[u.id]" class="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-1.5 disabled:opacity-50">
                           <span v-if="isSyncingUser[u.id]" class="animate-spin h-2.5 w-2.5 border-2 border-indigo-800 border-t-transparent rounded-full"></span>
@@ -1232,6 +1286,9 @@
                         </button>
                         <button @click.stop="toggleUserActive(u); activeUserMenuId = null" class="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-1.5">
                           <span>{{ u.is_active !== 0 ? '🗄️ Archive User' : '✅ Activate User' }}</span>
+                        </button>
+                        <button @click.stop="toggleForcePassword(u); activeUserMenuId = null" class="w-full text-left px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-50 flex items-center gap-1.5">
+                          <span>🔑</span> {{ u.must_change_password ? 'Clear Force Password' : 'Force Password Reset' }}
                         </button>
                         <button @click.stop="editUser(u); activeUserMenuId = null" class="w-full text-left px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50 flex items-center gap-1.5">
                           <span>✏️</span> Edit
@@ -1325,7 +1382,7 @@
         </div>
         
         <!-- Audit Logs Admin -->
-        <div v-if="adminSubTab === 'audit'" class="space-y-4 bg-white p-4 rounded border border-gray-200 shadow-sm">
+        <div v-if="adminSubTab === 'audit' && user.is_superuser" class="space-y-4 bg-white p-4 rounded border border-gray-200 shadow-sm">
            <div class="flex justify-between items-center mb-2">
              <h3 class="text-lg font-semibold text-gray-800">Audit Logs (Recent)</h3>
              <button @click="fetchAuditLogs" class="text-sm text-blue-600 hover:underline font-semibold">Refresh</button>
@@ -1358,7 +1415,7 @@
         </div>
         
         <!-- Statistics Admin -->
-        <div v-if="adminSubTab === 'statistics' && user.is_admin" class="space-y-6">
+        <div v-if="adminSubTab === 'statistics' && user.is_superuser" class="space-y-6">
           <div v-if="!statistics" class="text-center text-gray-500 p-4">Loading statistics...</div>
           <div v-else>
             <div class="mb-12">
@@ -2391,9 +2448,27 @@
                         <span class="font-bold text-gray-700 text-[11px] uppercase tracking-wide">Trainee Reflective Notes:</span>
                         <p class="italic bg-gray-50 p-2 border border-gray-200 rounded text-gray-800 mt-1 whitespace-pre-wrap">{{ log.trainee_comments || 'No reflective notes provided.' }}</p>
                       </div>
-                      <div v-if="log.assessor_comments" class="bg-amber-50/70 p-2.5 border border-amber-200 rounded">
-                        <span class="font-bold text-amber-900 text-[11px] uppercase tracking-wide block mb-1">Trainer Feedback & Notes Trail:</span>
-                        <div class="text-xs text-gray-800 whitespace-pre-wrap font-mono">{{ log.assessor_comments }}</div>
+                      <div v-if="log.assessor_comments" class="bg-slate-50/80 p-2.5 border border-slate-200 rounded-lg">
+                        <div class="flex justify-between items-center mb-2">
+                          <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                            Trainer Feedback & Notes Trail
+                          </span>
+                        </div>
+                        <div class="space-y-2">
+                          <div v-for="(block, bIdx) in parseCommentBlocks(log.assessor_comments)" :key="bIdx" class="bg-white p-2.5 rounded border border-gray-200 shadow-sm text-xs">
+                            <div class="flex flex-wrap items-center justify-between gap-1 mb-1 pb-1 border-b border-gray-100 text-[11px]">
+                              <span class="font-bold text-blue-900 flex items-center gap-1">
+                                <span>👤</span> {{ block.trainer }}
+                              </span>
+                              <div class="flex items-center gap-1.5 flex-wrap">
+                                <span v-if="block.supervision" class="font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px]">{{ block.supervision }}</span>
+                                <span v-if="block.date" class="text-gray-500 font-medium bg-gray-100 px-1.5 py-0.2 rounded text-[10px]">🕒 {{ block.date }}</span>
+                              </div>
+                            </div>
+                            <div class="text-gray-800 whitespace-pre-wrap leading-relaxed">{{ block.content }}</div>
+                          </div>
+                        </div>
                       </div>
                       <div v-else class="text-[11px] text-gray-400 italic">No trainer feedback recorded yet.</div>
 
@@ -2742,7 +2817,6 @@
                   <div class="flex flex-col gap-0.5">
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <span class="font-semibold text-gray-900 text-sm leading-tight group-hover:text-blue-900 transition">{{ userSummary.fullName }}</span>
-                      <span class="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 opacity-80 group-hover:opacity-100 transition">⏱️ Timings</span>
                     </div>
                     <span class="text-xs text-gray-500 font-medium">{{ userSummary.designation }}</span>
                     <span v-if="userSummary.status !== undefined" :class="getStatusBadgeClassByCode(userSummary.status)" class="w-fit">
@@ -3066,7 +3140,7 @@
     <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
       <div class="flex-1"></div>
       <div class="flex-1 flex justify-center">
-        <img src="compiltlogotrans.png" alt="Compilt Logo" class="h-10 w-auto object-contain">
+        <img src="compiltlogotrans.png" alt="ComPilot Logo" class="h-10 w-auto object-contain cursor-pointer hover:opacity-80 transition transform hover:scale-105" @click="showAboutModal = true" title="About ComPilot & Release Notes">
       </div>
       <div class="flex-1 text-right">
         James Burnley v2.5
@@ -3093,11 +3167,22 @@
 
         <!-- Other Trainers' Feedback Trail if exists -->
         <div v-if="activeLogReview.otherFeedbackBlocks && activeLogReview.otherFeedbackBlocks.length > 0" class="mb-4">
-          <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Previous Trainer Feedback Trail</label>
+          <label class="block text-xs font-bold text-gray-700 uppercase mb-1.5 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Previous Trainer Feedback Trail
+          </label>
           <div class="space-y-2">
-            <div v-for="(block, bIdx) in activeLogReview.otherFeedbackBlocks" :key="bIdx" class="bg-gray-50 p-2.5 border border-gray-200 rounded text-xs text-gray-800">
-              <div class="font-bold text-blue-900 mb-1">{{ block.header.replace(':', '') }}</div>
-              <div class="whitespace-pre-wrap font-mono">{{ block.content }}</div>
+            <div v-for="(block, bIdx) in activeLogReview.otherFeedbackBlocks" :key="bIdx" class="bg-slate-50 p-2.5 border border-slate-200 rounded-lg shadow-sm text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-1 mb-1 pb-1 border-b border-gray-200/60 text-[11px]">
+                <span class="font-bold text-blue-900 flex items-center gap-1">
+                  <span>👤</span> {{ block.trainer }}
+                </span>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span v-if="block.supervision" class="font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded text-[10px]">{{ block.supervision }}</span>
+                  <span v-if="block.date" class="text-gray-500 font-medium bg-gray-100 px-1.5 py-0.2 rounded text-[10px]">🕒 {{ block.date }}</span>
+                </div>
+              </div>
+              <div class="whitespace-pre-wrap text-gray-800 leading-relaxed font-sans">{{ block.content }}</div>
             </div>
           </div>
         </div>
@@ -3118,7 +3203,6 @@
               <option value="2">2. Direct Supervision</option>
               <option value="3">3. Indirect Supervision</option>
               <option value="4">4. Independent Practice</option>
-              <option value="5">5. Able to support others</option>
             </select>
           </div>
         </div>
@@ -3191,6 +3275,189 @@
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Reassign Case Log Modal -->
+    <div v-if="showReassignLogModal && activeReassignLog" @click.self="closeReassignLogModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <div class="flex items-center justify-between mb-3 border-b pb-2">
+          <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <span>🔁 Reassign Case Log</span>
+          </h3>
+          <button @click="closeReassignLogModal" class="text-gray-400 hover:text-gray-600 font-bold text-lg leading-none">&times;</button>
+        </div>
+        
+        <div class="mb-4 text-xs bg-blue-50 p-3 rounded border border-blue-200 space-y-1">
+          <div><strong class="text-blue-900">Trainee:</strong> {{ activeReassignLog.trainee_name }}</div>
+          <div><strong class="text-blue-900">Task:</strong> {{ activeReassignLog.category }} - {{ activeReassignLog.task_name }}</div>
+          <div><strong class="text-blue-900">Reference:</strong> {{ activeReassignLog.patient_reference || 'N/A' }}</div>
+          <div><strong class="text-blue-900">Currently Assigned:</strong> {{ activeReassignLog.assigned_assessor_name || 'Assigned to you' }}</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+            Handover Feedback / Comments (Appended to Continuous Trail)
+          </label>
+          <textarea v-model="reassignHandoverComments" rows="3" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:ring-blue-500 focus:border-blue-500" placeholder="Optional comments or feedback to pass on to the next trainer..."></textarea>
+        </div>
+
+        <div class="mb-5">
+          <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+            Select New Trainer / Assessor
+          </label>
+          <div v-if="loadingReassignAssessors" class="text-xs text-gray-500 py-2">Loading eligible trainers...</div>
+          <div v-else-if="reassignEligibleAssessors.length === 0" class="text-xs text-amber-700 bg-amber-50 p-2.5 rounded border border-amber-200">
+            No other eligible trainers found for this competency.
+          </div>
+          <select v-else v-model="selectedReassignAssessorId" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+            <option disabled value="">Choose an eligible trainer...</option>
+            <option v-for="t in reassignEligibleAssessors" :key="t.id" :value="t.id">
+              {{ t.full_name || t.username }} {{ t.id === activeReassignLog.assigned_assessor_id ? '(Current)' : '' }}
+            </option>
+          </select>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+          <button @click="closeReassignLogModal" type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-1.5 px-3 rounded text-sm transition">
+            Cancel
+          </button>
+          <button @click="confirmReassignLog" :disabled="!selectedReassignAssessorId || selectedReassignAssessorId === activeReassignLog.assigned_assessor_id || isReassigning" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm disabled:opacity-50 flex items-center gap-1.5">
+            <span v-if="isReassigning">Reassigning...</span>
+            <span v-else>Confirm Reassignment</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- About ComPilot Modal -->
+    <div v-if="showAboutModal" @click.self="showAboutModal = false" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto border border-gray-200">
+        <div class="flex items-start justify-between pb-3 border-b border-gray-200">
+          <div class="flex items-center gap-3">
+            <img src="compiltlogotrans.png" alt="ComPilot Logo" class="h-12 w-auto object-contain">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-xl font-bold text-gray-900 tracking-tight">ComPilot</h3>
+                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded-full border border-blue-200">v2.5</span>
+              </div>
+            </div>
+          </div>
+          <button @click="showAboutModal = false" class="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none px-1">&times;</button>
+        </div>
+
+        <div class="py-4 space-y-4 text-sm text-gray-700">
+          <div class="flex items-center justify-between text-xs text-gray-700 border border-gray-200 py-2.5 px-3 bg-gray-50 rounded-lg">
+            <div><strong class="text-gray-900">Author:</strong> James Burnley</div>
+            <div><strong class="text-gray-900">Release Date:</strong> 08/10/2026</div>
+          </div>
+
+          <!-- Nested Collapsible Version Release Notes -->
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <button @click="showReleaseNotes = !showReleaseNotes" type="button" class="w-full flex items-center justify-between p-3 bg-gray-100 hover:bg-gray-200 transition text-left text-xs font-bold text-gray-800 select-none">
+              <span class="flex items-center gap-2">
+                <span>📋</span>
+                <span>Version Release Notes</span>
+              </span>
+              <span class="text-gray-500 text-[11px] font-normal">
+                {{ showReleaseNotes ? '▲ Hide notes' : '▼ View notes' }}
+              </span>
+            </button>
+            <div v-if="showReleaseNotes" class="p-4 bg-white space-y-4 text-xs divide-y divide-gray-100 max-h-72 overflow-y-auto">
+              <!-- v2.5 -->
+              <div class="pt-1 first:pt-0">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-blue-900 text-sm">Release v2.5 (Current)</span>
+                  <span class="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold border border-blue-200">Latest</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                  <li><strong>Trainer Log Reassignment:</strong> Facility for trainers to reassign pending case log reviews directly from the feedback queue to another eligible trainer.</li>
+                  <li><strong>Supervision Scale Refinement:</strong> Removed Level 5 ("Able to support others") across review dropdowns, comments trail headers, and progression charts, standardizing on Levels 1–4 (up to Independent Practice).</li>
+                  <li><strong>Admin-Only Visibility for Statistics & Audit Logs:</strong> Restricted Statistics and Audit Log tabs and views exclusively to users with administrator and superuser permissions.</li>
+                  <li><strong>Turnaround & Completion Timing Analytics:</strong> Introduced comprehensive timing statistics (Min, Max, Mean, Median) on the Competency Records Details (Leaderboard) for both individual trainees and entire cohorts, reactive to active year periods.</li>
+                  <li><strong>QATrack+ Duration Tracking:</strong> Automatic calculation of duration from <code>work_started</code> and <code>work_completed</code> timestamps at data sync and storage.</li>
+                  <li><strong>Median Turnaround Leaderboard:</strong> Department ranking table based on median completion times for competencies.</li>
+                  <li><strong>Unsaved Comments Protection:</strong> Modal prompt warning trainers before navigating away from in-progress feedback reviews to prevent loss of comments.</li>
+                  <li><strong>About Splash & Release Notes Hub:</strong> Embedded interactive about modal with collapsible version history accessible from the footer logo.</li>
+                </ul>
+              </div>
+
+              <!-- v2.43 -->
+              <div class="pt-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-gray-800">Release v2.43</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                  <li>Assessor turnaround timing badges and timestamps on completed case logs.</li>
+                  <li>Sequential and date-based progression charts for case logs.</li>
+                  <li>Multi-section training overview matrix enhancements.</li>
+                </ul>
+              </div>
+
+              <!-- v2.4 -->
+              <div class="pt-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-gray-800">Release v2.4</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                  <li>Interactive trainee case logbooks with multi-trainer feedback trail and draft saving.</li>
+                  <li>Competency prerequisite lineage checks and automated milestone progression engine.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-3 border-t border-gray-100">
+          <button @click="showAboutModal = false" type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1.5 px-4 rounded text-xs transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Force Password Update Modal (Mandatory/Unskippable if user.must_change_password) -->
+    <div v-if="user && user.must_change_password" class="fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md border border-amber-300">
+        <div class="flex items-center gap-3 pb-3 border-b border-gray-200">
+          <div class="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center text-xl text-amber-600">
+            🔒
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-gray-900">Password Update Required</h3>
+            <p class="text-xs text-gray-500">You must update your password before continuing</p>
+          </div>
+        </div>
+
+        <form @submit.prevent="submitForcedPasswordUpdate" class="py-4 space-y-4">
+          <div v-if="forcedPasswordForm.error" class="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-xs">
+            {{ forcedPasswordForm.error }}
+          </div>
+
+          <p class="text-xs text-gray-600">
+            An administrator has requested that you set a new password for account <strong>{{ user.username }}</strong>.
+          </p>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">New Password</label>
+            <input type="password" v-model="forcedPasswordForm.newPassword" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2 text-sm" placeholder="Enter new password">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Confirm New Password</label>
+            <input type="password" v-model="forcedPasswordForm.confirmPassword" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 border px-3 py-2 text-sm" placeholder="Confirm new password">
+          </div>
+
+          <div class="flex items-center justify-between pt-3 border-t border-gray-100">
+            <button @click="logout" type="button" class="text-xs text-gray-500 hover:text-red-600 underline">
+              Log out
+            </button>
+            <button type="submit" :disabled="forcedPasswordForm.loading" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-xs transition disabled:opacity-50 flex items-center gap-1.5 shadow-sm">
+              <span v-if="forcedPasswordForm.loading" class="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>
+              <span>Update Password</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -3548,12 +3815,16 @@
         const myEvaluations = ref([]);
 
         const handleAdminTabClick = () => {
-          currentTab.value = 'admin';
-          if (!user.value.is_admin && !['users', 'categories', 'superadmin'].includes(adminSubTab.value)) {
-            adminSubTab.value = 'users';
+          if (!user.value || !(user.value.is_admin || user.value.is_superuser)) {
+            currentTab.value = 'individual';
+            return;
           }
-          if (user.value.is_admin && !user.value.is_superuser && ['users', 'superadmin'].includes(adminSubTab.value)) {
-            adminSubTab.value = 'competencies';
+          currentTab.value = 'admin';
+          if (!user.value.is_superuser && ['users', 'superadmin', 'statistics', 'audit'].includes(adminSubTab.value)) {
+            adminSubTab.value = user.value.is_admin ? 'competencies' : 'categories';
+          }
+          if (!user.value.is_admin && ['competencies', 'quizzes'].includes(adminSubTab.value)) {
+            adminSubTab.value = 'categories';
           }
         };
 
@@ -4180,7 +4451,7 @@
 
         const isEditingUser = ref(false);
         const editingUserId = ref(null);
-        const newUserData = ref({ username: '', full_name: '', email: '', designation: 'Trainee', is_admin: false, is_superuser: false, is_active: true, password: '', active_in: ['QA', 'Planning', 'Brachytherapy', 'SABR'], date_in_post: '' });
+        const newUserData = ref({ username: '', full_name: '', email: '', designation: 'Trainee', is_admin: false, is_superuser: false, is_active: true, password: '', must_change_password: false, active_in: ['QA', 'Planning', 'Brachytherapy', 'SABR'], date_in_post: '' });
         
         const startEditCategory = (cat) => {
             editingCategoryName.value = cat.category;
@@ -4303,8 +4574,7 @@
             1: '1. Observation',
             2: '2. Direct Supervision',
             3: '3. Indirect Supervision',
-            4: '4. Independent Practice',
-            5: '5. Able to support others'
+            4: '4. Independent Practice'
           };
           return labels[score] || (score ? `Level ${score}` : '');
         };
@@ -4504,7 +4774,15 @@
 
         const sectionApplicableUsers = computed(() => {
           if (!statistics.value) return [];
-          let filteredUsers = statistics.value.userStats.filter(u => u.overall_totalApplicable > 0);
+          let filteredUsers = statistics.value.userStats.filter(u => {
+            if (u.is_active === 0) return false;
+            let activeIn = [];
+            try {
+              activeIn = Array.isArray(u.active_in) ? u.active_in : JSON.parse(u.active_in || '[]');
+            } catch(e) { activeIn = []; }
+            if (selectedDb.value && !activeIn.includes(selectedDb.value)) return false;
+            return u.overall_totalApplicable > 0;
+          });
           
           return filteredUsers.sort((a, b) => {
             let valA, valB;
@@ -6035,6 +6313,13 @@
             }
             return u;
           });
+          if (user.value && user.value.id) {
+            const currentInList = users.value.find(u => u.id === user.value.id);
+            if (currentInList && currentInList.must_change_password !== undefined) {
+              user.value.must_change_password = currentInList.must_change_password ? 1 : 0;
+              localStorage.setItem('user', JSON.stringify(user.value));
+            }
+          }
           competencies.value = await cRes.json();
           progress.value = await pRes.json();
           userGroups.value = await gRes.json();
@@ -6533,12 +6818,12 @@
                 y: {
                   type: 'linear',
                   min: 0.5,
-                  max: 5.5,
+                  max: 4.5,
                   ticks: {
                     stepSize: 1,
                     precision: 0,
                     callback: function(val) {
-                      return [1, 2, 3, 4, 5].includes(val) ? val : '';
+                      return [1, 2, 3, 4].includes(val) ? val : '';
                     },
                     font: {
                       size: 11,
@@ -7739,41 +8024,88 @@
           } catch(e) { customAlert(e.message, "Error"); }
         };
 
-        const parseTrainerCommentsTrail = (text, currentTrainerName) => {
-          if (!text) return { otherBlocks: [], myContent: '', hasPreviousComments: false };
-          const regex = /\[(?:Draft by|Review by|Saved by|Completed by|Comment by)?\s*([^\]]+?)\s+on\s+([0-9\/\-:\s,apmAPM]+?)(?:\s*-\s*Score:[^\]]+)?\]:\n?/g;
+        const parseCommentBlocks = (text) => {
+          if (!text || !text.trim()) return [];
+          const regex = /\[(?:Draft by|Review by|Saved by|Completed by|Comment by)?\s*([^\]]+?)\s+on\s+([0-9\/\-:\s,apmAPM]+?)(?:\s*-\s*(?:Score|Supervision):([^\]]+))?\]:\n?/g;
           const entries = [];
           let match;
           let lastIndex = 0;
           let lastHeader = '';
           let lastTrainer = '';
           let lastDate = '';
+          let lastSupervision = '';
+
           while ((match = regex.exec(text)) !== null) {
             if (lastHeader) {
               const content = text.slice(lastIndex, match.index).trim();
-              entries.push({ trainer: lastTrainer, date: lastDate, header: lastHeader, content });
+              if (content) {
+                entries.push({
+                  trainer: lastTrainer,
+                  date: lastDate,
+                  supervision: lastSupervision,
+                  header: lastHeader,
+                  content: content
+                });
+              }
             }
             lastHeader = match[0].trim();
-            lastTrainer = match[1].trim();
-            lastDate = match[2].trim();
+            lastTrainer = (match[1] || '').trim();
+            lastDate = (match[2] || '').trim();
+            lastSupervision = (match[3] || '').trim();
             lastIndex = regex.lastIndex;
           }
           if (lastHeader) {
             const content = text.slice(lastIndex).trim();
-            entries.push({ trainer: lastTrainer, date: lastDate, header: lastHeader, content });
+            if (content) {
+              entries.push({
+                trainer: lastTrainer,
+                date: lastDate,
+                supervision: lastSupervision,
+                header: lastHeader,
+                content: content
+              });
+            }
           }
+
+          if (entries.length === 0 && text.trim()) {
+            return [{
+              trainer: 'Previous Note',
+              date: '',
+              supervision: '',
+              header: 'Notes:',
+              content: text.trim()
+            }];
+          }
+
+          return entries;
+        };
+
+        const parseTrainerCommentsTrail = (text, currentTrainerName) => {
+          if (!text) return { otherBlocks: [], myContent: '', hasPreviousComments: false };
+          const entries = parseCommentBlocks(text);
 
           if (entries.length === 0) {
-            return { otherBlocks: [], myContent: text.trim(), hasPreviousComments: !!text.trim() };
+            return { otherBlocks: [], myContent: '', hasPreviousComments: false };
           }
 
-          const myEntry = entries.find(e => e.trainer && e.trainer.toLowerCase() === (currentTrainerName || '').toLowerCase());
-          const otherEntries = entries.filter(e => e.trainer && e.trainer.toLowerCase() !== (currentTrainerName || '').toLowerCase());
-          return {
-            otherBlocks: otherEntries,
-            myContent: myEntry ? myEntry.content : '',
-            hasPreviousComments: !!myEntry
-          };
+          // If the last entry was authored by currentTrainerName, load it into myContent for editing.
+          // All earlier entries (even by the same trainer from previous turns) remain in otherBlocks in chronological order!
+          const lastEntry = entries[entries.length - 1];
+          const isLastSameTrainer = lastEntry && lastEntry.trainer && lastEntry.trainer.toLowerCase() === (currentTrainerName || '').toLowerCase();
+
+          if (isLastSameTrainer) {
+            return {
+              otherBlocks: entries.slice(0, entries.length - 1),
+              myContent: lastEntry.content,
+              hasPreviousComments: true
+            };
+          } else {
+            return {
+              otherBlocks: entries,
+              myContent: '',
+              hasPreviousComments: false
+            };
+          }
         };
 
         const openLogReviewModal = (log) => {
@@ -8018,6 +8350,78 @@
             customAlert(e.message, "Error");
           }
         };
+
+        const showReassignLogModal = ref(false);
+        const activeReassignLog = ref(null);
+        const reassignEligibleAssessors = ref([]);
+        const selectedReassignAssessorId = ref('');
+        const loadingReassignAssessors = ref(false);
+        const isReassigning = ref(false);
+        const reassignHandoverComments = ref('');
+
+        const openReassignLogModal = async (log) => {
+          activeReassignLog.value = log;
+          selectedReassignAssessorId.value = '';
+          reassignHandoverComments.value = (activeLogReview.value && activeLogReview.value.id === log.id && activeLogReview.value.review_comments) ? activeLogReview.value.review_comments : '';
+          loadingReassignAssessors.value = true;
+          showReassignLogModal.value = true;
+          try {
+            const res = await fetch(`/api/competencies/${log.competency_id}/eligible-assessors`, { headers: getHeaders() });
+            if (res.ok) {
+              const data = await res.json();
+              reassignEligibleAssessors.value = (data || []).filter(a => a.id !== log.trainee_id);
+            } else {
+              reassignEligibleAssessors.value = [];
+            }
+          } catch(e) {
+            reassignEligibleAssessors.value = [];
+          } finally {
+            loadingReassignAssessors.value = false;
+          }
+        };
+
+        const closeReassignLogModal = () => {
+          showReassignLogModal.value = false;
+          activeReassignLog.value = null;
+          selectedReassignAssessorId.value = '';
+          reassignEligibleAssessors.value = [];
+          reassignHandoverComments.value = '';
+        };
+
+        const confirmReassignLog = async () => {
+          if (!activeReassignLog.value || !selectedReassignAssessorId.value) return;
+          isReassigning.value = true;
+          try {
+            const res = await fetch(`/api/planning-logs/${activeReassignLog.value.id}/reassign`, {
+              method: 'PUT',
+              headers: getHeaders(true),
+              body: JSON.stringify({
+                assigned_assessor_id: selectedReassignAssessorId.value,
+                assessor_comments: reassignHandoverComments.value || (activeLogReview.value && activeLogReview.value.id === activeReassignLog.value.id ? activeLogReview.value.review_comments : '')
+              })
+            });
+            if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.error || 'Failed to reassign case log.');
+            }
+            customAlert("Case log successfully reassigned.", "Success");
+            closeReassignLogModal();
+            await fetchAssessorQueue();
+            if (selectedCell.value) {
+              await fetchCompPlanningLogs(selectedCell.value.comp.id, selectedCell.value.user.id);
+            }
+            if (currentTab.value === 'logbook') {
+              await fetchMyPlanningLogs();
+            }
+          } catch(e) {
+            customAlert(e.message, "Error");
+          } finally {
+            isReassigning.value = false;
+          }
+        };
+
+        const showAboutModal = ref(false);
+        const showReleaseNotes = ref(false);
 
         const submitVivaReviewModal = async (viva) => {
           await submitVivaReview(viva);
@@ -8642,8 +9046,84 @@
           } catch (err) { customAlert(err.message, "Error"); }
         };
 
-        const editUser = (u) => { newUserData.value = { ...u, is_admin: !!u.is_admin, is_superuser: !!u.is_superuser, is_active: u.is_active !== 0, password: u.password || '', active_in: Array.isArray(u.active_in) ? u.active_in : [], date_in_post: u.date_in_post || '' }; isEditingUser.value = true; editingUserId.value = u.id; window.scrollTo({ top: 0, behavior: 'smooth' }); };
-        const cancelEditUser = () => { newUserData.value = { username: '', full_name: '', email: '', designation: 'Trainee', is_admin: false, is_superuser: false, is_active: true, password: '', active_in: globalSettings.value.sections ? globalSettings.value.sections.map(s=>s.name) : [], date_in_post: '' }; isEditingUser.value = false; editingUserId.value = null; };
+        const editUser = (u) => { 
+          newUserData.value = { 
+            ...u, 
+            is_admin: !!u.is_admin, 
+            is_superuser: !!u.is_superuser, 
+            is_active: u.is_active !== 0, 
+            password: u.password || '••••••••', 
+            must_change_password: !!u.must_change_password, 
+            active_in: Array.isArray(u.active_in) ? u.active_in : [], 
+            date_in_post: u.date_in_post || '' 
+          }; 
+          isEditingUser.value = true; 
+          editingUserId.value = u.id; 
+          window.scrollTo({ top: 0, behavior: 'smooth' }); 
+        };
+
+        const cancelEditUser = () => { 
+          newUserData.value = { 
+            username: '', full_name: '', email: '', designation: 'Trainee', 
+            is_admin: false, is_superuser: false, is_active: true, password: '', 
+            must_change_password: false, 
+            active_in: globalSettings.value.sections ? globalSettings.value.sections.map(s=>s.name) : [], 
+            date_in_post: '' 
+          }; 
+          isEditingUser.value = false; 
+          editingUserId.value = null; 
+        };
+
+        const toggleForcePassword = async (u) => {
+          try {
+            const targetState = !u.must_change_password;
+            const res = await fetch(`/api/users/${u.id}/force-password-update`, {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ force: targetState })
+            });
+            if (!res.ok) throw new Error('Failed to update password force policy');
+            u.must_change_password = targetState ? 1 : 0;
+            customAlert(targetState ? `User '${u.username}' will be forced to change their password on next login.` : `Cleared forced password change for '${u.username}'.`, "Password Policy");
+          } catch (err) {
+            customAlert(err.message, "Error");
+          }
+        };
+
+        const forcedPasswordForm = ref({ newPassword: '', confirmPassword: '', error: '', loading: false });
+
+        const submitForcedPasswordUpdate = async () => {
+          if (!forcedPasswordForm.value.newPassword) {
+            forcedPasswordForm.value.error = 'Password cannot be empty.';
+            return;
+          }
+          if (forcedPasswordForm.value.newPassword !== forcedPasswordForm.value.confirmPassword) {
+            forcedPasswordForm.value.error = 'Passwords do not match.';
+            return;
+          }
+          forcedPasswordForm.value.loading = true;
+          forcedPasswordForm.value.error = '';
+          try {
+            const res = await fetch('/api/user/update-password', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({ new_password: forcedPasswordForm.value.newPassword })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to update password');
+            
+            if (user.value) {
+              user.value.must_change_password = 0;
+              localStorage.setItem('user', JSON.stringify(user.value));
+            }
+            forcedPasswordForm.value = { newPassword: '', confirmPassword: '', error: '', loading: false };
+            customAlert('Your password has been updated successfully. You can now use ComPilot normally.', 'Success');
+          } catch (err) {
+            forcedPasswordForm.value.error = err.message;
+          } finally {
+            forcedPasswordForm.value.loading = false;
+          }
+        };
         
         const deleteUser = async (id) => {
           if (!(await customConfirm('Are you sure you want to delete this user?', "Delete User"))) return;
@@ -9109,18 +9589,19 @@
         });
 
         watch(adminSubTab, (newTab) => {
-          if (newTab === 'statistics') {
+          const hasAdmin = user.value && (user.value.is_admin || user.value.is_superuser);
+          if (newTab === 'statistics' && user.value?.is_superuser) {
             fetchStatistics().then(() => nextTick(() => renderOverallChart()));
           }
-          if (newTab === 'quizzes' || newTab === 'competencies') {
+          if ((newTab === 'quizzes' || newTab === 'competencies') && user.value?.is_admin) {
             fetchQuizLibrary();
           }
-          if (newTab === 'superadmin') {
+          if (newTab === 'superadmin' && user.value?.is_superuser) {
             fetchDbInfo();
             fetchUploadStats();
             fetchAdminPreAssessmentUploads();
           }
-          if (newTab === 'audit') {
+          if (newTab === 'audit' && user.value?.is_superuser) {
             fetchAuditLogs();
           }
         });
@@ -9525,6 +10006,7 @@
                  newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, startEvaluation, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, canAssessorOverride, getSupervisionLabel, radarChartCanvas,
                  compListFilterCat, filteredAndSortedCompetencies, 
                  newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort, adminUserFilterGroup, displayedAdminUsers,
+                 toggleForcePassword, forcedPasswordForm, submitForcedPasswordUpdate,
                  quizLibrary, activeLibraryQuiz, isEditingQuiz, createNewLibraryQuiz, editLibraryQuiz, cancelEditLibraryQuiz, saveLibraryQuiz, deleteLibraryQuiz, cellQuizzes, takingQuiz, quizData, quizAnswers, loadQuizForTaking, submitQuiz, quizStats,
                  userGroups, newGroup, dragStartGroup, dropGroup, editingGroupId, editGroupValue, startEditGroup, updateGroup, saveGroup, deleteGroup, adminEdit, adminResetQuiz, adminResetEval, saveAdminOverrides, adminForceStatus,
                   adminResetReading, adminMarkReadingDone, adminMarkQuizPassed, adminMarkEvalPassed, myRenewalDue, myPreEvalDue, myPostEvalDue, myObjectivesMet, myAwaitingAssessment, usersRequiringAssessment, usersObjectivesMet, filteredUsersRequiringAssessment, filteredUsersObjectivesMet, getUserName, getUser,
@@ -9543,6 +10025,7 @@
                   selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
                   uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, expandedSectionUploads, loadingSectionUserStats, sectionUserStats, toggleSectionUploadsExpand, activeLogReview, openLogReviewModal, submitLogReviewModal, saveDraftLogReviewModal, saveDraftLogReview, adminDeleteLogReview,
                   showUnsavedReviewPrompt, handleLogReviewBackdropClick, handleCancelLogReview, handleUnsavedPromptSave, handleUnsavedPromptComplete, handleUnsavedPromptDiscard,
+                  showReassignLogModal, activeReassignLog, reassignEligibleAssessors, selectedReassignAssessorId, reassignHandoverComments, loadingReassignAssessors, isReassigning, openReassignLogModal, closeReassignLogModal, confirmReassignLog, showAboutModal, showReleaseNotes,
                   userTimingModal, userTimingStats, cohortTimingStats, medianLeaderboard, openUserTimingStats, closeUserTimingModal, closeStatCompModal, formatDurationMins,
                   auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
                    logbookCompetencies, allLogbookCompetencies, hasLogbookCompetencies, logbookActiveTrainingOnly, logbookSearchQuery, expandedLogbookCategories, toggleLogbookCategory, isLogbookCategoryExpanded, expandAllLogbookCategories, collapseAllLogbookCategories, activeTrainingCompsCount, totalLogbookCompsCount, logbookStatusFilters, toggleLogbookStatusFilter, isLogbookFilterDefault, logbookStatusCounts, getApprovedLogsCount, getSubmissionsCount, getCompPlanningLogs, isTrainerInAny, isCompetentToTrainAny,
@@ -9550,7 +10033,8 @@
                  preAssessmentQueue, fetchPreAssessmentQueue, preAssessmentSummaries, fetchPreAssessmentSummaries, takingPreAssessment, preAssessmentData, preAssessmentAnswers, preAssessmentAssessorId, preAssessmentSubmitToAll, preAssessmentEligibleAssessors, canSubmitPreAssessment, showingPreAssessmentFor, togglePreAssessmentReview, getLatestPreAssessment, loadPreAssessmentForTaking, submitPreAssessmentSelf, submitPreAssessmentReview, activePreAssessmentReview, openPreAssessmentReview, submitPreAssessmentReviewModal, activePreAssessmentHistory, preAssessmentHistory, openPreAssessmentHistory, closePreAssessmentHistory, getPreAssessmentResponse, getPreAssessmentQuestionReview, groupedPreAssessmentQueue,
                  createNewLibraryQuiz, standardQuizzes, selfAssessments, preAssessments, quizSearchQuery, moveQuestion,
                  viewingQuizResults, viewQuizResults, isAnswerCorrect, isOptionSelected, isOptionCorrect, getOptionClass, getOptionText,
-                 toggleSectionGamification, isGamificationEnabled, userBadgeStats, myBadges, toggleSectionLeaderboardType
+                 toggleSectionGamification, isGamificationEnabled, userBadgeStats, myBadges, toggleSectionLeaderboardType,
+        parseCommentBlocks
         };
       }
     }).mount('#app');

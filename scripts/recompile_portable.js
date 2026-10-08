@@ -19,12 +19,12 @@ for (const db of dbFiles) {
 }
 
 console.log('2. Compiling ComPilot_Portable_Offline.zip...');
+if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
 if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
 
 const psCommand = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${portableDir.replace(/'/g, "''")}', '${tempZipPath.replace(/'/g, "''")}', [System.IO.Compression.CompressionLevel]::Optimal, $false)`;
 execSync(`powershell -NoProfile -Command "${psCommand}"`, { stdio: 'inherit' });
 
-if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
 fs.renameSync(tempZipPath, zipPath);
 
 const stats = fs.statSync(zipPath);

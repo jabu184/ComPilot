@@ -22,6 +22,7 @@ for (const db of dbFiles) {
 
 console.log('2. Creating ComPilot_Portable_Linux.tar.gz...');
 if (fs.existsSync(tarGzPath)) fs.unlinkSync(tarGzPath);
+if (fs.existsSync(runPath)) fs.unlinkSync(runPath);
 execSync(`tar -czf ComPilot_Portable_Linux.tar.gz ComPilot_Portable_Linux`, { cwd: rootDir, stdio: 'inherit' });
 
 console.log('3. Generating self-extracting bundle: ComPilot_Linux_Offline.run...');
@@ -69,12 +70,12 @@ console.log(`Created self-extracting single file: ${runPath}`);
 console.log(`Total size: ${(headerBuffer.length + tarBuffer.length) / (1024 * 1024)} MB`);
 
 console.log('4. Creating ComPilot_Portable_Linux.zip...');
+if (fs.existsSync(linuxZipPath)) fs.unlinkSync(linuxZipPath);
 if (fs.existsSync(tempLinuxZipPath)) fs.unlinkSync(tempLinuxZipPath);
 
 const psCommand = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${linuxDir.replace(/'/g, "''")}', '${tempLinuxZipPath.replace(/'/g, "''")}', [System.IO.Compression.CompressionLevel]::Optimal, $false)`;
 execSync(`powershell -NoProfile -Command "${psCommand}"`, { stdio: 'inherit' });
 
-if (fs.existsSync(linuxZipPath)) fs.unlinkSync(linuxZipPath);
 fs.renameSync(tempLinuxZipPath, linuxZipPath);
 
 const zipStats = fs.statSync(linuxZipPath);
