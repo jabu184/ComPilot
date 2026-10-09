@@ -443,6 +443,57 @@
               </svg>
             </button>
           </div>
+
+          <!-- Log Status Filters -->
+          <div class="flex items-center flex-wrap gap-2 pt-2 border-t border-gray-100 text-xs">
+            <span class="font-semibold text-gray-600 flex items-center gap-1">
+              <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
+              Filter logs:
+            </span>
+            <button 
+              type="button" 
+              @click="logStatusFilter = 'all'" 
+              :class="logStatusFilter === 'all' ? 'bg-blue-600 text-white font-bold shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium'" 
+              class="px-2.5 py-1 rounded-full transition cursor-pointer"
+            >
+              All Logs ({{ (myPlanningLogs || []).length }})
+            </button>
+            <button 
+              type="button" 
+              @click="logStatusFilter = 'draft'" 
+              :class="logStatusFilter === 'draft' ? 'bg-gray-700 text-white font-bold shadow-sm' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium'" 
+              class="px-2.5 py-1 rounded-full transition cursor-pointer flex items-center gap-1"
+            >
+              <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+              Draft ({{ (myPlanningLogs || []).filter(l => l && l.status === 'Draft').length }})
+            </button>
+            <button 
+              type="button" 
+              @click="logStatusFilter = 'pending_review'" 
+              :class="logStatusFilter === 'pending_review' ? 'bg-yellow-600 text-white font-bold shadow-sm' : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border border-yellow-200 font-medium'" 
+              class="px-2.5 py-1 rounded-full transition cursor-pointer flex items-center gap-1"
+            >
+              <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+              Pending Review ({{ (myPlanningLogs || []).filter(l => l && l.status === 'Pending_Review').length }})
+            </button>
+            <button 
+              type="button" 
+              @click="logStatusFilter = 'completed'" 
+              :class="logStatusFilter === 'completed' ? 'bg-green-600 text-white font-bold shadow-sm' : 'bg-green-50 hover:bg-green-100 text-green-800 border border-green-200 font-medium'" 
+              class="px-2.5 py-1 rounded-full transition cursor-pointer flex items-center gap-1"
+            >
+              <span class="w-2 h-2 rounded-full bg-green-500"></span>
+              Completed ({{ (myPlanningLogs || []).filter(l => l && (l.status === 'Completed' || l.status === 'Needs_Amendment')).length }})
+            </button>
+            <button 
+              v-if="logStatusFilter !== 'all'" 
+              type="button" 
+              @click="logStatusFilter = 'all'" 
+              class="ml-auto text-blue-600 hover:underline font-semibold text-xs"
+            >
+              Reset filter
+            </button>
+          </div>
         </div>
 
         <div v-for="(comps, cat) in logbookCompetencies" :key="cat" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -495,8 +546,47 @@
 
               <!-- Expanded Logbook View -->
               <div v-if="activeLogbookCompId === comp.id && activeLogbookMode === 'view'" class="mt-2 border-t border-gray-200 pt-3">
-                <h4 class="font-bold text-gray-800 mb-2">Your Logs</h4>
-                <ul v-if="getCompPlanningLogs(comp.id).length > 0" class="space-y-3">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
+                  <h4 class="font-bold text-gray-800">Your Logs</h4>
+                  <!-- Competency-specific filter toggle pills -->
+                  <div class="flex items-center gap-1.5 text-xs">
+                    <span class="text-gray-500 text-[11px] font-medium mr-0.5">Filter:</span>
+                    <button 
+                      type="button" 
+                      @click="logStatusFilter = 'all'" 
+                      :class="logStatusFilter === 'all' ? 'bg-blue-600 text-white font-bold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium'" 
+                      class="px-2 py-0.5 rounded-full text-[11px] transition cursor-pointer"
+                    >
+                      All ({{ (getAllCompPlanningLogs(comp.id) || []).length }})
+                    </button>
+                    <button 
+                      type="button" 
+                      @click="logStatusFilter = 'draft'" 
+                      :class="logStatusFilter === 'draft' ? 'bg-gray-700 text-white font-bold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium'" 
+                      class="px-2 py-0.5 rounded-full text-[11px] transition cursor-pointer"
+                    >
+                      Draft ({{ (getAllCompPlanningLogs(comp.id) || []).filter(l => l && l.status === 'Draft').length }})
+                    </button>
+                    <button 
+                      type="button" 
+                      @click="logStatusFilter = 'pending_review'" 
+                      :class="logStatusFilter === 'pending_review' ? 'bg-yellow-600 text-white font-bold' : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border border-yellow-200 font-medium'" 
+                      class="px-2 py-0.5 rounded-full text-[11px] transition cursor-pointer"
+                    >
+                      Pending ({{ (getAllCompPlanningLogs(comp.id) || []).filter(l => l && l.status === 'Pending_Review').length }})
+                    </button>
+                    <button 
+                      type="button" 
+                      @click="logStatusFilter = 'completed'" 
+                      :class="logStatusFilter === 'completed' ? 'bg-green-600 text-white font-bold' : 'bg-green-50 hover:bg-green-100 text-green-800 border border-green-200 font-medium'" 
+                      class="px-2 py-0.5 rounded-full text-[11px] transition cursor-pointer"
+                    >
+                      Completed ({{ (getAllCompPlanningLogs(comp.id) || []).filter(l => l && (l.status === 'Completed' || l.status === 'Needs_Amendment')).length }})
+                    </button>
+                  </div>
+                </div>
+
+                <ul v-if="(getCompPlanningLogs(comp.id) || []).length > 0" class="space-y-3">
                   <li v-for="log in getCompPlanningLogs(comp.id)" :key="log.id" class="p-3 border rounded bg-white text-sm shadow-sm border-gray-200">
                     <div class="flex justify-between items-center mb-1">
                       <strong class="text-gray-800">Ref: {{ log.patient_reference }} <span v-if="log.log_date" class="text-gray-500 font-normal ml-1">({{ formatDate(log.log_date) }})</span></strong>
@@ -547,7 +637,13 @@
                     </div>
                   </li>
                 </ul>
-                <div v-else class="text-sm text-gray-500 italic">No logs submitted yet.</div>
+                <div v-else class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded border border-dashed border-gray-200">
+                  <span v-if="logStatusFilter === 'all'">No logs submitted yet for this competency.</span>
+                  <span v-else>
+                    No logs found with status <strong>{{ logStatusFilter.replace('_', ' ') }}</strong> for this competency. 
+                    <button type="button" @click="logStatusFilter = 'all'" class="text-blue-600 hover:underline font-semibold ml-1">Show all logs</button>
+                  </span>
+                </div>
               </div>
 
               <!-- Expanded Logbook Add/Edit -->
@@ -2362,8 +2458,8 @@
                     <button @click="showingPlanLogs = !showingPlanLogs; nextTick(() => renderPlanLogsProgressionChart())" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded font-bold shadow-sm transition whitespace-nowrap">
                       {{ showingPlanLogs ? 'Hide Logs' : 'View Logs' }}
                     </button>
-                    <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ planningLogs.filter(l => l.status === 'Completed' && l.score >= 3).length }} / {{ selectedCell.comp.required_plan_count }} Met</span>
-                    <span v-if="planningLogs.filter(l => l.status === 'Completed' && l.score >= 3).length >= selectedCell.comp.required_plan_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
+                    <span class="text-sm font-medium text-gray-700 whitespace-nowrap">{{ (planningLogs || []).filter(l => l && l.status === 'Completed' && l.score >= 3).length }} / {{ selectedCell.comp.required_plan_count }} Met</span>
+                    <span v-if="(planningLogs || []).filter(l => l && l.status === 'Completed' && l.score >= 3).length >= selectedCell.comp.required_plan_count" class="text-green-600 font-bold text-sm bg-green-50 px-2 py-1 rounded whitespace-nowrap">✓ Met</span>
                     <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
                   </div>
                 </div>
@@ -2394,7 +2490,7 @@
                         <span class="text-[11px] text-gray-500 font-medium hidden sm:inline">Target: Level 3</span>
                       </div>
                     </div>
-                    <template v-if="scoredPlanningLogs.length > 0">
+                    <template v-if="(scoredPlanningLogs || []).length > 0">
                       <div class="relative h-56 w-full bg-white rounded border border-gray-100 p-3 shadow-inner">
                         <canvas id="planLogsProgressionChartCanvas"></canvas>
                       </div>
@@ -2487,7 +2583,7 @@
                       </div>
                     </div>
                   </div>
-                  <div v-if="planningLogs.length === 0" class="text-xs text-gray-500 italic p-1.5">No case logs submitted.</div>
+                  <div v-if="(planningLogs || []).length === 0" class="text-xs text-gray-500 italic p-1.5">No case logs submitted.</div>
                 </div>
               </div>
 
@@ -4151,19 +4247,37 @@
           if (!user.value) return;
           try {
             const res = await fetch('/api/my-planning-logs', { headers: getHeaders() });
-            if (res.ok) myPlanningLogs.value = await res.json();
-          } catch (e) {}
+            if (res.ok) {
+              const data = await res.json();
+              myPlanningLogs.value = Array.isArray(data) ? data : [];
+            } else {
+              myPlanningLogs.value = [];
+            }
+          } catch (e) {
+            myPlanningLogs.value = [];
+          }
         };
 
+        const logStatusFilter = ref('all'); // 'all', 'draft', 'pending_review', 'completed'
+
         const getApprovedLogsCount = (compId) => {
-          return myPlanningLogs.value.filter(l => l.competency_id === compId && l.status === 'Completed' && l.score >= 3).length;
+          return (Array.isArray(myPlanningLogs.value) ? myPlanningLogs.value : []).filter(l => l && l.competency_id === compId && l.status === 'Completed' && l.score >= 3).length;
         };
 
         const getSubmissionsCount = (compId) => {
-          return myPlanningLogs.value.filter(l => l.competency_id === compId && l.status !== 'Draft').length;
+          return (Array.isArray(myPlanningLogs.value) ? myPlanningLogs.value : []).filter(l => l && l.competency_id === compId && l.status !== 'Draft').length;
         };
 
-        const getCompPlanningLogs = (compId) => myPlanningLogs.value.filter(l => l.competency_id === compId);
+        const getAllCompPlanningLogs = (compId) => (Array.isArray(myPlanningLogs.value) ? myPlanningLogs.value : []).filter(l => l && l.competency_id === compId);
+
+        const getCompPlanningLogs = (compId) => {
+          const all = getAllCompPlanningLogs(compId);
+          if (!logStatusFilter.value || logStatusFilter.value === 'all') return all;
+          if (logStatusFilter.value === 'draft') return all.filter(l => l && l.status === 'Draft');
+          if (logStatusFilter.value === 'pending_review') return all.filter(l => l && l.status === 'Pending_Review');
+          if (logStatusFilter.value === 'completed') return all.filter(l => l && (l.status === 'Completed' || l.status === 'Needs_Amendment'));
+          return all;
+        };
 
         const isTrainerInAny = computed(() => {
           if (!user.value) return false;
@@ -4270,8 +4384,15 @@
         const fetchPlanningLogs = async (userId, compId) => {
           try {
              const res = await fetch(`/api/competency/${compId}/planning-logs?user_id=${userId}`, { headers: getHeaders() });
-             if (res.ok) planningLogs.value = await res.json();
-          } catch(e) {}
+             if (res.ok) {
+               const data = await res.json();
+               planningLogs.value = Array.isArray(data) ? data : [];
+             } else {
+               planningLogs.value = [];
+             }
+          } catch(e) {
+            planningLogs.value = [];
+          }
         };
 
         const fetchEligibleAssessors = async (compId) => {
@@ -6026,6 +6147,7 @@
           overviewFilterGroup.value = '';
           expandedMatrixCategories.value = [];
           logbookStatusFilters.value = ['t', 'a', 'm'];
+          logStatusFilter.value = 'all';
 
           if (!token.value) {
             await fetchPublicSummary();
@@ -8341,7 +8463,7 @@
             activeLogReview.value = null;
             await fetchAssessorQueue();
             if (selectedCell.value) {
-              await fetchCompPlanningLogs(selectedCell.value.comp.id, selectedCell.value.user.id);
+              await fetchPlanningLogs(selectedCell.value.user.id, selectedCell.value.comp.id);
             }
             if (currentTab.value === 'logbook') {
               await fetchMyPlanningLogs();
@@ -8408,7 +8530,7 @@
             closeReassignLogModal();
             await fetchAssessorQueue();
             if (selectedCell.value) {
-              await fetchCompPlanningLogs(selectedCell.value.comp.id, selectedCell.value.user.id);
+              await fetchPlanningLogs(selectedCell.value.user.id, selectedCell.value.comp.id);
             }
             if (currentTab.value === 'logbook') {
               await fetchMyPlanningLogs();
@@ -9573,6 +9695,7 @@
           password.value = '';
           currentTab.value = 'individual';
           logbookStatusFilters.value = ['t', 'a', 'm'];
+          logStatusFilter.value = 'all';
           localStorage.removeItem('token');
           localStorage.removeItem('user');
         };
@@ -9609,6 +9732,7 @@
         watch(currentTab, (newTab) => {
           if (newTab === 'trainer') { fetchAssessorQueue(); }
           if (newTab === 'assessor') { fetchVivaQueue(); fetchPreAssessmentQueue(); }
+          if (newTab === 'logbook') { fetchMyPlanningLogs(); }
         });
 
         const uploadStats = ref([]);
@@ -10028,7 +10152,7 @@
                   showReassignLogModal, activeReassignLog, reassignEligibleAssessors, selectedReassignAssessorId, reassignHandoverComments, loadingReassignAssessors, isReassigning, openReassignLogModal, closeReassignLogModal, confirmReassignLog, showAboutModal, showReleaseNotes,
                   userTimingModal, userTimingStats, cohortTimingStats, medianLeaderboard, openUserTimingStats, closeUserTimingModal, closeStatCompModal, formatDurationMins,
                   auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
-                   logbookCompetencies, allLogbookCompetencies, hasLogbookCompetencies, logbookActiveTrainingOnly, logbookSearchQuery, expandedLogbookCategories, toggleLogbookCategory, isLogbookCategoryExpanded, expandAllLogbookCategories, collapseAllLogbookCategories, activeTrainingCompsCount, totalLogbookCompsCount, logbookStatusFilters, toggleLogbookStatusFilter, isLogbookFilterDefault, logbookStatusCounts, getApprovedLogsCount, getSubmissionsCount, getCompPlanningLogs, isTrainerInAny, isCompetentToTrainAny,
+                   logbookCompetencies, allLogbookCompetencies, hasLogbookCompetencies, logbookActiveTrainingOnly, logbookSearchQuery, expandedLogbookCategories, toggleLogbookCategory, isLogbookCategoryExpanded, expandAllLogbookCategories, collapseAllLogbookCategories, activeTrainingCompsCount, totalLogbookCompsCount, logbookStatusFilters, toggleLogbookStatusFilter, isLogbookFilterDefault, logbookStatusCounts, getApprovedLogsCount, getSubmissionsCount, getCompPlanningLogs, getAllCompPlanningLogs, logStatusFilter, myPlanningLogs, fetchMyPlanningLogs, isTrainerInAny, isCompetentToTrainAny,
                  vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal,
                  preAssessmentQueue, fetchPreAssessmentQueue, preAssessmentSummaries, fetchPreAssessmentSummaries, takingPreAssessment, preAssessmentData, preAssessmentAnswers, preAssessmentAssessorId, preAssessmentSubmitToAll, preAssessmentEligibleAssessors, canSubmitPreAssessment, showingPreAssessmentFor, togglePreAssessmentReview, getLatestPreAssessment, loadPreAssessmentForTaking, submitPreAssessmentSelf, submitPreAssessmentReview, activePreAssessmentReview, openPreAssessmentReview, submitPreAssessmentReviewModal, activePreAssessmentHistory, preAssessmentHistory, openPreAssessmentHistory, closePreAssessmentHistory, getPreAssessmentResponse, getPreAssessmentQuestionReview, groupedPreAssessmentQueue,
                  createNewLibraryQuiz, standardQuizzes, selfAssessments, preAssessments, quizSearchQuery, moveQuestion,
