@@ -16,11 +16,11 @@
     };
   </script>
   <!-- Load Tailwind CSS -->
-  <script src="js/tailwindcss.js?v=2.5"></script>
+  <script src="js/tailwindcss.js?v=2.7"></script>
   <!-- Load Vue.js -->
-  <script src="js/vue.global.prod.js?v=2.5"></script>
+  <script src="js/vue.global.prod.js?v=2.7"></script>
   <!-- Load Chart.js -->
-  <script src="js/chart.js?v=2.5"></script>
+  <script src="js/chart.js?v=2.7"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans p-8">
   <div id="app" class="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-6">
@@ -48,9 +48,9 @@
             <p v-if="loginError" class="text-red-500 mt-1 text-sm">{{ loginError }}</p>
           </div>
           <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-            <input v-model.lazy="username" @keyup.enter="login" type="text" placeholder="Username" 
+            <input v-model="username" @keyup.enter="login" type="text" placeholder="Username" 
                    class="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48" />
-            <input v-model.lazy="password" @keyup.enter="login" type="password" placeholder="Password" 
+            <input v-model="password" @keyup.enter="login" type="password" placeholder="Password" 
                    class="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48" />
             <button @click="login" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition w-full sm:w-auto whitespace-nowrap">
               Login
@@ -63,7 +63,14 @@
         <div class="flex justify-between items-center mb-1 px-1">
           <h3 class="text-lg font-bold text-gray-800">{{ selectedDb }} Section Competency Matrix</h3>
         </div>
-        <div v-if="publicSummaryData.users.length === 0" class="text-sm text-gray-500 italic px-1">No users active in this section.</div>
+        <div v-if="loadingPublicMatrix" class="flex items-center justify-center p-8 bg-blue-50/50 border border-blue-200 rounded-lg text-blue-800 text-sm font-semibold gap-3 my-2 shadow-2xs">
+          <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+          </svg>
+          <span>Loading {{ selectedDb }} Competency Matrix...</span>
+        </div>
+        <div v-else-if="publicSummaryData.users.length === 0" class="text-sm text-gray-500 italic px-1">No users active in this section.</div>
         <div v-else class="space-y-4">
             <!-- Top Scrollbar -->
             <div ref="publicTopScroll" @scroll="syncPublicScroll('top', $event)" class="overflow-x-auto overflow-y-hidden w-full hidden md:block" style="height: 16px;">
@@ -155,7 +162,7 @@
       <!-- Tab Navigation -->
       <div class="flex gap-6 mb-4 border-b pb-2">
         <button @click="currentTab = 'individual'" :class="currentTab === 'individual' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Individual</button>
-        <button v-if="user.is_admin || user.is_superuser || isCompetentToTrainAny" @click="currentTab = 'overview'" :class="currentTab === 'overview' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Overview</button>
+        <button @click="currentTab = 'overview'" :class="currentTab === 'overview' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Overview</button>
         <button v-if="hasLogbookCompetencies" @click="currentTab = 'logbook'" :class="currentTab === 'logbook' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Logbook</button>
         <button v-if="isTrainerInAny" @click="currentTab = 'trainer'" :class="currentTab === 'trainer' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Trainer</button>
         <button v-if="user.is_admin || user.is_superuser" @click="currentTab = 'assessor'" :class="currentTab === 'assessor' ? 'text-blue-700 font-bold border-b-2 border-blue-700' : 'text-gray-500 hover:text-blue-600'" class="pb-1 px-1 transition">Assessor</button>
@@ -331,9 +338,9 @@
                   </div>
                 </td>
                 <td v-for="u in displayedUsers" :key="u.id" 
-                    @click="canAccessUserCompetency(u, comp) ? openModal(u, comp) : null" 
+                    @click="isApplicable(u, comp) ? openModal(u, comp) : null" 
                     :class="['whitespace-nowrap px-3 py-4 text-sm text-center border-l transition relative', u.id === user.id ? 'bg-blue-50/40' : '',
-                             canAccessUserCompetency(u, comp) ? 'cursor-pointer hover:bg-blue-100' : (isApplicable(u, comp) ? 'cursor-default' : 'bg-gray-100 cursor-not-allowed')]">
+                             isApplicable(u, comp) ? 'cursor-pointer hover:bg-blue-100' : 'bg-gray-100 cursor-not-allowed']">
                   <div v-if="isApplicable(u, comp)" class="inline-flex items-center justify-center gap-1">
                     <span :class="getStatusBadgeClass(u.id, comp.id)">
                       {{ (getProgressStatus(u.id, comp.id) || '').toUpperCase() || '-' }}<span v-if="getProgressObj(u.id, comp.id)?.signoff_comment" class="ml-0.5">*</span>
@@ -369,7 +376,7 @@
           <button @click="toggleLegend('c')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('c') || activeLegends?.length === 0 ? 'bg-green-50 text-green-700 ring-green-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">C : Competent</button>
           <button @click="toggleLegend('x')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('x') || activeLegends?.length === 0 ? 'bg-blue-50 text-blue-700 ring-blue-700/10' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">X : Competent to Train</button>
           <button @click="toggleLegend('renewal')" :class="['inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset transition-opacity cursor-pointer hover:opacity-80', activeLegends.includes('renewal') || activeLegends?.length === 0 ? 'bg-red-50 text-red-700 ring-red-600/20' : 'bg-gray-100 text-gray-400 opacity-50 ring-gray-200']">⚠️ : Renewal Due</button>
-          <div class="ml-2 px-2 py-1 text-xs text-gray-500 font-semibold border-l border-gray-300">* : Sign-off comment attached</div>
+          <div class="ml-2 px-2 py-1 text-xs text-gray-500 font-semibold border-l border-gray-300">* : Sign-off / Concession comment attached</div>
           <button @click="activeLegends = []; selectedFilterCompetency = null;" v-if="activeLegends?.length > 0 || selectedFilterCompetency" class="text-xs text-blue-600 hover:underline ml-auto font-semibold">Clear Filters</button>
         </div>
       </div>
@@ -598,7 +605,7 @@
                       <span v-if="log.status !== 'Draft'">Sent to <strong>{{ getAssessorName(log.assigned_assessor_id) }}</strong> on {{ formatDate(log.created_at, true) }}</span>
                       <span v-else>Draft saved on {{ formatDate(log.created_at, true) }}</span>
                     </div>
-                    <p class="text-gray-700 mt-1 mb-2 italic whitespace-pre-wrap">{{ log.trainee_comments }}</p>
+                    <p class="text-gray-700 mt-1 mb-2 whitespace-pre-wrap">{{ log.trainee_comments }}</p>
                     <div v-if="log.assessor_comments" class="border-t border-gray-100 pt-2 mt-2 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200">
                       <div class="flex justify-between items-center mb-2">
                         <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -631,8 +638,9 @@
                         </span>
                       </div>
                     </div>
-                    <div v-if="log.status === 'Draft' || log.status === 'Pending_Review' || log.status === 'Needs_Amendment'" class="border-t border-gray-100 pt-2 mt-2 flex gap-2">
+                    <div v-if="log.status === 'Draft' || log.status === 'Pending_Review' || log.status === 'Needs_Amendment'" class="border-t border-gray-100 pt-2 mt-2 flex flex-wrap items-center gap-3">
                       <button @click="editPlanLog(log)" class="text-xs text-blue-600 font-semibold hover:underline">Edit / Reassign Trainer</button>
+                      <button v-if="log.status === 'Draft' || log.status === 'Pending_Review'" @click="openTransferLogModal(log)" class="text-xs text-indigo-600 font-semibold hover:underline">Transfer Competency</button>
                       <button @click="deletePlanLog(log.id)" class="text-xs text-red-600 font-semibold hover:underline">Delete</button>
                     </div>
                   </li>
@@ -795,7 +803,7 @@
               <ul class="space-y-1">
                 <li v-for="comp in comps" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
                   <span>{{ comp.category }} - {{ comp.task_name }}</span>
-                  <button @click="openModal(getUser(userId), comp)" class="bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1 rounded font-semibold transition text-xs">Assess</button>
+                  <button @click="handleAssessorOpenModal(userId, comp)" class="bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1 rounded font-semibold transition text-xs">Assess</button>
                 </li>
               </ul>
             </div>
@@ -813,7 +821,7 @@
               <ul class="space-y-1">
                 <li v-for="comp in comps" :key="comp.id" class="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
                   <span>{{ comp.category }} - {{ comp.task_name }}</span>
-                  <button @click="openModal(getUser(userId), comp)" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded font-semibold transition text-xs">View</button>
+                  <button @click="handleAssessorOpenModal(userId, comp)" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded font-semibold transition text-xs">View</button>
                 </li>
               </ul>
             </div>
@@ -1518,7 +1526,7 @@
               <h3 class="text-xl font-bold text-blue-900 mb-4 bg-blue-50 p-3 rounded-lg shadow-sm border border-blue-100">Overall Section Statistics</h3>
               
               <!-- Summary Cards -->
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-yellow-50 p-4 rounded border border-yellow-200 shadow-sm text-center">
                   <div class="text-xs font-bold text-yellow-800 mb-1">In Training (T)</div>
                   <div class="text-2xl font-bold text-yellow-900">{{ sectionSummaryStats.t }}</div>
@@ -1534,6 +1542,10 @@
                 <div class="bg-green-50 p-4 rounded border border-green-200 shadow-sm text-center">
                   <div class="text-xs font-bold text-green-800 mb-1">Competent (C/X)</div>
                   <div class="text-2xl font-bold text-green-900">{{ sectionSummaryStats.c + sectionSummaryStats.x }}</div>
+                </div>
+                <div class="bg-amber-50 p-4 rounded border border-amber-200 shadow-sm text-center">
+                  <div class="text-xs font-bold text-amber-800 mb-1">Logs Pending Review</div>
+                  <div class="text-2xl font-bold text-amber-900">{{ sectionPendingLogsCount }}</div>
                 </div>
               </div>
               
@@ -1965,17 +1977,21 @@
                 {{ {t: 'Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train'}[getProgressStatus(selectedCell.user.id, selectedCell.comp.id)] || 'Not Started' }}
               </span>
             </div>
-          <div class="text-xs text-gray-500 font-medium" v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ formatDate(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_started) || 'N/A' }}</span></div>
-          <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off">
-            Date Signed Off: <span class="text-gray-800">{{ formatDate(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_signed_off) || 'Legacy / Pre-System' }}</span>
-          </div>
-          <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id">
-            Signed Off By: <span class="text-gray-800">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id ? getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.assessor_id) : 'Legacy / System' }}</span>
-          </div>
-            <div class="text-xs text-gray-500 font-medium" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getAssessorName(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.reviewer_id) }} on {{ formatDate(getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.date_reviewed) }}</span></div>
-            <div class="text-xs text-gray-500 font-medium mt-1" v-if="getProgressObj(selectedCell.user.id, selectedCell.comp.id)?.signoff_comment">Sign-off Comment: <span class="text-gray-800 italic">{{ getProgressObj(selectedCell.user.id, selectedCell.comp.id).signoff_comment }}</span></div>
+            <div class="text-xs text-gray-500 font-medium" v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) !== ''">Date Started: <span class="text-gray-800">{{ formatDate(activeCellProgress?.date_started) || 'N/A' }}</span></div>
+            <div class="text-xs text-gray-500 font-medium" v-if="['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) || activeCellProgress?.date_signed_off">
+              Date Signed Off: <span class="text-gray-800">{{ formatDate(activeCellProgress?.date_signed_off) || 'Legacy / Pre-System' }}</span>
+            </div>
+            <div class="text-xs text-gray-500 font-medium" v-if="activeCellProgress?.assessor_id">
+              {{ ['c', 'x'].includes(getProgressStatus(selectedCell.user.id, selectedCell.comp.id)) ? 'Signed Off By:' : 'Assessed / Actioned By:' }} <span class="text-gray-800">{{ getAssessorName(activeCellProgress.assessor_id) }}</span>
+            </div>
+            <div class="text-xs text-gray-500 font-medium" v-if="activeCellProgress?.date_reviewed">Reviewed By: <span class="text-gray-800">{{ getAssessorName(activeCellProgress.reviewer_id) }} on {{ formatDate(activeCellProgress.date_reviewed) }}</span></div>
+            <div class="text-xs text-indigo-900 font-medium mt-1 bg-indigo-50 border border-indigo-200 p-2.5 rounded-md shadow-sm" v-if="activeCellProgress?.signoff_comment">
+              <strong class="text-indigo-800">Sign-off / Concession Comment:</strong> <span class="italic text-gray-900 ml-1">{{ activeCellProgress.signoff_comment }}</span>
+            </div>
           </div>
 
+          <!-- Detailed Competency View: Milestones, Quizzes, Case Logs, Assessment Records & Overrides -->
+          <template v-if="isDetailedCompetencyView">
           <!-- Milestones View -->
           <div class="mb-4">
             <h4 class="font-semibold text-gray-800 mb-3">Training Milestones</h4>
@@ -2075,7 +2091,7 @@
                       <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Pending</span>
                     </template>
                     <template v-else-if="qz.is_viva">
-                      <button v-if="getLatestViva(qz.id)?.variance_analysis" @click="toggleVivaScore(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
+                      <button v-if="(selectedCell.user.id === user.id || isAssessorForSelected) && getLatestViva(qz.id)?.variance_analysis" @click="toggleVivaScore(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
                         {{ showingVivaFor === qz.id ? 'Hide Score' : 'Score' }}
                       </button>
                       <button v-if="selectedCell.user.id === user.id && (!getLatestViva(qz.id) || getLatestViva(qz.id).status === 'Needs_Retake')" @click="loadVivaForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">
@@ -2087,7 +2103,7 @@
                       <span v-else class="text-yellow-600 font-bold text-sm bg-yellow-50 px-2 py-1 rounded whitespace-nowrap">✗ Not Started</span>
                     </template>
                     <template v-else>
-                      <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="viewQuizResults(qz.id)" class="bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded font-bold shadow-sm transition whitespace-nowrap mr-2">View Results</button>
+                      <button v-if="(selectedCell.user.id === user.id || isAssessorForSelected) && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="viewQuizResults(qz.id)" class="bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded font-bold shadow-sm transition whitespace-nowrap mr-2">View Results</button>
                       <button v-if="selectedCell.user.id === user.id && getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed !== undefined" @click="loadQuizForTaking(qz.id)" class="text-xs text-blue-600 hover:underline whitespace-nowrap">Retake</button>
                       <button v-else-if="selectedCell.user.id === user.id" @click="loadQuizForTaking(qz.id)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs px-3 py-1.5 rounded font-bold shadow-sm transition whitespace-nowrap">Take Quiz</button>
   
@@ -2542,7 +2558,7 @@
                       </div>
                       <div>
                         <span class="font-bold text-gray-700 text-[11px] uppercase tracking-wide">Trainee Reflective Notes:</span>
-                        <p class="italic bg-gray-50 p-2 border border-gray-200 rounded text-gray-800 mt-1 whitespace-pre-wrap">{{ log.trainee_comments || 'No reflective notes provided.' }}</p>
+                        <p class="bg-gray-50 p-2 border border-gray-200 rounded text-gray-800 mt-1 whitespace-pre-wrap">{{ log.trainee_comments || 'No reflective notes provided.' }}</p>
                       </div>
                       <div v-if="log.assessor_comments" class="bg-slate-50/80 p-2.5 border border-slate-200 rounded-lg">
                         <div class="flex justify-between items-center mb-2">
@@ -2659,15 +2675,108 @@
             </div>
           </div>
 
-          <!-- Assessor Sign-Off View -->
-          <div v-if="getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'a' && getProgressStatus(user.id, selectedCell.comp.id) === 'x'" class="mb-4">
-            <h4 class="font-semibold text-gray-800 mb-2">Assessor Action Required</h4>
-            <p class="text-sm text-gray-600 mb-4">Trainee has completed prerequisites.</p>
-            <textarea v-model="signoffComment" placeholder="Optional comment or restriction (e.g. 'Review after holiday')" class="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-3 focus:ring-blue-500 focus:border-blue-500"></textarea>
-            <div class="flex flex-col gap-2">
-              <button @click="signOff('m')" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded">Grant 'M' (Meets Requirements)</button>
-              <button @click="signOff('c')" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded">Grant 'C' (Competent)</button>
-              <button @click="signOff('x')" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">Grant 'X' (Competent to Train)</button>
+          <!-- Record of Assessment Unified Section -->
+          <div v-if="canSeeAssessmentRecords" class="mb-4 bg-slate-50 border border-slate-200 p-3.5 rounded-lg shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
+                <span>📋 Record of Assessment</span>
+                <span v-if="assessmentRecords.length > 0" class="text-xs bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded-full font-bold">{{ assessmentRecords.length }}</span>
+              </h4>
+              <div v-if="canCarryOutAssessment" class="flex items-center gap-2">
+                <button v-if="!showAssessmentForm" 
+                        @click="openAssessmentForm('c', 'Pass')" 
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-2.5 py-1 rounded transition shadow-sm flex items-center gap-1">
+                  <span>+ Record Assessment</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- New Record of Assessment Form -->
+            <div v-if="showAssessmentForm && canCarryOutAssessment" class="mb-3 p-3 bg-white border border-indigo-200 rounded-lg shadow-sm">
+              <h5 class="font-bold text-indigo-900 text-xs uppercase tracking-wider mb-2 flex items-center justify-between">
+                <span>New Record of Assessment</span>
+                <span class="text-[11px] font-normal text-gray-500">Trainee: {{ selectedCell.user.full_name }}</span>
+              </h5>
+              
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Assessment For:</label>
+                  <select v-model="newAssessment.type" @change="onAssessmentTypeChange" class="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 bg-white">
+                    <option value="c">Competent (C)</option>
+                    <option value="x">Competent to Train (X)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Assessment Result:</label>
+                  <div class="flex gap-2">
+                    <button type="button" @click="setAssessmentResult('Pass')" :class="newAssessment.result === 'Pass' ? 'bg-green-600 text-white font-bold border-green-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium border-gray-300'" class="flex-1 py-1.5 rounded text-xs border transition">Pass</button>
+                    <button type="button" @click="setAssessmentResult('Fail')" :class="newAssessment.result === 'Fail' ? 'bg-red-600 text-white font-bold border-red-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium border-gray-300'" class="flex-1 py-1.5 rounded text-xs border transition">Fail</button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="newAssessment.result === 'Fail'" class="mb-2.5 bg-red-50 p-2.5 rounded border border-red-200 text-xs">
+                <label class="block font-semibold text-red-900 mb-1">Resulting Trainee Status:</label>
+                <select v-model="newAssessment.outcome" class="w-full border border-red-300 rounded px-2.5 py-1.5 bg-white text-xs">
+                  <option value="t">T - In Training (Further practice / evidence required)</option>
+                  <option value="m">M - Meets Requirements (Prerequisites intact, reassess later)</option>
+                  <option value="a">A - Ready for Assessment (Keep in assessment queue)</option>
+                </select>
+              </div>
+              <div v-else class="mb-2.5 bg-green-50 p-2 rounded border border-green-200 text-xs text-green-800 flex items-center justify-between">
+                <span>Passing this assessment will grant status: <strong class="uppercase font-bold">{{ newAssessment.type }}</strong></span>
+              </div>
+
+              <div class="mb-2.5">
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Assessor Feedback / Assessment Notes: <span class="text-red-500">*</span></label>
+                <textarea v-model="newAssessment.feedback" rows="3" placeholder="Provide feedback detailing the assessment discussion, clinical observation, strengths, or areas for development..." class="w-full border border-gray-300 rounded px-2.5 py-2 text-xs focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+              </div>
+
+              <!-- Concession Toggle & Input Field inside Assessment Form (Only displayed when marking competent or competent to train) -->
+              <div v-if="newAssessment.result === 'Pass'" class="mb-3 p-2.5 bg-amber-50/70 border border-amber-200 rounded">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" v-model="showConcessionToggle" class="rounded text-amber-600 focus:ring-amber-500 h-4 w-4">
+                  <span class="text-xs font-semibold text-amber-900">Attach Concession / Condition / Comment</span>
+                </label>
+                <div v-if="showConcessionToggle" class="mt-2">
+                  <textarea v-model="signoffComment" rows="2" placeholder="Detail any conditions, concessions, or review restrictions (e.g. 'Signed off with concession: supervision required on stereotactic linac until 3 cases completed')..." class="w-full border border-amber-300 rounded px-2.5 py-1.5 text-xs bg-white focus:ring-amber-500 focus:border-amber-500"></textarea>
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-2">
+                <button type="button" @click="cancelAssessmentForm" class="px-3 py-1.5 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100 border border-gray-300">Cancel</button>
+                <button type="button" @click="submitAssessmentRecord" :disabled="isSubmittingAssessment || !newAssessment.feedback.trim()" class="px-4 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition">
+                  {{ isSubmittingAssessment ? 'Saving Record...' : 'Save Record of Assessment' }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Existing Records List -->
+            <div v-if="assessmentRecords.length > 0" class="space-y-2 mb-1">
+              <div v-for="rec in assessmentRecords" :key="rec.id" class="bg-white border rounded-md p-3 shadow-sm text-xs" :class="rec.result === 'Pass' ? 'border-green-200' : 'border-red-200'">
+                <div class="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+                  <div class="flex items-center gap-2">
+                    <span :class="rec.result === 'Pass' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'" class="px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px] border">
+                      {{ rec.result }}
+                    </span>
+                    <span class="font-bold text-gray-800">
+                      {{ rec.assessment_type === 'x' ? 'Competent to Train (X)' : 'Competent (C)' }} Assessment
+                    </span>
+                    <span class="text-gray-500">→ Outcome: <strong class="uppercase text-gray-900">{{ rec.status_outcome }}</strong></span>
+                  </div>
+                  <span class="text-gray-400 text-[11px]">{{ formatDate(rec.created_at, true) }}</span>
+                </div>
+                <div class="text-gray-600 text-[11px] mb-1">
+                  Assessed by: <strong>{{ rec.assessor_name }}</strong>
+                </div>
+                <div v-if="rec.feedback" class="mt-1 bg-slate-50 p-2 rounded border border-slate-100 text-gray-800 whitespace-pre-wrap text-xs">
+                  {{ rec.feedback }}
+                </div>
+                <div v-else class="text-gray-400 italic text-[11px]">No additional written feedback recorded.</div>
+              </div>
+            </div>
+            <div v-else-if="!showAssessmentForm" class="text-xs text-gray-500 italic py-1">
+              No formal assessment records recorded for this competency yet.
             </div>
           </div>
 
@@ -2704,12 +2813,15 @@
               </select>
               <button @click="adminForceStatus" class="bg-red-600 hover:bg-red-700 text-white font-medium py-1.5 px-3 rounded text-sm transition shadow-sm whitespace-nowrap">Apply</button>
             </div>
-            <div v-if="['c', 'x'].includes(adminEdit.status)" class="flex flex-col gap-2 mb-3">
-              <label class="text-sm font-medium text-gray-700 flex items-center gap-2">
+            <div class="flex flex-col gap-2 mb-3">
+              <label v-if="['c', 'x'].includes(adminEdit.status)" class="text-sm font-medium text-gray-700 flex items-center gap-2">
                 <span class="whitespace-nowrap">Sign-off Date:</span>
                 <input type="date" v-model="adminEdit.date_override" class="rounded border-gray-300 px-2 py-1 text-sm border bg-white flex-grow">
               </label>
-              <textarea v-model="adminEdit.signoff_comment" placeholder="Optional sign-off comment" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"></textarea>
+              <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Sign-off / Concession Comment:</label>
+                <textarea v-model="adminEdit.signoff_comment" placeholder="Optional sign-off comment or concession" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"></textarea>
+              </div>
             </div>
 
             <div v-if="selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz || selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
@@ -2751,6 +2863,7 @@
               </div>
             </div>
           </div>
+          </template>
         </div>
       </div>
     </div>
@@ -2845,6 +2958,20 @@
           <button v-if="customDialog.type === 'confirm'" @click="closeDialog(true)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">Confirm</button>
           <button v-if="customDialog.type === 'prompt'" @click="closeDialog(customDialog.inputValue)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">OK</button>
           <button v-if="customDialog.type === 'alert'" @click="closeDialog(true)" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Progress Indicator for Section Switches and Async Tasks -->
+    <div v-if="sectionSwitchProgress.active" class="fixed inset-0 bg-gray-900/60 backdrop-blur-[1px] flex items-center justify-center z-[110] p-4 transition-opacity">
+      <div class="bg-white rounded-xl shadow-2xl p-5 w-full max-w-sm flex items-center gap-4 border border-gray-100">
+        <svg class="animate-spin h-7 w-7 text-blue-600 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <div>
+          <h4 class="font-bold text-gray-900 text-sm">{{ sectionSwitchProgress.message }}</h4>
+          <p class="text-xs text-gray-500 mt-0.5">Please wait a moment...</p>
         </div>
       </div>
     </div>
@@ -3146,27 +3273,102 @@
             Basis: <strong class="text-gray-700">{{ statCompModal.competency?.hasCaseLogs ? 'Logbook Turnaround Time (Submitted to Completed)' : 'QATrack Completion Time (Work Started to Work Completed)' }}</strong>
           </div>
 
-          <!-- KPI Cards -->
-          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-            <div class="bg-gray-50 border border-gray-200 rounded p-2.5 text-center shadow-2xs">
-              <div class="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Total Records</div>
-              <div class="text-lg font-bold text-gray-900 mt-0.5">{{ userTimingStats.count }}</div>
+          <!-- KPI Cards with Benchmarks & Comparison Indicators (Soft Pastel: Green/Red, Grey, Purple) -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+            <!-- Time Taken to Achieve Competency Card -->
+            <div :class="timeToAchieveIndicator?.cardClass || 'bg-gray-50 border-gray-200'" class="border rounded p-3 text-center shadow-2xs flex flex-col justify-between">
+              <div>
+                <div :class="timeToAchieveIndicator?.titleClass || 'text-gray-600'" class="text-[10px] uppercase font-bold tracking-wider">Time to Achieve</div>
+                <div :class="timeToAchieveIndicator?.valClass || 'text-gray-900'" class="text-lg font-bold mt-0.5">{{ userTimeTakenDisplay }}</div>
+              </div>
+              <div :class="timeToAchieveIndicator?.dividerClass || 'border-gray-200'" class="mt-2 pt-1 border-t flex flex-col items-center gap-0.5">
+                <span v-if="timeToAchieveIndicator" :class="timeToAchieveIndicator.badgeClass" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  {{ timeToAchieveIndicator.text }}
+                </span>
+                <span :class="timeToAchieveIndicator?.subTextClass || 'text-gray-500'" class="text-[10px] font-medium">
+                  {{ compAchieveStats.avgDays !== null ? 'Cohort Avg: ' + compAchieveStats.avgDays + ' days' : 'Cohort Avg: None' }}
+                </span>
+              </div>
             </div>
-            <div class="bg-blue-50 border border-blue-200 rounded p-2.5 text-center shadow-2xs">
-              <div class="text-[10px] uppercase font-bold text-blue-700 tracking-wider">Min Time</div>
-              <div class="text-lg font-bold text-blue-900 mt-0.5">{{ userTimingStats.minStr }}</div>
+
+            <!-- Total Records Card -->
+            <div :class="totalRecordsIndicator?.cardClass || 'bg-gray-50 border-gray-200'" class="border rounded p-3 text-center shadow-2xs flex flex-col justify-between">
+              <div>
+                <div :class="totalRecordsIndicator?.titleClass || 'text-gray-600'" class="text-[10px] uppercase font-bold tracking-wider">Total Records</div>
+                <div :class="totalRecordsIndicator?.valClass || 'text-gray-900'" class="text-lg font-bold mt-0.5">{{ userTimingStats.count }}</div>
+              </div>
+              <div :class="totalRecordsIndicator?.dividerClass || 'border-gray-200'" class="mt-2 pt-1 border-t flex flex-col items-center gap-0.5">
+                <span v-if="totalRecordsIndicator" :class="totalRecordsIndicator.badgeClass" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  {{ totalRecordsIndicator.text }}
+                </span>
+                <span :class="totalRecordsIndicator?.subTextClass || 'text-gray-500'" class="text-[10px] font-medium">
+                  Cohort Avg: {{ cohortAvgRecords }}
+                </span>
+              </div>
             </div>
-            <div class="bg-purple-50 border border-purple-200 rounded p-2.5 text-center shadow-2xs">
-              <div class="text-[10px] uppercase font-bold text-purple-700 tracking-wider">Max Time</div>
-              <div class="text-lg font-bold text-purple-900 mt-0.5">{{ userTimingStats.maxStr }}</div>
+
+            <!-- Min Time Card -->
+            <div :class="minTimeIndicator?.cardClass || 'bg-gray-50 border-gray-200'" class="border rounded p-3 text-center shadow-2xs flex flex-col justify-between">
+              <div>
+                <div :class="minTimeIndicator?.titleClass || 'text-gray-600'" class="text-[10px] uppercase font-bold tracking-wider">Min Time</div>
+                <div :class="minTimeIndicator?.valClass || 'text-gray-900'" class="text-lg font-bold mt-0.5">{{ userTimingStats.minStr }}</div>
+              </div>
+              <div :class="minTimeIndicator?.dividerClass || 'border-gray-200'" class="mt-2 pt-1 border-t flex flex-col items-center gap-0.5">
+                <span v-if="minTimeIndicator" :class="minTimeIndicator.badgeClass" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  {{ minTimeIndicator.text }}
+                </span>
+                <span :class="minTimeIndicator?.subTextClass || 'text-gray-500'" class="text-[10px] font-medium">
+                  {{ cohortAvgMinMins !== null ? 'Cohort Avg: ' + formatDurationMins(cohortAvgMinMins) : 'Cohort Avg: N/A' }}
+                </span>
+              </div>
             </div>
-            <div class="bg-emerald-50 border border-emerald-200 rounded p-2.5 text-center shadow-2xs">
-              <div class="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Mean Time</div>
-              <div class="text-lg font-bold text-emerald-900 mt-0.5">{{ userTimingStats.meanStr }}</div>
+
+            <!-- Max Time Card -->
+            <div :class="maxTimeIndicator?.cardClass || 'bg-gray-50 border-gray-200'" class="border rounded p-3 text-center shadow-2xs flex flex-col justify-between">
+              <div>
+                <div :class="maxTimeIndicator?.titleClass || 'text-gray-600'" class="text-[10px] uppercase font-bold tracking-wider">Max Time</div>
+                <div :class="maxTimeIndicator?.valClass || 'text-gray-900'" class="text-lg font-bold mt-0.5">{{ userTimingStats.maxStr }}</div>
+              </div>
+              <div :class="maxTimeIndicator?.dividerClass || 'border-gray-200'" class="mt-2 pt-1 border-t flex flex-col items-center gap-0.5">
+                <span v-if="maxTimeIndicator" :class="maxTimeIndicator.badgeClass" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  {{ maxTimeIndicator.text }}
+                </span>
+                <span :class="maxTimeIndicator?.subTextClass || 'text-gray-500'" class="text-[10px] font-medium">
+                  {{ cohortAvgMaxMins !== null ? 'Cohort Avg: ' + formatDurationMins(cohortAvgMaxMins) : 'Cohort Avg: N/A' }}
+                </span>
+              </div>
             </div>
-            <div class="bg-amber-50 border border-amber-200 rounded p-2.5 text-center col-span-2 sm:col-span-1 shadow-2xs">
-              <div class="text-[10px] uppercase font-bold text-amber-700 tracking-wider">Median Time</div>
-              <div class="text-lg font-bold text-amber-900 mt-0.5">{{ userTimingStats.medianStr }}</div>
+
+            <!-- Mean Time Card -->
+            <div :class="meanTimeIndicator?.cardClass || 'bg-gray-50 border-gray-200'" class="border rounded p-3 text-center shadow-2xs flex flex-col justify-between">
+              <div>
+                <div :class="meanTimeIndicator?.titleClass || 'text-gray-600'" class="text-[10px] uppercase font-bold tracking-wider">Mean Time</div>
+                <div :class="meanTimeIndicator?.valClass || 'text-gray-900'" class="text-lg font-bold mt-0.5">{{ userTimingStats.meanStr }}</div>
+              </div>
+              <div :class="meanTimeIndicator?.dividerClass || 'border-gray-200'" class="mt-2 pt-1 border-t flex flex-col items-center gap-0.5">
+                <span v-if="meanTimeIndicator" :class="meanTimeIndicator.badgeClass" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  {{ meanTimeIndicator.text }}
+                </span>
+                <span :class="meanTimeIndicator?.subTextClass || 'text-gray-500'" class="text-[10px] font-medium">
+                  Cohort Mean: {{ cohortTimingStats.meanStr }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Median Time Card -->
+            <div :class="medianTimeIndicator?.cardClass || 'bg-gray-50 border-gray-200'" class="border rounded p-3 text-center shadow-2xs flex flex-col justify-between">
+              <div>
+                <div :class="medianTimeIndicator?.titleClass || 'text-gray-600'" class="text-[10px] uppercase font-bold tracking-wider">Median Time</div>
+                <div :class="medianTimeIndicator?.valClass || 'text-gray-900'" class="text-lg font-bold mt-0.5">{{ userTimingStats.medianStr }}</div>
+              </div>
+              <div :class="medianTimeIndicator?.dividerClass || 'border-gray-200'" class="mt-2 pt-1 border-t flex flex-col items-center gap-0.5">
+                <span v-if="medianTimeIndicator" :class="medianTimeIndicator.badgeClass" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  {{ medianTimeIndicator.text }}
+                </span>
+                <span :class="medianTimeIndicator?.subTextClass || 'text-gray-500'" class="text-[10px] font-medium">
+                  Cohort Median: {{ cohortTimingStats.medianStr }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -3239,7 +3441,7 @@
         <img src="compiltlogotrans.png" alt="ComPilot Logo" class="h-10 w-auto object-contain cursor-pointer hover:opacity-80 transition transform hover:scale-105" @click="showAboutModal = true" title="About ComPilot & Release Notes">
       </div>
       <div class="flex-1 text-right">
-        James Burnley v2.5
+        James Burnley v2.7
       </div>
     </div>
 
@@ -3258,7 +3460,7 @@
         </div>
         <div class="mb-4">
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Trainee Reflective Notes</label>
-          <p class="italic bg-white p-3 border border-gray-200 rounded text-gray-700 shadow-inner text-sm whitespace-pre-wrap">{{ activeLogReview.trainee_comments }}</p>
+          <p class="bg-white p-3 border border-gray-200 rounded text-gray-700 shadow-inner text-sm whitespace-pre-wrap">{{ activeLogReview.trainee_comments }}</p>
         </div>
 
         <!-- Other Trainers' Feedback Trail if exists -->
@@ -3426,6 +3628,71 @@
       </div>
     </div>
 
+    <!-- Transfer Case Log Modal -->
+    <div v-if="showTransferLogModal && activeTransferLog" @click.self="closeTransferLogModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-3 border-b pb-2">
+          <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <span>🔀 Transfer Case Log</span>
+          </h3>
+          <button @click="closeTransferLogModal" class="text-gray-400 hover:text-gray-600 font-bold text-lg leading-none">&times;</button>
+        </div>
+        
+        <div class="mb-4 text-xs bg-indigo-50 p-3 rounded border border-indigo-200 space-y-1">
+          <div><strong class="text-indigo-900">Patient Ref:</strong> {{ activeTransferLog.patient_reference || 'N/A' }}</div>
+          <div v-if="activeTransferLog.log_date"><strong class="text-indigo-900">Log Date:</strong> {{ formatDate(activeTransferLog.log_date) }}</div>
+          <div><strong class="text-indigo-900">Current Task:</strong> {{ getCompetencyName(activeTransferLog.competency_id) }}</div>
+          <div><strong class="text-indigo-900">Current Status:</strong> <span class="font-bold">{{ activeTransferLog.status === 'Draft' ? 'Draft' : 'Pending Review' }}</span></div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+            Select Destination Competency *
+          </label>
+          <select v-model="targetTransferCompId" @change="onTargetTransferCompChange" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:ring-indigo-500 focus:border-indigo-500">
+            <option disabled value="">Choose target competency...</option>
+            <option v-for="c in transferAvailableCompetencies" :key="c.id" :value="c.id">
+              {{ c.category }} — {{ c.task_name }} (Req: {{ c.required_plan_count }} logs)
+            </option>
+          </select>
+          <p v-if="transferAvailableCompetencies.length === 0" class="text-xs text-amber-600 mt-1">
+            No other competencies requiring case logs are available in this section.
+          </p>
+        </div>
+
+        <!-- Target Assessor Selection (only if not a draft) -->
+        <div v-if="activeTransferLog.status !== 'Draft' && targetTransferCompId" class="mb-4">
+          <label class="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+            Assigned Trainer / Assessor
+          </label>
+          <div v-if="loadingTransferAssessors" class="text-xs text-gray-500 py-2">Loading eligible trainers...</div>
+          <div v-else-if="transferEligibleAssessors.length === 0" class="text-xs text-amber-700 bg-amber-50 p-2.5 rounded border border-amber-200">
+            No eligible trainers found for this destination competency. This log will be transferred as a <strong>Draft</strong>.
+          </div>
+          <select v-else v-model="targetTransferAssessorId" class="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:ring-indigo-500 focus:border-indigo-500">
+            <option disabled value="">Choose a trainer for this competency...</option>
+            <option v-for="t in transferEligibleAssessors" :key="t.id" :value="t.id">
+              {{ t.full_name || t.username }} {{ t.id === activeTransferLog.assigned_assessor_id ? '(Current Trainer)' : '' }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="transferErrorMessage" class="text-xs text-red-600 font-semibold mb-3">
+          {{ transferErrorMessage }}
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+          <button @click="closeTransferLogModal" type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-1.5 px-3 rounded text-sm transition">
+            Cancel
+          </button>
+          <button @click="confirmTransferLog" :disabled="!targetTransferCompId || isTransferring || (activeTransferLog.status !== 'Draft' && transferEligibleAssessors.length > 0 && !targetTransferAssessorId)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-4 rounded text-sm transition shadow-sm disabled:opacity-50 flex items-center gap-1.5">
+            <span v-if="isTransferring">Transferring...</span>
+            <span v-else>Confirm Transfer</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- About ComPilot Modal -->
     <div v-if="showAboutModal" @click.self="showAboutModal = false" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto border border-gray-200">
@@ -3435,7 +3702,7 @@
             <div>
               <div class="flex items-center gap-2">
                 <h3 class="text-xl font-bold text-gray-900 tracking-tight">ComPilot</h3>
-                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded-full border border-blue-200">v2.5</span>
+                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded-full border border-blue-200">v2.7</span>
               </div>
             </div>
           </div>
@@ -3445,7 +3712,7 @@
         <div class="py-4 space-y-4 text-sm text-gray-700">
           <div class="flex items-center justify-between text-xs text-gray-700 border border-gray-200 py-2.5 px-3 bg-gray-50 rounded-lg">
             <div><strong class="text-gray-900">Author:</strong> James Burnley</div>
-            <div><strong class="text-gray-900">Release Date:</strong> 08/10/2026</div>
+            <div><strong class="text-gray-900">Release Date:</strong> 10/11/2026</div>
           </div>
 
           <!-- Nested Collapsible Version Release Notes -->
@@ -3460,11 +3727,49 @@
               </span>
             </button>
             <div v-if="showReleaseNotes" class="p-4 bg-white space-y-4 text-xs divide-y divide-gray-100 max-h-72 overflow-y-auto">
-              <!-- v2.5 -->
+              <!-- v2.7 -->
               <div class="pt-1 first:pt-0">
                 <div class="flex items-center justify-between mb-1.5">
-                  <span class="font-bold text-blue-900 text-sm">Release v2.5 (Current)</span>
+                  <span class="font-bold text-blue-900 text-sm">Release v2.7 (Current)</span>
                   <span class="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold border border-blue-200">Latest</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600 mb-3">
+                  <li><strong>Strict Assessor Scoping:</strong> Unified Record of Assessment and assessment recording are strictly restricted to authorized assessors certified competent to train ('X' or 'X+') for that particular competency. Non-assessors and trainers/admins not certified in that specific competency cannot view or add assessment records.</li>
+                  <li><strong>Trainer Tab Availability:</strong> The Trainer tab is consistently accessible to any authorized trainer across all applicable sections, allowing immediate access to feedback queues and log filtering.</li>
+                  <li><strong>Section Review Queue Statistics Alignment:</strong> Logs Pending Review counter on the statistics dashboard now accurately aligns with section-specific active trainer queue counts.</li>
+                  <li><strong>Matrix Performance Optimizations:</strong> Fast indexed lookups for public matrix rendering, instantaneous credential entry, and responsive section-switching progress feedback.</li>
+                </ul>
+              </div>
+              <!-- v2.6 -->
+              <div class="pt-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-gray-800 text-sm">Release v2.6</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600 mb-3">
+                  <li><strong>Record of Assessment:</strong> Unified assessment workspace replacing the separate assessor action section, featuring structured feedback, pass/fail result outcomes (C, X, T, M, A), and integrated concession/condition toggle with automatic competency status updates.</li>
+                  <li><strong>Strict Assessor Access Control:</strong> Only authorized assessors (competent to train 'X' in that competency) or administrators can carry out assessments or view other trainees' assessment records.</li>
+                  <li><strong>System-wide Competency Status Overview:</strong> Individual competency average time to achieve displayed for each task, calculated exclusively from non-admin-override completions.</li>
+                  <li><strong>Timing Analytics Pastel Theming:</strong> Streamlined metric boxes on the Timing Analytics card using a semantic soft pastel scheme (Green for better, Red for worse, Grey for neutral/equal, and Purple for cohort best).</li>
+                  <li><strong>Refined Concession Workflow:</strong> Removed standalone concession button and isolated concession toggle to display exclusively when marking a trainee as competent or competent to train.</li>
+                  <li><strong>Timing Analytics In-Progress Days:</strong> Displays active days in training in the Time to Achieve metric card when competency is in progress.</li>
+                  <li><strong>Admin Statistics Pending Logs Count:</strong> Real-time counter of case logs pending review added alongside overall section statistics in the Admin tab.</li>
+                </ul>
+              </div>
+              <!-- v2.51 -->
+              <div class="pt-1 first:pt-0">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-gray-800 text-sm">Release v2.51</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600 mb-3">
+                  <li><strong>Assessor Comments &amp; Concessions:</strong> Assessors can now record, save, and edit optional sign-off comments and concessions across all stages (T, M, A, C, X) even prior to final sign-off, with immediate persistence and asterisk display in the matrix.</li>
+                  <li><strong>Status 'M' Preservation:</strong> Trainees manually granted 'M' or given assessor concessions will no longer be reverted to 'T' by automated system checks.</li>
+                  <li><strong>Competency Log Transfer:</strong> Trainees can transfer Draft or Pending Review case logs between competencies while preserving the trainer feedback trail.</li>
+                </ul>
+              </div>
+              <!-- v2.5 -->
+              <div class="pt-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-gray-800 text-sm">Release v2.5</span>
                 </div>
                 <ul class="list-disc pl-5 space-y-1 text-gray-600">
                   <li><strong>Trainer Log Reassignment:</strong> Facility for trainers to reassign pending case log reviews directly from the feedback queue to another eligible trainer.</li>
@@ -4281,17 +4586,24 @@
 
         const isTrainerInAny = computed(() => {
           if (!user.value) return false;
-          return progress.value.some(p => {
-            if (p.user_id !== user.value.id || p.current_status !== 'x') return false;
-            const c = competencies.value.find(comp => comp.id === p.competency_id);
-            if (!c) return false;
-            return c.required_plan_count > 0;
+          if (user.value.is_admin || user.value.is_superuser) return true;
+          const isCompetentTrainer = (progress.value || []).some(p => {
+            if (p.user_id !== user.value.id) return false;
+            const stat = String(p.current_status || '').toLowerCase();
+            return stat === 'x' || stat === 'x+';
           });
+          if (isCompetentTrainer) return true;
+          return (assessorQueue.value || []).some(l => l.assigned_assessor_id === user.value.id);
         });
 
         const isCompetentToTrainAny = computed(() => {
           if (!user.value) return false;
-          return progress.value.some(p => p.user_id === user.value.id && (p.current_status === 'x' || p.current_status === 'x+'));
+          if (user.value.is_admin || user.value.is_superuser) return true;
+          return (progress.value || []).some(p => {
+            if (p.user_id !== user.value.id) return false;
+            const stat = String(p.current_status || '').toLowerCase();
+            return stat === 'x' || stat === 'x+';
+          });
         });
 
         const toggleVivaScore = (quizId) => {
@@ -4355,6 +4667,7 @@
         };
 
         const fetchAssessorQueue = async () => {
+          if (!token.value || !user.value) return;
           try {
              const res = await fetch('/api/assessor/feedback-queue', { headers: getHeaders() });
              if (res.ok) {
@@ -4402,144 +4715,206 @@
           } catch(e) {}
         };
 
+      const loadingPublicMatrix = ref(false);
+      const sectionSwitchProgress = ref({ active: false, message: '' });
+
       const publicSummaryData = ref({ users: [], allUsers: [], competencies: [], progress: [], categoryOrder: [], userGroups: [] });
 
-        const fetchPublicSummary = async () => {
-          try {
-            const res = await fetch('/api/public/summary', { headers: { 'X-Database': selectedDb.value } });
-            if (res.ok) {
-              publicSummaryData.value = await res.json();
-            }
-          } catch(e) { console.error(e); }
-        };
-
-        const publicDisplayedUsers = computed(() => {
-          const order = {};
-          (publicSummaryData.value.userGroups || []).forEach((g, index) => {
-            order[g.name] = index;
-          });
-          return [...publicSummaryData.value.users].sort((a, b) => {
-            const orderA = order[a.designation] !== undefined ? order[a.designation] : 999;
-            const orderB = order[b.designation] !== undefined ? order[b.designation] : 999;
-            if (orderA !== orderB) return orderA - orderB;
-            // Fallback alphabetical sorting within same role
-            return (a.full_name || '').localeCompare(b.full_name || '');
-          });
+      const publicProgressMap = computed(() => {
+        const map = {};
+        (publicSummaryData.value.progress || []).forEach(p => {
+          map[`${p.user_id}_${p.competency_id}`] = p;
         });
+        return map;
+      });
 
-        const isPublicApplicable = (u, comp) => {
-          return (comp.target_groups && comp.target_groups.includes(u.designation)) || (comp.target_users && comp.target_users.includes(u.id));
-        };
-
-        const publicGroupedCompetencies = computed(() => {
-          const groups = {};
-          publicSummaryData.value.competencies.forEach(c => {
-            const applicable = publicDisplayedUsers.value.some(u => isPublicApplicable(u, c));
-            if (applicable) {
-              if (!groups[c.category]) groups[c.category] = [];
-              groups[c.category].push(c);
-            }
-          });
-          
-          const orderedGroups = {};
-          Object.keys(groups).sort((a, b) => {
-            const indexA = publicSummaryData.value.categoryOrder.findIndex(co => co.category === a);
-            const indexB = publicSummaryData.value.categoryOrder.findIndex(co => co.category === b);
-            return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
-          }).forEach(k => orderedGroups[k] = groups[k]);
-          
-          return orderedGroups;
+      const publicUsersMap = computed(() => {
+        const map = {};
+        (publicSummaryData.value.users || []).forEach(u => {
+          map[u.id] = u;
         });
+        return map;
+      });
 
-        const publicAllUsersProgress = computed(() => {
-          const stats = {};
-          publicDisplayedUsers.value.forEach(u => {
-            const myProgress = publicSummaryData.value.progress.filter(p => p.user_id === u.id);
-            const myCompetencies = publicSummaryData.value.competencies.filter(c => isPublicApplicable(u, c));
+      const publicCompsMap = computed(() => {
+        const map = {};
+        (publicSummaryData.value.competencies || []).forEach(c => {
+          map[c.id] = c;
+        });
+        return map;
+      });
+
+      const fetchPublicSummary = async () => {
+        loadingPublicMatrix.value = true;
+        try {
+          const res = await fetch('/api/public/summary', { headers: { 'X-Database': selectedDb.value } });
+          if (res.ok) {
+            publicSummaryData.value = await res.json();
+          }
+        } catch(e) { console.error(e); }
+        finally {
+          loadingPublicMatrix.value = false;
+        }
+      };
+
+      const publicDisplayedUsers = computed(() => {
+        const order = {};
+        (publicSummaryData.value.userGroups || []).forEach((g, index) => {
+          order[g.name] = index;
+        });
+        return [...publicSummaryData.value.users].sort((a, b) => {
+          const orderA = order[a.designation] !== undefined ? order[a.designation] : 999;
+          const orderB = order[b.designation] !== undefined ? order[b.designation] : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          // Fallback alphabetical sorting within same role
+          return (a.full_name || '').localeCompare(b.full_name || '');
+        });
+      });
+
+      const isPublicApplicable = (u, comp) => {
+        return (comp.target_groups && comp.target_groups.includes(u.designation)) || (comp.target_users && comp.target_users.includes(u.id));
+      };
+
+      const publicGroupedCompetencies = computed(() => {
+        const groups = {};
+        publicSummaryData.value.competencies.forEach(c => {
+          const applicable = publicDisplayedUsers.value.some(u => isPublicApplicable(u, c));
+          if (applicable) {
+            if (!groups[c.category]) groups[c.category] = [];
+            groups[c.category].push(c);
+          }
+        });
+        
+        const orderedGroups = {};
+        Object.keys(groups).sort((a, b) => {
+          const indexA = publicSummaryData.value.categoryOrder.findIndex(co => co.category === a);
+          const indexB = publicSummaryData.value.categoryOrder.findIndex(co => co.category === b);
+          return (indexA !== -1 ? indexA : 999) - (indexB !== -1 ? indexB : 999);
+        }).forEach(k => orderedGroups[k] = groups[k]);
+        
+        return orderedGroups;
+      });
+
+      const publicAllUsersProgress = computed(() => {
+        const stats = {};
+        const pMap = publicProgressMap.value;
+        const comps = publicSummaryData.value.competencies || [];
+        const users = publicDisplayedUsers.value || [];
+
+        users.forEach(u => {
+          let overallComplete = 0;
+          const catStats = {};
+          const catCompsMap = {};
+          let totalApplicable = 0;
+
+          comps.forEach(c => {
+            if (!isPublicApplicable(u, c)) return;
+            totalApplicable++;
+            if (!catCompsMap[c.category]) catCompsMap[c.category] = [];
+            catCompsMap[c.category].push(c);
             
-            const categories = [...new Set(myCompetencies.map(c => c.category))];
-            let overallComplete = 0;
-            const catStats = {};
-
-            categories.forEach(cat => {
-              const catComps = myCompetencies.filter(c => c.category === cat);
-              let catComplete = 0;
-              catComps.forEach(c => {
-                const p = myProgress.find(pr => pr.competency_id === c.id);
-                if (p && (p.current_status === 'c' || p.current_status === 'x')) { catComplete++; overallComplete++; }
-              });
-              catStats[cat] = { complete: catComplete, total: catComps.length, percent: Math.round((catComplete / (catComps.length || 1)) * 100) };
-            });
-            stats[u.id] = { overall: { complete: overallComplete, total: myCompetencies.length, percent: Math.round((overallComplete / (myCompetencies.length || 1)) * 100) }, categories: catStats };
-          });
-          return stats;
-        });
-
-        const getPublicUserCategoryProgress = (u, cat) => {
-          if (!publicAllUsersProgress.value[u.id] || !publicAllUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0, complete: 0 };
-          return publicAllUsersProgress.value[u.id].categories[cat];
-        };
-
-        const hasNoPrerequisites = (c) => {
-          if (!c) return false;
-          if (c.requires_instructions && c.reading_prerequisites?.length > 0) return false;
-          if (c.requires_quiz && c.quiz_ids?.length > 0) return false;
-          if (c.requires_prerequisite_competencies && c.prerequisite_competencies?.length > 0) return false;
-          if (c.requires_pre_eval) return false;
-          if (c.qatrack_requirements?.length > 0) return false;
-          if (c.required_plan_count > 0) return false;
-          return true;
-        };
-
-        const getPublicProgressStatus = (userId, compId) => {
-          const p = publicSummaryData.value.progress.find(p => p.user_id === userId && p.competency_id === compId);
-          if (p) return p.current_status;
-          
-          const u = publicSummaryData.value.users.find(user => user.id === userId);
-          const c = publicSummaryData.value.competencies.find(comp => comp.id === compId);
-          if (u && c && isPublicApplicable(u, c)) return hasNoPrerequisites(c) ? 'm' : 't';
-          
-          return '';
-        };
-
-        const getPublicStatusBadgeClass = (userId, compId) => {
-          const status = getPublicProgressStatus(userId, compId);
-          const baseClass = "inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset ";
-          if (status === 't') return baseClass + "bg-yellow-50 text-yellow-800 ring-yellow-600/20";
-          if (status === 'a') return baseClass + "bg-orange-50 text-orange-800 ring-orange-600/20";
-          if (status === 'm') return baseClass + "bg-purple-50 text-purple-700 ring-purple-600/20";
-          if (status === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
-          if (status === 'x') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
-          return "text-gray-400"; // Empty state
-        };
-
-        const publicSelectedCell = ref(null);
-        const openPublicModal = (u, comp) => {
-          publicSelectedCell.value = { user: u, comp };
-        };
-        const closePublicModal = () => {
-          publicSelectedCell.value = null;
-        };
-
-        const getPublicProgressObj = (userId, compId) => {
-          return publicSummaryData.value.progress.find(p => p.user_id === userId && p.competency_id === compId);
-        };
-
-        const getPublicAssessorName = (assessorId) => {
-        const userList = publicSummaryData.value.allUsers && publicSummaryData.value.allUsers.length > 0 ? publicSummaryData.value.allUsers : publicSummaryData.value.users;
-        const assessor = userList.find(u => u.id === assessorId);
-          return assessor ? assessor.full_name : 'Unknown';
-        };
-
-        const fetchPublicData = async () => {
-          try {
-            const secRes = await fetch('/api/public/sections');
-            if (secRes.ok) {
-              globalSettings.value.sections = await secRes.json();
+            const p = pMap[`${u.id}_${c.id}`];
+            if (p && (p.current_status === 'c' || p.current_status === 'x')) {
+              overallComplete++;
             }
-            await fetchPublicSummary();
-          } catch(e) { console.error(e); }
-        };
+          });
+
+          Object.keys(catCompsMap).forEach(cat => {
+            const cList = catCompsMap[cat];
+            let catComplete = 0;
+            cList.forEach(c => {
+              const p = pMap[`${u.id}_${c.id}`];
+              if (p && (p.current_status === 'c' || p.current_status === 'x')) catComplete++;
+            });
+            catStats[cat] = {
+              complete: catComplete,
+              total: cList.length,
+              percent: Math.round((catComplete / (cList.length || 1)) * 100)
+            };
+          });
+
+          stats[u.id] = {
+            overall: {
+              complete: overallComplete,
+              total: totalApplicable,
+              percent: Math.round((overallComplete / (totalApplicable || 1)) * 100)
+            },
+            categories: catStats
+          };
+        });
+        return stats;
+      });
+
+      const getPublicUserCategoryProgress = (u, cat) => {
+        if (!publicAllUsersProgress.value[u.id] || !publicAllUsersProgress.value[u.id].categories[cat]) return { percent: 0, total: 0, complete: 0 };
+        return publicAllUsersProgress.value[u.id].categories[cat];
+      };
+
+      const hasNoPrerequisites = (c) => {
+        if (!c) return false;
+        if (c.requires_instructions && c.reading_prerequisites?.length > 0) return false;
+        if (c.requires_quiz && c.quiz_ids?.length > 0) return false;
+        if (c.requires_prerequisite_competencies && c.prerequisite_competencies?.length > 0) return false;
+        if (c.requires_pre_eval) return false;
+        if (c.qatrack_requirements?.length > 0) return false;
+        if (c.required_plan_count > 0) return false;
+        return true;
+      };
+
+      const getPublicProgressStatus = (userId, compId) => {
+        const key = `${userId}_${compId}`;
+        const p = publicProgressMap.value[key];
+        if (p) return p.current_status;
+        
+        const u = publicUsersMap.value[userId];
+        const c = publicCompsMap.value[compId];
+        if (u && c && isPublicApplicable(u, c)) return hasNoPrerequisites(c) ? 'm' : 't';
+        
+        return '';
+      };
+
+      const getPublicStatusBadgeClass = (userId, compId) => {
+        const status = getPublicProgressStatus(userId, compId);
+        const baseClass = "inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset ";
+        if (status === 't') return baseClass + "bg-yellow-50 text-yellow-800 ring-yellow-600/20";
+        if (status === 'a') return baseClass + "bg-orange-50 text-orange-800 ring-orange-600/20";
+        if (status === 'm') return baseClass + "bg-purple-50 text-purple-700 ring-purple-600/20";
+        if (status === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
+        if (status === 'x') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
+        return "text-gray-400"; // Empty state
+      };
+
+      const publicSelectedCell = ref(null);
+      const openPublicModal = (u, comp) => {
+        publicSelectedCell.value = { user: u, comp };
+      };
+      const closePublicModal = () => {
+        publicSelectedCell.value = null;
+      };
+
+      const getPublicProgressObj = (userId, compId) => {
+        return publicProgressMap.value[`${userId}_${compId}`];
+      };
+
+      const getPublicAssessorName = (assessorId) => {
+      const userList = publicSummaryData.value.allUsers && publicSummaryData.value.allUsers.length > 0 ? publicSummaryData.value.allUsers : publicSummaryData.value.users;
+      const assessor = userList.find(u => u.id === assessorId);
+        return assessor ? assessor.full_name : 'Unknown';
+      };
+
+      const fetchPublicData = async () => {
+        loadingPublicMatrix.value = true;
+        try {
+          const secRes = await fetch('/api/public/sections');
+          if (secRes.ok) {
+            globalSettings.value.sections = await secRes.json();
+          }
+          await fetchPublicSummary();
+        } catch(e) { console.error(e); }
+        finally {
+          loadingPublicMatrix.value = false;
+        }
+      };
 
         const saveCategory = async () => {
           try {
@@ -4680,14 +5055,46 @@
           takingEval.value = type;
         };
 
+        const activeCellProgress = computed(() => {
+          if (!selectedCell.value || !selectedCell.value.user || !selectedCell.value.comp) return null;
+          return getProgressObj(selectedCell.value.user.id, selectedCell.value.comp.id);
+        });
+
+        const isCompetentToTrainComp = (userId, compId) => {
+          if (!userId || !compId) return false;
+          const p = progressMap.value ? progressMap.value[`${userId}_${compId}`] : (progress.value || []).find(pr => pr.user_id === userId && pr.competency_id === compId);
+          const stat = String(p?.current_status || '').toLowerCase().trim();
+          return stat === 'x' || stat === 'x+';
+        };
+
         const isAssessorForSelected = computed(() => {
-          if (!user.value || !selectedCell.value) return false;
-          return getProgressStatus(user.value.id, selectedCell.value.comp.id) === 'x' || user.value.is_admin || user.value.is_superuser;
+          if (!user.value || !selectedCell.value || !selectedCell.value.comp) return false;
+          const compId = selectedCell.value.comp.id;
+          return isCompetentToTrainComp(user.value.id, compId);
+        });
+
+        const canCarryOutAssessment = computed(() => {
+          if (!user.value || !selectedCell.value || !selectedCell.value.user) return false;
+          if (selectedCell.value.user.id === user.value.id) return false;
+          return isAssessorForSelected.value;
+        });
+
+        const canSeeAssessmentRecords = computed(() => {
+          if (!user.value || !selectedCell.value || !selectedCell.value.comp) return false;
+          return isAssessorForSelected.value;
         });
 
         const canAssessorOverride = computed(() => {
           if (!user.value || !selectedCell.value) return false;
           return !!(user.value.is_superuser || user.value.is_admin);
+        });
+
+        const isDetailedCompetencyView = computed(() => {
+          if (!user.value || !selectedCell.value || !selectedCell.value.comp) return false;
+          if (user.value.is_admin || user.value.is_superuser) return true;
+          if (selectedCell.value.user && selectedCell.value.user.id === user.value.id) return true;
+          const compId = selectedCell.value.comp.id;
+          return isCompetentToTrainComp(user.value.id, compId);
         });
 
         const getSupervisionLabel = (score) => {
@@ -4702,8 +5109,8 @@
 
         const myAssessorCompetencies = computed(() => {
           if (!user.value) return [];
-          return progress.value
-            .filter(p => p.user_id === user.value.id && p.current_status === 'x')
+          return (progress.value || [])
+            .filter(p => p.user_id === user.value.id && ['x', 'x+'].includes(String(p.current_status || '').toLowerCase().trim()))
             .map(p => p.competency_id);
         });
 
@@ -4825,7 +5232,17 @@
         };
         
         const getUser = (userId) => {
-          return users.value.find(user => user.id === parseInt(userId, 10));
+          const uid = parseInt(userId, 10);
+          return (users.value || []).find(user => user.id === uid) || (allUsers && allUsers.value ? allUsers.value.find(user => user.id === uid) : null);
+        };
+
+        const handleAssessorOpenModal = (userId, comp) => {
+          const u = getUser(userId);
+          if (!u) {
+            customAlert("Could not find trainee user record for ID: " + userId, "Error");
+            return;
+          }
+          openModal(u, comp);
         };
         
         const statistics = ref(null);
@@ -4883,6 +5300,10 @@
                 acc.x += cat.x || 0;
                 return acc;
             }, { t: 0, m: 0, a: 0, c: 0, x: 0 });
+        });
+
+        const sectionPendingLogsCount = computed(() => {
+            return totalTrainableLogsCount.value || 0;
         });
 
         const statUserSortCol = ref('name');
@@ -5009,17 +5430,23 @@
               else if (status === 'm') stats.m++;
               else stats.t++;
               
-              if (p && ['c', 'x'].includes(p.current_status) && p.date_started && p.date_signed_off) {
-                const t1 = new Date(p.date_started).getTime();
-                const t2 = new Date(p.date_signed_off).getTime();
-                if (!isNaN(t1) && !isNaN(t2) && t2 > t1) {
-                   totalTimeMs += (t2 - t1);
-                   timeCount++;
+            });
+            
+            (progress.value || []).forEach(p => {
+              if (p.competency_id === c.id && ['c', 'x'].includes(p.current_status)) {
+                // Ensure average time taken does not include users signed off via admin override
+                if (!p.is_admin_override && p.assessor_id !== 18 && p.date_started && p.date_signed_off) {
+                  const t1 = new Date(p.date_started).getTime();
+                  const t2 = new Date(p.date_signed_off).getTime();
+                  if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
+                    totalTimeMs += (t2 - t1);
+                    timeCount++;
+                  }
                 }
               }
             });
             
-            const avgTimeDays = timeCount > 0 ? Math.round(totalTimeMs / (1000 * 3600 * 24)) : null;
+            const avgTimeDays = timeCount > 0 ? Math.round(totalTimeMs / (1000 * 3600 * 24 * timeCount)) : null;
             
             return { ...c, t: stats.t, m: stats.m, a: stats.a, c: stats.c, x: stats.x, total: applicableUsers.length, avgTimeDays, totalTimeMs, timeCount };
           });
@@ -5027,6 +5454,8 @@
           return comps.sort((a, b) => {
             let valA = a[statCompSortCol.value];
             let valB = b[statCompSortCol.value];
+            if (valA === null || valA === undefined) valA = -1;
+            if (valB === null || valB === undefined) valB = -1;
             let res = (typeof valA === 'string') ? valA.localeCompare(valB) * statCompSortDir.value : (valA - valB) * statCompSortDir.value;
             if (res === 0 && statCompSortCol.value !== 'task_name') return a.task_name.localeCompare(b.task_name);
             return res;
@@ -5386,6 +5815,277 @@
           const year = selectedLeaderboardYear.value;
           const uRecs = extractRecordsForUser(userTimingModal.value.user, year);
           return computeTimingStatsFromRecords(uRecs);
+        });
+
+        // User Progress Record for Time to Achieve
+        const userProgressRecord = computed(() => {
+          if (!userTimingModal.value.isOpen || !userTimingModal.value.user || !statCompModal.value.competency) {
+            return null;
+          }
+          const uId = userTimingModal.value.user.userId || userTimingModal.value.user.id;
+          const cId = statCompModal.value.competency.id;
+          return (progress.value || []).find(p => p.user_id === uId && p.competency_id === cId) || null;
+        });
+
+        const userTimeTakenDays = computed(() => {
+          const p = userProgressRecord.value;
+          if (!p || !['c', 'x'].includes(p.current_status) || !p.date_started || !p.date_signed_off) {
+            return null;
+          }
+          const d1 = new Date(p.date_started).getTime();
+          const d2 = new Date(p.date_signed_off).getTime();
+          if (isNaN(d1) || isNaN(d2)) return null;
+          return Math.max(0, Math.round((d2 - d1) / (1000 * 3600 * 24)));
+        });
+
+        const userTimeTakenDisplay = computed(() => {
+          const p = userProgressRecord.value;
+          if (!p) return 'N/A';
+          if (['c', 'x'].includes(p.current_status)) {
+            if (userTimeTakenDays.value !== null) {
+              return `${userTimeTakenDays.value} day${userTimeTakenDays.value !== 1 ? 's' : ''}`;
+            }
+            return 'Signed Off';
+          }
+          if (p.date_started) {
+            const d1 = new Date(p.date_started).getTime();
+            const now = Date.now();
+            if (!isNaN(d1) && now >= d1) {
+              const days = Math.max(0, Math.round((now - d1) / (1000 * 3600 * 24)));
+              return `${days} day${days !== 1 ? 's' : ''}`;
+            }
+          }
+          return '0 days';
+        });
+
+        // Cohort average time to achieve competency (excluding admin overrides)
+        const compAchieveStats = computed(() => {
+          const comp = statCompModal.value.competency;
+          if (!comp) return { avgDays: null, count: 0, minDays: null };
+          let totalDays = 0;
+          let count = 0;
+          let minDays = null;
+          (progress.value || []).forEach(p => {
+            if (p.competency_id === comp.id && ['c', 'x'].includes(p.current_status)) {
+              if (p.is_admin_override || p.assessor_id === 18) return; // Exclude admin overrides
+              if (p.date_started && p.date_signed_off) {
+                const d1 = new Date(p.date_started).getTime();
+                const d2 = new Date(p.date_signed_off).getTime();
+                if (!isNaN(d1) && !isNaN(d2) && d2 >= d1) {
+                  const days = Math.round((d2 - d1) / (1000 * 3600 * 24));
+                  totalDays += days;
+                  count++;
+                  if (minDays === null || days < minDays) {
+                    minDays = days;
+                  }
+                }
+              }
+            }
+          });
+          const avgDays = count > 0 ? Math.round(totalDays / count) : null;
+          return { avgDays, count, minDays };
+        });
+
+        // Soft pastel palette helpers: green (better), red (worse), grey (neutral), purple (best)
+        const getPastelTheme = (category) => {
+          if (category === 'best') {
+            return {
+              cardClass: 'bg-purple-50/70 border-purple-200',
+              titleClass: 'text-purple-800',
+              valClass: 'text-purple-950',
+              dividerClass: 'border-purple-100',
+              badgeClass: 'bg-purple-100 text-purple-800 border border-purple-300',
+              subTextClass: 'text-purple-700/80'
+            };
+          }
+          if (category === 'better') {
+            return {
+              cardClass: 'bg-emerald-50/70 border-emerald-200',
+              titleClass: 'text-emerald-800',
+              valClass: 'text-emerald-950',
+              dividerClass: 'border-emerald-100',
+              badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+              subTextClass: 'text-emerald-700/80'
+            };
+          }
+          if (category === 'worse') {
+            return {
+              cardClass: 'bg-rose-50/70 border-rose-200',
+              titleClass: 'text-rose-800',
+              valClass: 'text-rose-950',
+              dividerClass: 'border-rose-100',
+              badgeClass: 'bg-rose-100 text-rose-800 border border-rose-300',
+              subTextClass: 'text-rose-700/80'
+            };
+          }
+          // Default: neutral (grey)
+          return {
+            cardClass: 'bg-gray-50 border-gray-200',
+            titleClass: 'text-gray-600',
+            valClass: 'text-gray-900',
+            dividerClass: 'border-gray-200',
+            badgeClass: 'bg-gray-100 text-gray-700 border border-gray-300',
+            subTextClass: 'text-gray-500'
+          };
+        };
+
+        const timeToAchieveIndicator = computed(() => {
+          const p = userProgressRecord.value;
+          if (!p || !['c', 'x'].includes(p.current_status)) {
+            return { 
+              text: 'In Progress', 
+              ...getPastelTheme('neutral'),
+              badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200' 
+            };
+          }
+          if (p.is_admin_override || p.assessor_id === 18) {
+            return { text: 'Admin Override', ...getPastelTheme('neutral') };
+          }
+          if (userTimeTakenDays.value === null || compAchieveStats.value.avgDays === null) {
+            return { text: 'No Cohort Benchmark', ...getPastelTheme('neutral') };
+          }
+          const diff = userTimeTakenDays.value - compAchieveStats.value.avgDays;
+          if (compAchieveStats.value.count > 1 && compAchieveStats.value.minDays !== null && userTimeTakenDays.value === compAchieveStats.value.minDays) {
+            return { text: `★ Fastest (${userTimeTakenDays.value}d)`, ...getPastelTheme('best') };
+          } else if (diff < 0) {
+            return { text: `▼ Below Avg (${diff}d)`, ...getPastelTheme('better') };
+          } else if (diff > 0) {
+            return { text: `▲ Above Avg (+${diff}d)`, ...getPastelTheme('worse') };
+          }
+          return { text: '= Equal to Avg', ...getPastelTheme('neutral') };
+        });
+
+        const cohortAvgRecords = computed(() => {
+          const summary = statCompModal.value.summary || [];
+          if (summary.length === 0) return 0;
+          const year = selectedLeaderboardYear.value;
+          let total = 0;
+          let activeCount = 0;
+          summary.forEach(u => {
+            const recs = extractRecordsForUser(u, year);
+            total += recs.length;
+            if (recs.length > 0) activeCount++;
+          });
+          return activeCount > 0 ? Math.round((total / activeCount) * 10) / 10 : 0;
+        });
+
+        const cohortMaxRecords = computed(() => {
+          const summary = statCompModal.value.summary || [];
+          if (summary.length === 0) return 0;
+          const year = selectedLeaderboardYear.value;
+          let maxCount = 0;
+          summary.forEach(u => {
+            const count = extractRecordsForUser(u, year).length;
+            if (count > maxCount) maxCount = count;
+          });
+          return maxCount;
+        });
+
+        const totalRecordsIndicator = computed(() => {
+          const count = userTimingStats.value.count || 0;
+          const avg = cohortAvgRecords.value || 0;
+          if (avg === 0 && count === 0) {
+            return { text: 'No Records', ...getPastelTheme('neutral') };
+          }
+          const diff = Math.round((count - avg) * 10) / 10;
+          const max = cohortMaxRecords.value;
+          if (max > 0 && count === max && count > avg) {
+            return { text: `★ Most Records (${count})`, ...getPastelTheme('best') };
+          } else if (diff > 0) {
+            return { text: `▲ Above Avg (+${diff})`, ...getPastelTheme('better') };
+          } else if (diff < 0) {
+            return { text: `▼ Below Avg (${diff})`, ...getPastelTheme('worse') };
+          }
+          return { text: '= Equal to Avg', ...getPastelTheme('neutral') };
+        });
+
+        const cohortAvgMinMins = computed(() => {
+          const list = medianLeaderboard.value || [];
+          if (list.length === 0) return null;
+          const sum = list.reduce((acc, u) => acc + (u.minMins != null ? u.minMins : 0), 0);
+          return sum / list.length;
+        });
+
+        const minTimeIndicator = computed(() => {
+          const val = userTimingStats.value.minMins;
+          const avg = cohortAvgMinMins.value;
+          if (val == null || avg == null) {
+            return { text: 'No Benchmark', ...getPastelTheme('neutral') };
+          }
+          const list = medianLeaderboard.value || [];
+          const bestMin = list.length > 0 ? Math.min(...list.map(u => u.minMins).filter(x => x != null)) : null;
+          const diff = Math.round((val - avg) * 10) / 10;
+          if (list.length > 1 && bestMin !== null && val === bestMin) {
+            return { text: '★ Fastest in Cohort', ...getPastelTheme('best') };
+          } else if (diff < 0) {
+            return { text: '▼ Below Avg', ...getPastelTheme('better') };
+          } else if (diff > 0) {
+            return { text: '▲ Above Avg', ...getPastelTheme('worse') };
+          }
+          return { text: '= Equal to Avg', ...getPastelTheme('neutral') };
+        });
+
+        const cohortAvgMaxMins = computed(() => {
+          const list = medianLeaderboard.value || [];
+          if (list.length === 0) return null;
+          const sum = list.reduce((acc, u) => acc + (u.maxMins != null ? u.maxMins : 0), 0);
+          return sum / list.length;
+        });
+
+        const maxTimeIndicator = computed(() => {
+          const val = userTimingStats.value.maxMins;
+          const avg = cohortAvgMaxMins.value;
+          if (val == null || avg == null) {
+            return { text: 'No Benchmark', ...getPastelTheme('neutral') };
+          }
+          const list = medianLeaderboard.value || [];
+          const bestMax = list.length > 0 ? Math.min(...list.map(u => u.maxMins).filter(x => x != null)) : null;
+          const diff = Math.round((val - avg) * 10) / 10;
+          if (list.length > 1 && bestMax !== null && val === bestMax) {
+            return { text: '★ Lowest Max in Cohort', ...getPastelTheme('best') };
+          } else if (diff < 0) {
+            return { text: '▼ Below Avg', ...getPastelTheme('better') };
+          } else if (diff > 0) {
+            return { text: '▲ Above Avg', ...getPastelTheme('worse') };
+          }
+          return { text: '= Equal to Avg', ...getPastelTheme('neutral') };
+        });
+
+        const meanTimeIndicator = computed(() => {
+          const val = userTimingStats.value.meanMins;
+          const avg = cohortTimingStats.value.meanMins;
+          if (val == null || avg == null) {
+            return { text: 'No Benchmark', ...getPastelTheme('neutral') };
+          }
+          const list = medianLeaderboard.value || [];
+          const bestMean = list.length > 0 ? Math.min(...list.map(u => u.meanMins).filter(x => x != null)) : null;
+          const diff = Math.round((val - avg) * 10) / 10;
+          if (list.length > 1 && bestMean !== null && val === bestMean) {
+            return { text: '★ Fastest Mean', ...getPastelTheme('best') };
+          } else if (diff < 0) {
+            return { text: '▼ Below Avg', ...getPastelTheme('better') };
+          } else if (diff > 0) {
+            return { text: '▲ Above Avg', ...getPastelTheme('worse') };
+          }
+          return { text: '= Equal to Avg', ...getPastelTheme('neutral') };
+        });
+
+        const medianTimeIndicator = computed(() => {
+          const val = userTimingStats.value.medianMins;
+          const avg = cohortTimingStats.value.medianMins;
+          if (val == null || avg == null) {
+            return { text: 'No Benchmark', ...getPastelTheme('neutral') };
+          }
+          const list = medianLeaderboard.value || [];
+          const diff = Math.round((val - avg) * 10) / 10;
+          if (list.length > 1 && list[0]?.userId === userTimingModal.value.user?.id) {
+            return { text: '★ #1 Ranked (Fastest)', ...getPastelTheme('best') };
+          } else if (diff < 0) {
+            return { text: '▼ Below Avg', ...getPastelTheme('better') };
+          } else if (diff > 0) {
+            return { text: '▲ Above Avg', ...getPastelTheme('worse') };
+          }
+          return { text: '= Equal to Avg', ...getPastelTheme('neutral') };
         });
 
         const medianLeaderboard = computed(() => {
@@ -6119,101 +6819,115 @@
         const adminUserFilterGroup = ref(localStorage.getItem('selectedDb') || 'QA');
         let activeSyncDb = null;
         const handleDbChange = async (targetDbName) => {
+          if (targetDbName && targetDbName === selectedDb.value && token.value) return;
           if (targetDbName) {
             selectedDb.value = targetDbName;
           }
-          localStorage.setItem('selectedDb', selectedDb.value);
-          activeSyncDb = selectedDb.value;
-          adminUserFilterGroup.value = selectedDb.value;
-          
-          // Clear active UI states that belong to the previous database
-          selectedCell.value = null;
-          publicSelectedCell.value = null;
-          takingQuiz.value = false;
-          takingPreAssessment.value = false;
-          isEditingComp.value = false;
-          isEditingUser.value = false;
-          activeLibraryQuiz.value = null;
-          isEditingQuiz.value = false;
-          showQaEvidenceFor.value = null;
-          qaEvidenceCache.value = {};
-          activeLogbookCompId.value = null;
-          activeLogbookMode.value = null;
-          selectedStatCompetencyId.value = 'overall';
-          selectedFilterCompetency.value = null;
-          overviewFilterCategory.value = '';
-          overviewFilterTask.value = '';
-          overviewFilterName.value = '';
-          overviewFilterGroup.value = '';
-          expandedMatrixCategories.value = [];
-          logbookStatusFilters.value = ['t', 'a', 'm'];
-          logStatusFilter.value = 'all';
+          sectionSwitchProgress.value = {
+            active: true,
+            message: currentTab.value === 'admin' && adminSubTab.value === 'statistics'
+              ? `Calculating ${selectedDb.value} statistics...`
+              : `Loading ${selectedDb.value} section...`
+          };
 
-          if (!token.value) {
-            await fetchPublicSummary();
-            return;
-          }
+          try {
+            localStorage.setItem('selectedDb', selectedDb.value);
+            activeSyncDb = selectedDb.value;
+            adminUserFilterGroup.value = selectedDb.value;
+            
+            // Clear active UI states that belong to the previous database
+            selectedCell.value = null;
+            publicSelectedCell.value = null;
+            takingQuiz.value = false;
+            takingPreAssessment.value = false;
+            isEditingComp.value = false;
+            isEditingUser.value = false;
+            activeLibraryQuiz.value = null;
+            isEditingQuiz.value = false;
+            showQaEvidenceFor.value = null;
+            qaEvidenceCache.value = {};
+            activeLogbookCompId.value = null;
+            activeLogbookMode.value = null;
+            selectedStatCompetencyId.value = 'overall';
+            selectedFilterCompetency.value = null;
+            overviewFilterCategory.value = '';
+            overviewFilterTask.value = '';
+            overviewFilterName.value = '';
+            overviewFilterGroup.value = '';
+            expandedMatrixCategories.value = [];
+            logbookStatusFilters.value = ['t', 'a', 'm'];
+            logStatusFilter.value = 'all';
 
-          if (user.value && user.value.username) {
-            try {
-              let response;
-              if (token.value) {
-                response = await fetch('/api/switch-db', {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${token.value}`, 'X-Database': selectedDb.value }
-                });
-              } else {
-                response = await fetch('/api/login', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'X-Database': selectedDb.value },
-                  body: JSON.stringify({ username: user.value.username, password: password.value })
-                });
-              }
-              if (response.ok) {
-                const data = await response.json();
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('user', JSON.stringify(data.user));
-                token.value = data.token;
-                user.value = data.user;
-                
-                await fetchData();
-                syncAllProgress(); // Asynchronously sync progress in background without blocking UI switch
+            if (!token.value) {
+              await fetchPublicSummary();
+              return;
+            }
 
-                const hasAdminRights = user.value && (user.value.is_admin || user.value.is_superuser);
-                
-                // Validate if currentTab is permitted in the new section; if not, fallback to 'individual'
-                if (currentTab.value === 'admin' && !hasAdminRights) {
-                  await customAlert(`Unauthorized Access: You do not have admin rights in the '${selectedDb.value}' database. Redirecting to Individual View.`, "Unauthorized");
-                  currentTab.value = 'individual';
-                } else if (currentTab.value === 'assessor' && !hasAdminRights) {
-                  currentTab.value = 'individual';
-                } else if (currentTab.value === 'overview' && !(hasAdminRights || isCompetentToTrainAny.value)) {
-                  currentTab.value = 'individual';
-                } else if (currentTab.value === 'trainer' && !isTrainerInAny.value) {
-                  currentTab.value = 'individual';
-                } else if (currentTab.value === 'logbook' && !hasLogbookCompetencies.value) {
-                  currentTab.value = 'individual';
+            if (user.value && user.value.username) {
+              try {
+                let response;
+                if (token.value) {
+                  response = await fetch('/api/switch-db', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token.value}`, 'X-Database': selectedDb.value }
+                  });
+                } else {
+                  response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Database': selectedDb.value },
+                    body: JSON.stringify({ username: user.value.username, password: password.value })
+                  });
                 }
+                if (response.ok) {
+                  const data = await response.json();
+                  localStorage.setItem('token', data.token);
+                  localStorage.setItem('user', JSON.stringify(data.user));
+                  token.value = data.token;
+                  user.value = data.user;
+                  
+                  await fetchData();
+                  syncAllProgress(); // Asynchronously sync progress in background without blocking UI switch
 
-                // Refresh tab-specific queues and data for the active tab in the new section
-                if (currentTab.value === 'trainer') {
-                  await fetchAssessorQueue();
-                } else if (currentTab.value === 'assessor') {
-                  await fetchVivaQueue();
-                  await fetchPreAssessmentQueue();
-                } else if (currentTab.value === 'admin') {
-                  if (adminSubTab.value === 'statistics') await fetchStatistics();
-                  if (adminSubTab.value === 'system') await fetchDbInfo();
-                } else if (currentTab.value === 'logbook') {
-                  await fetchMyPlanningLogs();
+                  const hasAdminRights = user.value && (user.value.is_admin || user.value.is_superuser);
+                  
+                  // Validate if currentTab is permitted in the new section; if not, fallback to 'individual'
+                  if (currentTab.value === 'admin' && !hasAdminRights) {
+                    await customAlert(`Unauthorized Access: You do not have admin rights in the '${selectedDb.value}' database. Redirecting to Individual View.`, "Unauthorized");
+                    currentTab.value = 'individual';
+                  } else if (currentTab.value === 'assessor' && !hasAdminRights) {
+                    currentTab.value = 'individual';
+                  } else if (currentTab.value === 'trainer' && !isTrainerInAny.value) {
+                    currentTab.value = 'individual';
+                  } else if (currentTab.value === 'logbook' && !hasLogbookCompetencies.value) {
+                    currentTab.value = 'individual';
+                  }
+
+                  // Refresh tab-specific queues and data for the active tab in the new section
+                  if (currentTab.value === 'trainer') {
+                    await fetchAssessorQueue();
+                  } else if (currentTab.value === 'assessor') {
+                    await fetchVivaQueue();
+                    await fetchPreAssessmentQueue();
+                  } else if (currentTab.value === 'admin') {
+                    if (adminSubTab.value === 'statistics') {
+                      sectionSwitchProgress.value.message = `Calculating ${selectedDb.value} statistics...`;
+                      await fetchAssessorQueue();
+                      await fetchStatistics();
+                    }
+                    if (adminSubTab.value === 'system') await fetchDbInfo();
+                  } else if (currentTab.value === 'logbook') {
+                    await fetchMyPlanningLogs();
+                  }
+
+                  return; // Seamless switch successful!
                 }
-
-                return; // Seamless switch successful!
-              }
-            } catch (err) { console.error('Seamless switch failed:', err); }
+              } catch (err) { console.error('Seamless switch failed:', err); }
+            }
+            // If seamless switch failed or user didn't exist in the new DB, log them out
+            logout();
+          } finally {
+            sectionSwitchProgress.value.active = false;
           }
-          // If seamless switch failed or user didn't exist in the new DB, log them out
-          logout();
         };
 
         const getHeaders = (isJson = false) => {
@@ -6333,13 +7047,8 @@
 
         const groupedCompetencies = computed(() => {
           const groups = {};
-          const isAdm = user.value && (user.value.is_admin || user.value.is_superuser);
           competencies.value.forEach(c => {
             if (currentTab.value === 'overview') {
-              if (!isAdm) {
-                const myStatus = getProgressStatus(user.value?.id, c.id);
-                if (!['x', 'x+'].includes(myStatus)) return;
-              }
               if (overviewFilterCategory.value && c.category !== overviewFilterCategory.value) return;
               if (overviewFilterTask.value && !c.task_name.toLowerCase().includes(overviewFilterTask.value.toLowerCase())) return;
             }
@@ -6471,6 +7180,9 @@
           if (user.value && (user.value.is_admin || user.value.is_superuser)) {
             await fetchQuizLibrary();
           }
+          if (user.value) {
+            await fetchAssessorQueue();
+          }
           await fetchMyEvaluations();
           await fetchMyPlanningLogs();
         };
@@ -6509,8 +7221,8 @@
 
         const getProgressStatus = (userId, compId) => {
           const p = progressMap.value[`${userId}_${compId}`];
-          const rawStatus = p && p.current_status ? String(p.current_status).toLowerCase() : '';
-          if (['a', 'c', 'x'].includes(rawStatus)) return rawStatus;
+          const rawStatus = p && p.current_status ? String(p.current_status).toLowerCase().trim() : '';
+          if (['m', 'a', 'c', 'x', 'x+'].includes(rawStatus)) return rawStatus;
           
           const u = usersMap.value[userId];
           const c = competenciesMap.value[compId];
@@ -6647,16 +7359,13 @@
         };
 
         const canAccessUserCompetency = (u, comp) => {
-          if (!u || !comp || !isApplicable(u, comp)) return false;
-          if (user.value && u.id === user.value.id) return true;
-          if (user.value && (user.value.is_admin || user.value.is_superuser)) return true;
-          return user.value && ['x', 'x+'].includes(getProgressStatus(user.value.id, comp.id));
+          if (!u || !comp) return false;
+          return isApplicable(u, comp);
         };
 
         const openModal = async (u, comp) => { 
-          if (!canAccessUserCompetency(u, comp)) return;
+          if (!isApplicable(u, comp)) return;
           selectedCell.value = { user: u, comp }; 
-          signoffComment.value = '';
           showQaEvidenceFor.value = null;
           showingPlanLogs.value = false;
           planLogsChartMode.value = 'sequential';
@@ -6674,6 +7383,9 @@
           }
 
           const p = getProgressObj(u.id, comp.id);
+          signoffComment.value = p && p.signoff_comment ? p.signoff_comment : '';
+          showConcessionToggle.value = !!(p && p.signoff_comment);
+          showConcessionPanel.value = !!(p && p.signoff_comment);
           const currentStatus = p ? p.current_status : (hasNoPrerequisites(comp) ? 'm' : 't');
           adminEdit.value = {
             readings_completed: p && p.readings_completed ? p.readings_completed : [],
@@ -6681,24 +7393,51 @@
             signoff_comment: p && p.signoff_comment ? p.signoff_comment : '',
             date_override: p && p.date_signed_off ? p.date_signed_off.split('T')[0] : ''
           };
-          if (comp.requires_quiz) {
-            const res = await fetch(`/api/competency/${comp.id}/quiz?user_id=${u.id}`, { headers: getHeaders() });
-            cellQuizzes.value = await res.json();
-            await fetchVivaSummaries(u.id, comp.id);
-            await fetchPreAssessmentSummaries(u.id, comp.id);
+          const isAssessorForComp = isCompetentToTrainComp(user.value?.id, comp.id);
+          const canViewDetailed = !!(user.value?.is_admin || user.value?.is_superuser || u.id === user.value?.id || isAssessorForComp);
+
+          if (canViewDetailed) {
+            if (comp.requires_quiz) {
+              try {
+                const res = await fetch(`/api/competency/${comp.id}/quiz?user_id=${u.id}`, { headers: getHeaders() });
+                if (res.ok) {
+                  const qzData = await res.json();
+                  cellQuizzes.value = Array.isArray(qzData) ? qzData : [];
+                } else {
+                  cellQuizzes.value = [];
+                }
+              } catch (_) {
+                cellQuizzes.value = [];
+              }
+              await fetchVivaSummaries(u.id, comp.id);
+              await fetchPreAssessmentSummaries(u.id, comp.id);
+            } else {
+              cellQuizzes.value = [];
+              vivaSummaries.value = [];
+              preAssessmentSummaries.value = [];
+            }
+            await fetchEvaluations(u, comp);
+            if (isAssessorForComp) {
+              await fetchAssessmentRecords(u.id, comp.id);
+            } else {
+              assessmentRecords.value = [];
+            }
+            showAssessmentForm.value = false;
+            if (comp.allow_file_uploads) await fetchFiles(u.id, comp.id);
+            if (comp.required_plan_count > 0) {
+              showingPlanLogs.value = false;
+              await fetchPlanningLogs(u.id, comp.id);
+            }
+            
+            if (u.id === user.value.id && (comp.required_plan_count > 0 || cellQuizzes.value.some(q => q.is_viva || q.is_pre_assessment))) {
+              await fetchEligibleAssessors(comp.id);
+            }
           } else {
             cellQuizzes.value = [];
             vivaSummaries.value = [];
             preAssessmentSummaries.value = [];
-          }await fetchEvaluations(u, comp);
-          if (comp.allow_file_uploads) await fetchFiles(u.id, comp.id);
-          if (comp.required_plan_count > 0) {
-            showingPlanLogs.value = false;
-            await fetchPlanningLogs(u.id, comp.id);
-          }
-          
-          if (u.id === user.value.id && (comp.required_plan_count > 0 || cellQuizzes.value.some(q => q.is_viva || q.is_pre_assessment))) {
-            await fetchEligibleAssessors(comp.id);
+            assessmentRecords.value = [];
+            planningLogs.value = [];
           }
           takingEval.value = null;
           nextTick(() => {
@@ -6710,6 +7449,10 @@
         };
         const closeModal = () => { 
           selectedCell.value = null; 
+          showAssessmentForm.value = false;
+          assessmentRecords.value = [];
+          showConcessionToggle.value = false;
+          showConcessionPanel.value = false;
           takingQuiz.value = false; 
           takingPreAssessment.value = false;
           showingPlanLogs.value = false;
@@ -8542,6 +9285,135 @@
           }
         };
 
+        const showTransferLogModal = ref(false);
+        const activeTransferLog = ref(null);
+        const targetTransferCompId = ref('');
+        const targetTransferAssessorId = ref('');
+        const transferEligibleAssessors = ref([]);
+        const loadingTransferAssessors = ref(false);
+        const isTransferring = ref(false);
+        const transferErrorMessage = ref('');
+
+        const getCompetencyName = (compId) => {
+          const c = (competencies.value || []).find(x => x.id === parseInt(compId, 10));
+          return c ? `${c.category} - ${c.task_name}` : 'Competency #' + compId;
+        };
+
+        const transferAvailableCompetencies = computed(() => {
+          if (!activeTransferLog.value || !user.value) return [];
+          const currentCompId = activeTransferLog.value.competency_id;
+          return (competencies.value || [])
+            .filter(c => c.required_plan_count > 0 && c.id !== currentCompId && isApplicable(user.value, c))
+            .sort((a, b) => {
+              if (a.category !== b.category) return a.category.localeCompare(b.category);
+              return (a.display_order || 0) - (b.display_order || 0);
+            });
+        });
+
+        const openTransferLogModal = async (log) => {
+          activeTransferLog.value = log;
+          targetTransferCompId.value = '';
+          targetTransferAssessorId.value = '';
+          transferEligibleAssessors.value = [];
+          transferErrorMessage.value = '';
+          showTransferLogModal.value = true;
+        };
+
+        const onTargetTransferCompChange = async () => {
+          targetTransferAssessorId.value = '';
+          transferEligibleAssessors.value = [];
+          transferErrorMessage.value = '';
+          if (!targetTransferCompId.value || !activeTransferLog.value) return;
+
+          if (activeTransferLog.value.status !== 'Draft') {
+            loadingTransferAssessors.value = true;
+            try {
+              const res = await fetch(`/api/competencies/${targetTransferCompId.value}/eligible-assessors`, { headers: getHeaders() });
+              if (res.ok) {
+                const data = await res.json();
+                transferEligibleAssessors.value = (data || []).filter(a => a.id !== user.value.id);
+                const prevAssessorId = activeTransferLog.value.assigned_assessor_id;
+                if (transferEligibleAssessors.value.some(a => a.id === prevAssessorId)) {
+                  targetTransferAssessorId.value = prevAssessorId;
+                } else if (transferEligibleAssessors.value.length > 0) {
+                  targetTransferAssessorId.value = transferEligibleAssessors.value[0].id;
+                }
+              }
+            } catch(e) {
+              console.error('Error fetching eligible assessors for transfer:', e);
+            } finally {
+              loadingTransferAssessors.value = false;
+            }
+          }
+        };
+
+        const closeTransferLogModal = () => {
+          showTransferLogModal.value = false;
+          activeTransferLog.value = null;
+          targetTransferCompId.value = '';
+          targetTransferAssessorId.value = '';
+          transferEligibleAssessors.value = [];
+          transferErrorMessage.value = '';
+          isTransferring.value = false;
+        };
+
+        const confirmTransferLog = async () => {
+          if (!activeTransferLog.value || !targetTransferCompId.value) return;
+          const log = activeTransferLog.value;
+          const isDraft = log.status === 'Draft' || transferEligibleAssessors.value.length === 0;
+          if (!isDraft && !targetTransferAssessorId.value) {
+            transferErrorMessage.value = "Please select an eligible trainer for the destination competency.";
+            return;
+          }
+
+          isTransferring.value = true;
+          transferErrorMessage.value = '';
+
+          try {
+            let combinedComments = log.trainee_comments || '';
+            if (log.assessor_comments && log.assessor_comments.trim()) {
+              combinedComments += `\n\n[Previous Trainer Feedback from ${getCompetencyName(log.competency_id)}]:\n${log.assessor_comments.trim()}`;
+            }
+
+            // 1. Submit new log to destination competency
+            const createRes = await fetch('/api/planning-logs/submit', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({
+                competency_id: parseInt(targetTransferCompId.value, 10),
+                patient_reference: log.patient_reference,
+                log_date: log.log_date,
+                trainee_comments: combinedComments,
+                assigned_assessor_id: isDraft ? 0 : parseInt(targetTransferAssessorId.value, 10),
+                is_draft: isDraft
+              })
+            });
+
+            if (!createRes.ok) {
+              const errData = await createRes.json();
+              throw new Error(errData.error || 'Failed to create case log under destination competency.');
+            }
+
+            // 2. Delete old log from source competency
+            const deleteRes = await fetch(`/api/planning-logs/${log.id}`, {
+              method: 'DELETE',
+              headers: getHeaders()
+            });
+            if (!deleteRes.ok) {
+              console.warn('Could not delete original log after transfer:', await deleteRes.text());
+            }
+
+            customAlert(`Case log for patient "${log.patient_reference}" successfully transferred to ${getCompetencyName(targetTransferCompId.value)}.`, "Log Transferred");
+            closeTransferLogModal();
+            await fetchMyPlanningLogs();
+          } catch(err) {
+            transferErrorMessage.value = err.message || 'Transfer failed.';
+            customAlert(err.message || 'Transfer failed.', "Error");
+          } finally {
+            isTransferring.value = false;
+          }
+        };
+
         const showAboutModal = ref(false);
         const showReleaseNotes = ref(false);
 
@@ -8864,19 +9736,208 @@
           } catch(e) { customAlert(e.message, "Error"); }
         };
 
-        const signOff = async (actionType) => {
+        const assessmentRecords = ref([]);
+        const showConcessionToggle = ref(false);
+        const showConcessionPanel = ref(false);
+        const loadingAssessmentRecords = ref(false);
+        const showAssessmentForm = ref(false);
+        const isSubmittingAssessment = ref(false);
+        const newAssessment = ref({
+          type: 'c',
+          result: 'Pass',
+          outcome: 'c',
+          feedback: ''
+        });
+
+        const setAssessmentResult = (res) => {
+          newAssessment.value.result = res;
+          if (res === 'Pass') {
+            newAssessment.value.outcome = newAssessment.value.type;
+          } else {
+            if (newAssessment.value.outcome === 'c' || newAssessment.value.outcome === 'x') {
+              newAssessment.value.outcome = 'm';
+            }
+          }
+        };
+
+        const onAssessmentTypeChange = () => {
+          if (newAssessment.value.result === 'Pass') {
+            newAssessment.value.outcome = newAssessment.value.type;
+          }
+        };
+
+        const openAssessmentForm = (targetType = 'c', defaultResult = 'Pass') => {
+          if (!canCarryOutAssessment.value) {
+            customAlert("Only authorized assessors for this competency can record assessments.", "Access Denied");
+            return;
+          }
+          newAssessment.value.type = targetType;
+          newAssessment.value.result = defaultResult;
+          newAssessment.value.outcome = defaultResult === 'Pass' ? targetType : 'm';
+          newAssessment.value.feedback = '';
+          showConcessionToggle.value = !!(signoffComment.value && signoffComment.value.trim());
+          showAssessmentForm.value = true;
+        };
+
+        const cancelAssessmentForm = () => {
+          showAssessmentForm.value = false;
+          newAssessment.value.feedback = '';
+        };
+
+        const fetchAssessmentRecords = async (userId, compId) => {
+          if (!userId || !compId) return;
+          if (!isCompetentToTrainComp(user.value?.id, compId)) {
+            assessmentRecords.value = [];
+            return;
+          }
+          loadingAssessmentRecords.value = true;
           try {
-            const res = await fetch('/api/competency/signoff', {
+            const res = await fetch(`/api/competency/${compId}/assessment-records?user_id=${userId}`, {
+              headers: getHeaders()
+            });
+            const contentType = res.headers.get('content-type') || '';
+            if (res.ok && contentType.includes('application/json')) {
+              assessmentRecords.value = await res.json();
+            } else {
+              assessmentRecords.value = [];
+            }
+          } catch(e) {
+            assessmentRecords.value = [];
+          } finally {
+            loadingAssessmentRecords.value = false;
+          }
+        };
+
+        const submitAssessmentRecord = async () => {
+          if (!canCarryOutAssessment.value) {
+            customAlert("Only authorized assessors for this competency can record assessments.", "Access Denied");
+            return;
+          }
+          if (!newAssessment.value.feedback || !newAssessment.value.feedback.trim()) {
+            customAlert("Please provide assessor feedback / notes for this assessment record.", "Feedback Required");
+            return;
+          }
+          isSubmittingAssessment.value = true;
+          try {
+            const isPassing = newAssessment.value.result === 'Pass';
+            const statusOutcome = isPassing ? newAssessment.value.type : newAssessment.value.outcome;
+            const chosenConcession = (isPassing && showConcessionToggle.value) ? (signoffComment.value || '').trim() : null;
+
+            const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/assessment-record`, {
               method: 'POST',
               headers: getHeaders(true),
-              body: JSON.stringify({ trainee_id: selectedCell.value.user.id, competency_id: selectedCell.value.comp.id, action_type: actionType, comment: signoffComment.value })
+              body: JSON.stringify({
+                trainee_id: selectedCell.value.user.id,
+                assessment_type: newAssessment.value.type,
+                result: newAssessment.value.result,
+                status_outcome: statusOutcome,
+                feedback: newAssessment.value.feedback.trim(),
+                concession: chosenConcession
+              })
+            });
+
+            let data = {};
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              data = await res.json();
+            } else {
+              const textResp = await res.text();
+              // If route is 404 (e.g. server process has not been restarted), fall back seamlessly to admin-force-status
+              if (res.status === 404) {
+                const fallbackRes = await fetch('/api/progress/admin-force-status', {
+                  method: 'POST',
+                  headers: getHeaders(true),
+                  body: JSON.stringify({
+                    user_id: selectedCell.value.user.id,
+                    competency_id: selectedCell.value.comp.id,
+                    status: statusOutcome,
+                    signoff_comment: chosenConcession || undefined
+                  })
+                });
+                let fallbackData = {};
+                try { fallbackData = await fallbackRes.json(); } catch (_) {}
+                if (!fallbackRes.ok) throw new Error(fallbackData.error || 'Failed to update competency status');
+
+                customAlert(`Assessment outcome '${statusOutcome.toUpperCase()}' applied successfully.\n\n(Note: Please restart your Node server process to record full historical assessment logs in the database)`, 'Assessment Updated');
+                showAssessmentForm.value = false;
+                newAssessment.value.feedback = '';
+                await fetchData();
+                openModal(selectedCell.value.user, selectedCell.value.comp);
+                return;
+              }
+              throw new Error(`Server returned HTTP ${res.status}: ${textResp.slice(0, 120)}`);
+            }
+
+            if (!res.ok) throw new Error(data.error || 'Failed to save record of assessment');
+
+            customAlert(data.message || 'Record of assessment saved successfully.', 'Assessment Recorded');
+            showAssessmentForm.value = false;
+            newAssessment.value.feedback = '';
+
+            await fetchData();
+            await fetchAssessmentRecords(selectedCell.value.user.id, selectedCell.value.comp.id);
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch (err) {
+            customAlert(err.message, 'Error');
+          } finally {
+            isSubmittingAssessment.value = false;
+          }
+        };
+
+        const signOff = async (actionType) => {
+          try {
+            const res = await fetch('/api/progress/admin-force-status', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({
+                user_id: selectedCell.value.user.id,
+                competency_id: selectedCell.value.comp.id,
+                status: actionType,
+                signoff_comment: signoffComment.value || null
+              })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
-            customAlert(data.message, "Success");
+            if (!res.ok) throw new Error(data.error || 'Failed to sign off');
+            
+            const p = getProgressObj(selectedCell.value.user.id, selectedCell.value.comp.id);
+            if (p) {
+              p.signoff_comment = signoffComment.value || null;
+              p.current_status = actionType;
+            }
+            adminEdit.value.signoff_comment = signoffComment.value || '';
+            
+            customAlert(data.message || `Competency updated to status '${actionType.toUpperCase()}' with sign-off comment.`, "Success");
             await fetchData();
-            closeModal();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
           } catch (err) { customAlert(err.message, "Error"); }
+        };
+
+        const saveSignoffCommentOnly = async () => {
+          try {
+            const currentStat = (getProgressStatus(selectedCell.value.user.id, selectedCell.value.comp.id) || 't').toLowerCase();
+            const res = await fetch('/api/progress/admin-force-status', {
+              method: 'POST',
+              headers: getHeaders(true),
+              body: JSON.stringify({
+                user_id: selectedCell.value.user.id,
+                competency_id: selectedCell.value.comp.id,
+                status: currentStat,
+                signoff_comment: signoffComment.value || null
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to save comment');
+            
+            const p = getProgressObj(selectedCell.value.user.id, selectedCell.value.comp.id);
+            if (p) {
+              p.signoff_comment = signoffComment.value || null;
+            }
+            adminEdit.value.signoff_comment = signoffComment.value || '';
+            
+            customAlert("Sign-off / concession comment saved successfully.", "Success");
+            await fetchData();
+            openModal(selectedCell.value.user, selectedCell.value.comp);
+          } catch(err) { customAlert(err.message, "Error"); }
         };
 
         const adminForceStatus = async () => {
@@ -9696,6 +10757,7 @@
           currentTab.value = 'individual';
           logbookStatusFilters.value = ['t', 'a', 'm'];
           logStatusFilter.value = 'all';
+          assessorQueue.value = [];
           localStorage.removeItem('token');
           localStorage.removeItem('user');
         };
@@ -9714,7 +10776,11 @@
         watch(adminSubTab, (newTab) => {
           const hasAdmin = user.value && (user.value.is_admin || user.value.is_superuser);
           if (newTab === 'statistics' && user.value?.is_superuser) {
-            fetchStatistics().then(() => nextTick(() => renderOverallChart()));
+            sectionSwitchProgress.value = { active: true, message: `Calculating ${selectedDb.value} statistics...` };
+            fetchAssessorQueue();
+            fetchStatistics().then(() => nextTick(() => renderOverallChart())).finally(() => {
+              sectionSwitchProgress.value.active = false;
+            });
           }
           if ((newTab === 'quizzes' || newTab === 'competencies') && user.value?.is_admin) {
             fetchQuizLibrary();
@@ -10127,7 +11193,7 @@
                  login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable, canAccessUserCompetency,
                  currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, moveReadingPrereq, dragStartCompetency, dropCompetency, availableCategories, overviewAvailableCategories,
                  categoryOrder, dragStartCategory, dropCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
-                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, startEvaluation, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, canAssessorOverride, getSupervisionLabel, radarChartCanvas,
+                 newCategoryName, editingCategoryName, editCategoryValue, saveCategory, deleteCategory, startEditCategory, updateCategory, cellEvaluations, evaluationScores, submitEvaluation, takingEval, startEvaluation, evalTexts, latestPreEvaluation, latestPostEvaluation, isAssessorForSelected, canAssessorOverride, isDetailedCompetencyView, getSupervisionLabel, radarChartCanvas,
                  compListFilterCat, filteredAndSortedCompetencies, 
                  newUserData, isEditingUser, saveUser, saveAsNewUser, toggleUserActive, editUser, cancelEditUser, deleteUser, sortedAdminUsers, userSortCol, userSortDir, toggleUserSort, adminUserFilterGroup, displayedAdminUsers,
                  toggleForcePassword, forcedPasswordForm, submitForcedPasswordUpdate,
@@ -10138,10 +11204,11 @@
                   expandedMatrixCategories, toggleMatrixCategory,
                   activeLegends, selectedFilterCompetency, toggleLegend, toggleCompetencyFilter,
                   overviewFilterName, overviewFilterTask, overviewFilterCategory, overviewFilterGroup,
-                  statistics, sectionSummaryStats, statCompetencies, groupedStatCompetencies, statCompSortCol, statCompSortDir, toggleStatCompSort, expandedStatCategories, toggleStatCategory,
+                  statistics, sectionSummaryStats, sectionPendingLogsCount, statCompetencies, groupedStatCompetencies, statCompSortCol, statCompSortDir, toggleStatCompSort, expandedStatCategories, toggleStatCategory,
                   selectedStatCompetencyId, statCompetenciesByCategory, isSelectedCompEmpty, renderOverallChart,
                   sectionApplicableUsers, statUserSortCol, statUserSortDir, toggleStatUserSort, getTimeInPost, getStatSectionDesignationAverage, getStatOverallDesignationAverage, statUserModal, openStatUserModal, statCompModal, openStatCompModal, statEvalDateRange, userStatEvalDateRange, sortedQaSummary, maxQaRecords, openStatCategoryModal, openStatSectionModal, getStatusLabelByCode, getStatusBadgeClassByCode,
                   dbInfo, backupFile, frontendFile, globalSettings, newSectionName, activeSections, fetchDbInfo, onBackupFileSelected, onFrontendFileSelected, backupDatabase, restoreDatabase, uploadFrontend, saveGlobalSettings, testQATrackConnection, toggleSectionActive, addSection, deleteSection, individualRestoreInput, restoreScope, triggerRestore, onIndividualRestoreFileSelected,
+                  loadingPublicMatrix, sectionSwitchProgress,
                   publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass, getPublicProgressObj, getPublicAssessorName,
                   publicSelectedCell, openPublicModal, closePublicModal,
                   customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
@@ -10150,7 +11217,10 @@
                   uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, expandedSectionUploads, loadingSectionUserStats, sectionUserStats, toggleSectionUploadsExpand, activeLogReview, openLogReviewModal, submitLogReviewModal, saveDraftLogReviewModal, saveDraftLogReview, adminDeleteLogReview,
                   showUnsavedReviewPrompt, handleLogReviewBackdropClick, handleCancelLogReview, handleUnsavedPromptSave, handleUnsavedPromptComplete, handleUnsavedPromptDiscard,
                   showReassignLogModal, activeReassignLog, reassignEligibleAssessors, selectedReassignAssessorId, reassignHandoverComments, loadingReassignAssessors, isReassigning, openReassignLogModal, closeReassignLogModal, confirmReassignLog, showAboutModal, showReleaseNotes,
+                  showTransferLogModal, activeTransferLog, targetTransferCompId, targetTransferAssessorId, transferEligibleAssessors, loadingTransferAssessors, isTransferring, transferErrorMessage, transferAvailableCompetencies, openTransferLogModal, closeTransferLogModal, onTargetTransferCompChange, confirmTransferLog, getCompetencyName, handleAssessorOpenModal, signoffComment, saveSignoffCommentOnly, activeCellProgress,
+                  canCarryOutAssessment, canSeeAssessmentRecords, showConcessionToggle, showConcessionPanel, assessmentRecords, loadingAssessmentRecords, showAssessmentForm, isSubmittingAssessment, newAssessment, setAssessmentResult, onAssessmentTypeChange, openAssessmentForm, cancelAssessmentForm, fetchAssessmentRecords, submitAssessmentRecord, isCompetentToTrainComp,
                   userTimingModal, userTimingStats, cohortTimingStats, medianLeaderboard, openUserTimingStats, closeUserTimingModal, closeStatCompModal, formatDurationMins,
+                  userProgressRecord, userTimeTakenDays, userTimeTakenDisplay, compAchieveStats, timeToAchieveIndicator, cohortAvgRecords, totalRecordsIndicator, cohortAvgMinMins, minTimeIndicator, cohortAvgMaxMins, maxTimeIndicator, meanTimeIndicator, medianTimeIndicator,
                   auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
                    logbookCompetencies, allLogbookCompetencies, hasLogbookCompetencies, logbookActiveTrainingOnly, logbookSearchQuery, expandedLogbookCategories, toggleLogbookCategory, isLogbookCategoryExpanded, expandAllLogbookCategories, collapseAllLogbookCategories, activeTrainingCompsCount, totalLogbookCompsCount, logbookStatusFilters, toggleLogbookStatusFilter, isLogbookFilterDefault, logbookStatusCounts, getApprovedLogsCount, getSubmissionsCount, getCompPlanningLogs, getAllCompPlanningLogs, logStatusFilter, myPlanningLogs, fetchMyPlanningLogs, isTrainerInAny, isCompetentToTrainAny,
                  vivaQueue, fetchVivaQueue, vivaSummaries, fetchVivaSummaries, takingViva, vivaData, vivaAnswers, vivaAssessorId, getLatestViva, loadVivaForTaking, submitVivaSelf, submitVivaReview, showingVivaFor, toggleVivaScore, groupedVivaQueue, activeVivaReview, submitVivaReviewModal,

@@ -266,6 +266,17 @@ const initDb = (db, cb) => {
       reviewed_at TEXT
     )`, () => {});
 
+    db.run(`CREATE TABLE IF NOT EXISTS assessment_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trainee_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      assessor_id INTEGER NOT NULL,
+      assessment_type TEXT NOT NULL,
+      result TEXT NOT NULL,
+      status_outcome TEXT NOT NULL,
+      feedback TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`, () => {});
     db.run(`CREATE TABLE IF NOT EXISTS competency_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT DEFAULT CURRENT_TIMESTAMP, target_user_id INTEGER, competency_id INTEGER, action_type TEXT, actioned_by_id INTEGER, previous_status TEXT, new_status TEXT, notes TEXT)`, () => {});
     
     db.run("CREATE TABLE IF NOT EXISTS competency_groups (competency_id INTEGER, group_name TEXT, UNIQUE(competency_id, group_name))", () => {
@@ -1261,6 +1272,7 @@ app.delete('/api/competencies/:id', authenticateToken, requireAdmin, async (req,
     await execute(req.db, `DELETE FROM patient_plan_logs WHERE competency_id = ?`, [compId]);
     await execute(req.db, `DELETE FROM competency_audit_log WHERE competency_id = ?`, [compId]);
     await execute(req.db, `DELETE FROM file_uploads WHERE competency_id = ?`, [compId]);
+    await execute(req.db, `DELETE FROM assessment_records WHERE competency_id = ?`, [compId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -1464,6 +1476,18 @@ app.delete('/api/categories/:name', authenticateToken, requireAdmin, async (req,
         res.status(500).json({ error: error.message });
     }
 });
+
+async function isCompetentToTrain(db, userId, competencyId) {
+  if (!userId || !competencyId) return false;
+  const trainerCheck = await query(
+    db, 
+    `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, 
+    [userId, competencyId]
+  );
+  if (trainerCheck.length === 0) return false;
+  const stat = String(trainerCheck[0].current_status || '').toLowerCase().trim();
+  return stat === 'x' || stat === 'x+';
+}
 
 async function isEligibleToViewUserCompetency(db, reqUser, targetUserId, competencyId) {
   if (reqUser.is_admin || reqUser.is_superuser) return true;
@@ -2668,6 +2692,134 @@ app.post('/api/competency/signoff', authenticateToken, async (req, res) => {
     res.json({ success: true, message: "Competency signed off and audited successfully." });
   } catch (err) {
     res.status(500).json({ error: "Internal Server Error during sign-off execution." });
+  }
+});
+
+app.get('/api/competency/:id/assessment-records', authenticateToken, async (req, res) => {
+  const competencyId = parseInt(req.params.id, 10);
+  const targetUserId = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
+  try {
+    const isAssessor = await isCompetentToTrain(req.db, req.user.id, competencyId);
+    if (!isAssessor) {
+      return res.status(403).json({ error: 'Access Denied: Only assessors competent to train for this particular competency can view assessment records.' });
+    }
+    const records = await query(
+      req.db,
+      `SELECT * FROM assessment_records WHERE trainee_id = ? AND competency_id = ? ORDER BY created_at DESC`,
+      [targetUserId, competencyId]
+    );
+    const users = await query(sharedDb, `SELECT id, full_name FROM users`);
+    const userMap = {};
+    users.forEach(u => userMap[u.id] = u.full_name);
+    records.forEach(r => {
+      r.assessor_name = userMap[r.assessor_id] || 'Unknown Assessor';
+      r.trainee_name = userMap[r.trainee_id] || 'Unknown Trainee';
+    });
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/competency/:id/assessment-record', authenticateToken, async (req, res) => {
+  const competencyId = parseInt(req.params.id, 10);
+  const { trainee_id, assessment_type, result, status_outcome, feedback, concession } = req.body;
+  const assessor_id = req.user.id;
+
+  if (!trainee_id || !competencyId) {
+    return res.status(400).json({ error: 'Trainee ID and Competency ID are required.' });
+  }
+
+  if (parseInt(trainee_id, 10) === parseInt(req.user.id, 10)) {
+    return res.status(403).json({ error: 'Assessors cannot record assessments on themselves.' });
+  }
+
+  const validTypes = ['c', 'x'];
+  const validResults = ['Pass', 'Fail'];
+  const validOutcomes = ['c', 'x', 'm', 't', 'a'];
+
+  if (!validTypes.includes(assessment_type)) {
+    return res.status(400).json({ error: "Invalid assessment type. Must be 'c' or 'x'." });
+  }
+  if (!validResults.includes(result)) {
+    return res.status(400).json({ error: "Invalid result. Must be 'Pass' or 'Fail'." });
+  }
+  if (!validOutcomes.includes(status_outcome)) {
+    return res.status(400).json({ error: "Invalid status outcome." });
+  }
+
+  if (result === 'Pass' && status_outcome !== assessment_type) {
+    return res.status(400).json({ error: `Passing assessment must grant status '${assessment_type.toUpperCase()}'.` });
+  }
+  if (result === 'Fail' && !['t', 'm', 'a'].includes(status_outcome)) {
+    return res.status(400).json({ error: "Unsuccessful assessment must result in status 'T', 'M', or 'A'." });
+  }
+
+  try {
+    const isAssessor = await isCompetentToTrain(req.db, req.user.id, competencyId);
+    if (!isAssessor) {
+      return res.status(403).json({ error: 'Access Denied: Requires Assessor privileges competent to train for this particular competency.' });
+    }
+
+    // Insert record of assessment
+    await execute(
+      req.db,
+      `INSERT INTO assessment_records (trainee_id, competency_id, assessor_id, assessment_type, result, status_outcome, feedback) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [trainee_id, competencyId, assessor_id, assessment_type, result, status_outcome, feedback || '']
+    );
+
+    // Update staff_competency_progress
+    const progressCheck = await query(req.db, `SELECT current_status, signoff_comment FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [trainee_id, competencyId]);
+    const previousStatus = progressCheck.length > 0 ? progressCheck[0].current_status : 't';
+    const existingComment = progressCheck.length > 0 ? progressCheck[0].signoff_comment : null;
+    const finalComment = (concession !== undefined) ? (concession ? concession.trim() : null) : existingComment;
+
+    if (progressCheck.length === 0) {
+      if (['c', 'x'].includes(status_outcome)) {
+        await execute(
+          req.db,
+          `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, date_signed_off, assessor_id, signoff_comment, is_admin_override) VALUES (?, ?, ?, CURRENT_DATE, ?, ?, 0)`,
+          [trainee_id, competencyId, status_outcome, assessor_id, finalComment]
+        );
+      } else {
+        await execute(
+          req.db,
+          `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, assessor_id, signoff_comment) VALUES (?, ?, ?, ?, ?)`,
+          [trainee_id, competencyId, status_outcome, assessor_id, finalComment]
+        );
+      }
+    } else {
+      if (['c', 'x'].includes(status_outcome)) {
+        await execute(
+          req.db,
+          `UPDATE staff_competency_progress SET current_status = ?, date_signed_off = CURRENT_DATE, assessor_id = ?, signoff_comment = ?, is_admin_override = 0, date_reviewed = NULL, reviewer_id = NULL WHERE user_id = ? AND competency_id = ?`,
+          [status_outcome, assessor_id, finalComment, trainee_id, competencyId]
+        );
+      } else {
+        await execute(
+          req.db,
+          `UPDATE staff_competency_progress SET current_status = ?, date_signed_off = NULL, assessor_id = ?, signoff_comment = ?, date_reviewed = NULL, reviewer_id = NULL WHERE user_id = ? AND competency_id = ?`,
+          [status_outcome, assessor_id, finalComment, trainee_id, competencyId]
+        );
+      }
+    }
+
+    // Audit log
+    const commentSummary = finalComment ? ` | Concession: "${finalComment}"` : '';
+    const auditNotes = `Record of Assessment: Result=${result}, Target=${assessment_type.toUpperCase()}, Outcome=${status_outcome.toUpperCase()}${commentSummary}${feedback ? ` | Feedback: "${feedback}"` : ''}`;
+    await execute(
+      req.db,
+      `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, 'RECORD_OF_ASSESSMENT', ?, ?, ?, ?)`,
+      [trainee_id, competencyId, assessor_id, previousStatus, status_outcome, auditNotes]
+    );
+
+    res.json({
+      success: true,
+      message: `Record of assessment saved successfully. Status updated to '${status_outcome.toUpperCase()}'.`,
+      status: status_outcome
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
