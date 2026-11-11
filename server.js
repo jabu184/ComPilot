@@ -143,7 +143,7 @@ const initDb = (db, cb) => {
       });
     });
 
-    db.run(`CREATE TABLE IF NOT EXISTS staff_competency_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, competency_id INTEGER, current_status TEXT DEFAULT 't', instructions_read INTEGER DEFAULT 0, quiz_passed INTEGER DEFAULT 0, date_started TEXT DEFAULT CURRENT_DATE, date_signed_off TEXT, assessor_id INTEGER, date_reviewed TEXT, reviewer_id INTEGER, quiz_score INTEGER, qatrack_records INTEGER, qatrack_records_detail TEXT DEFAULT '{}', qatrack_manual_override INTEGER DEFAULT 0, readings_completed TEXT DEFAULT '[]', quizzes_completed TEXT DEFAULT '{}', UNIQUE(user_id, competency_id))`, () => {
+    db.run(`CREATE TABLE IF NOT EXISTS staff_competency_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, competency_id INTEGER, current_status TEXT DEFAULT 't', instructions_read INTEGER DEFAULT 0, quiz_passed INTEGER DEFAULT 0, date_started TEXT DEFAULT CURRENT_DATE, date_signed_off TEXT, assessor_id INTEGER, date_reviewed TEXT, reviewer_id INTEGER, quiz_score INTEGER, qatrack_records INTEGER, qatrack_records_detail TEXT DEFAULT '{}', qatrack_manual_override INTEGER DEFAULT 0, readings_completed TEXT DEFAULT '[]', quizzes_completed TEXT DEFAULT '{}', is_admin_override INTEGER DEFAULT 0, UNIQUE(user_id, competency_id))`, () => {
       db.get("SELECT count(*) as count FROM staff_competency_progress", (err, row) => {
         if (row && row.count === 0) {
           db.run(`INSERT INTO staff_competency_progress (user_id, competency_id, current_status, readings_completed) VALUES 
@@ -377,6 +377,7 @@ const initDb = (db, cb) => {
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN signoff_comment TEXT", () => {});
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN date_reviewed TEXT", () => {});
     db.run("ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER", () => {});
+    db.run("ALTER TABLE staff_competency_progress ADD COLUMN is_admin_override INTEGER DEFAULT 0", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN description TEXT", () => {});
     db.run("ALTER TABLE competencies ADD COLUMN required_plan_count INTEGER DEFAULT 0", () => {});
@@ -447,11 +448,39 @@ const ensureDbColumns = async (db) => {
     if (!compCols.includes('description')) await execute(db, "ALTER TABLE competencies ADD COLUMN description TEXT");
     
     const progCols = (await query(db, "PRAGMA table_info(staff_competency_progress)")).map(c => c.name);
+    if (!progCols.includes('is_admin_override')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN is_admin_override INTEGER DEFAULT 0");
     if (!progCols.includes('qatrack_timings')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN qatrack_timings TEXT DEFAULT '[]'");
     if (!progCols.includes('qatrack_records_detail')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN qatrack_records_detail TEXT DEFAULT '{}'");
     if (!progCols.includes('signoff_comment')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN signoff_comment TEXT");
     if (!progCols.includes('date_reviewed')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN date_reviewed TEXT");
     if (!progCols.includes('reviewer_id')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER");
+
+    await execute(db, `CREATE TABLE IF NOT EXISTS assessment_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trainee_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      assessor_id INTEGER NOT NULL,
+      assessment_type TEXT NOT NULL,
+      result TEXT NOT NULL,
+      status_outcome TEXT NOT NULL,
+      feedback TEXT,
+      concession TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    const arCols = (await query(db, "PRAGMA table_info(assessment_records)")).map(c => c.name);
+    if (!arCols.includes('concession')) await execute(db, "ALTER TABLE assessment_records ADD COLUMN concession TEXT");
+
+    await execute(db, `CREATE TABLE IF NOT EXISTS competency_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      target_user_id INTEGER,
+      competency_id INTEGER,
+      action_type TEXT,
+      actioned_by_id INTEGER,
+      previous_status TEXT,
+      new_status TEXT,
+      notes TEXT
+    )`);
 
     await execute(db, `CREATE TABLE IF NOT EXISTS qatrack_timings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2789,33 +2818,48 @@ app.post('/api/competency/:id/assessment-record', authenticateToken, async (req,
     const existingComment = progressCheck.length > 0 ? progressCheck[0].signoff_comment : null;
     const finalComment = (concession !== undefined) ? (concession ? concession.trim() : null) : existingComment;
 
-    if (progressCheck.length === 0) {
-      if (['c', 'x'].includes(status_outcome)) {
-        await execute(
-          req.db,
-          `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, date_signed_off, assessor_id, signoff_comment, is_admin_override) VALUES (?, ?, ?, CURRENT_DATE, ?, ?, 0)`,
-          [trainee_id, competencyId, status_outcome, assessor_id, finalComment]
-        );
+    await ensureDbColumns(req.db);
+
+    const runProgressWrite = async () => {
+      if (progressCheck.length === 0) {
+        if (['c', 'x'].includes(status_outcome)) {
+          await execute(
+            req.db,
+            `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, date_signed_off, assessor_id, signoff_comment, is_admin_override) VALUES (?, ?, ?, CURRENT_DATE, ?, ?, 0)`,
+            [trainee_id, competencyId, status_outcome, assessor_id, finalComment]
+          );
+        } else {
+          await execute(
+            req.db,
+            `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, assessor_id, signoff_comment) VALUES (?, ?, ?, ?, ?)`,
+            [trainee_id, competencyId, status_outcome, assessor_id, finalComment]
+          );
+        }
       } else {
-        await execute(
-          req.db,
-          `INSERT INTO staff_competency_progress (user_id, competency_id, current_status, assessor_id, signoff_comment) VALUES (?, ?, ?, ?, ?)`,
-          [trainee_id, competencyId, status_outcome, assessor_id, finalComment]
-        );
+        if (['c', 'x'].includes(status_outcome)) {
+          await execute(
+            req.db,
+            `UPDATE staff_competency_progress SET current_status = ?, date_signed_off = CURRENT_DATE, assessor_id = ?, signoff_comment = ?, is_admin_override = 0, date_reviewed = NULL, reviewer_id = NULL WHERE user_id = ? AND competency_id = ?`,
+            [status_outcome, assessor_id, finalComment, trainee_id, competencyId]
+          );
+        } else {
+          await execute(
+            req.db,
+            `UPDATE staff_competency_progress SET current_status = ?, date_signed_off = NULL, assessor_id = ?, signoff_comment = ?, date_reviewed = NULL, reviewer_id = NULL WHERE user_id = ? AND competency_id = ?`,
+            [status_outcome, assessor_id, finalComment, trainee_id, competencyId]
+          );
+        }
       }
-    } else {
-      if (['c', 'x'].includes(status_outcome)) {
-        await execute(
-          req.db,
-          `UPDATE staff_competency_progress SET current_status = ?, date_signed_off = CURRENT_DATE, assessor_id = ?, signoff_comment = ?, is_admin_override = 0, date_reviewed = NULL, reviewer_id = NULL WHERE user_id = ? AND competency_id = ?`,
-          [status_outcome, assessor_id, finalComment, trainee_id, competencyId]
-        );
+    };
+
+    try {
+      await runProgressWrite();
+    } catch (pwErr) {
+      if (pwErr.message && pwErr.message.includes('is_admin_override')) {
+        await execute(req.db, "ALTER TABLE staff_competency_progress ADD COLUMN is_admin_override INTEGER DEFAULT 0");
+        await runProgressWrite();
       } else {
-        await execute(
-          req.db,
-          `UPDATE staff_competency_progress SET current_status = ?, date_signed_off = NULL, assessor_id = ?, signoff_comment = ?, date_reviewed = NULL, reviewer_id = NULL WHERE user_id = ? AND competency_id = ?`,
-          [status_outcome, assessor_id, finalComment, trainee_id, competencyId]
-        );
+        throw pwErr;
       }
     }
 
@@ -2856,37 +2900,52 @@ app.post('/api/progress/admin-force-status', authenticateToken, async (req, res)
     const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
     const previousStatus = progressCheck.length > 0 ? progressCheck[0].current_status : 't';
     
-    if (progressCheck.length === 0) {
-      const dateExpr = date_override ? '?' : 'CURRENT_DATE';
-      const q = `INSERT INTO staff_competency_progress (user_id, competency_id, current_status${(status === 'c' || status === 'x') ? ', date_signed_off, assessor_id, signoff_comment' : ''}) VALUES (?, ?, ?${(status === 'c' || status === 'x') ? `, ${dateExpr}, ?, ?` : ''})`;
-      const params = [user_id, competency_id, status];
-      if (status === 'c' || status === 'x') {
-        if (date_override) params.push(date_override);
-        params.push(admin_id, signoff_comment || null);
-      }
-      await execute(req.db, q, params);
-    } else {
-      let q = `UPDATE staff_competency_progress SET current_status = ?`;
-      let params = [status];
-      if (status === 't' || status === 'm' || status === 'a') {
-        q += `, date_signed_off = NULL, assessor_id = NULL, signoff_comment = NULL, date_reviewed = NULL, reviewer_id = NULL`;
-      } else if ((status === 'c' || status === 'x') && (previousStatus === 't' || previousStatus === 'm' || previousStatus === 'a')) {
+    await ensureDbColumns(req.db);
+
+    const runForceWrite = async () => {
+      if (progressCheck.length === 0) {
         const dateExpr = date_override ? '?' : 'CURRENT_DATE';
-        q += `, date_signed_off = ${dateExpr}, assessor_id = ?, signoff_comment = ?, date_reviewed = NULL, reviewer_id = NULL`;
-        if (date_override) params.push(date_override);
-        params.push(admin_id, signoff_comment || null);
-      } else if (status === 'c' || status === 'x') {
-        q += `, signoff_comment = ?`;
-        params.push(signoff_comment || null);
-        if (date_override) {
-          q += `, date_signed_off = ?, date_reviewed = NULL, reviewer_id = NULL`;
-          params.push(date_override);
+        const q = `INSERT INTO staff_competency_progress (user_id, competency_id, current_status${(status === 'c' || status === 'x') ? ', date_signed_off, assessor_id, signoff_comment, is_admin_override' : ''}) VALUES (?, ?, ?${(status === 'c' || status === 'x') ? `, ${dateExpr}, ?, ?, 1` : ''})`;
+        const params = [user_id, competency_id, status];
+        if (status === 'c' || status === 'x') {
+          if (date_override) params.push(date_override);
+          params.push(admin_id, signoff_comment || null);
         }
+        await execute(req.db, q, params);
+      } else {
+        let q = `UPDATE staff_competency_progress SET current_status = ?`;
+        let params = [status];
+        if (status === 't' || status === 'm' || status === 'a') {
+          q += `, date_signed_off = NULL, assessor_id = NULL, signoff_comment = NULL, date_reviewed = NULL, reviewer_id = NULL, is_admin_override = 0`;
+        } else if ((status === 'c' || status === 'x') && (previousStatus === 't' || previousStatus === 'm' || previousStatus === 'a')) {
+          const dateExpr = date_override ? '?' : 'CURRENT_DATE';
+          q += `, date_signed_off = ${dateExpr}, assessor_id = ?, signoff_comment = ?, date_reviewed = NULL, reviewer_id = NULL, is_admin_override = 1`;
+          if (date_override) params.push(date_override);
+          params.push(admin_id, signoff_comment || null);
+        } else if (status === 'c' || status === 'x') {
+          q += `, signoff_comment = ?, is_admin_override = 1`;
+          params.push(signoff_comment || null);
+          if (date_override) {
+            q += `, date_signed_off = ?, date_reviewed = NULL, reviewer_id = NULL`;
+            params.push(date_override);
+          }
+        }
+        q += ` WHERE user_id = ? AND competency_id = ?`;
+        params.push(user_id, competency_id);
+        
+        await execute(req.db, q, params);
       }
-      q += ` WHERE user_id = ? AND competency_id = ?`;
-      params.push(user_id, competency_id);
-      
-      await execute(req.db, q, params);
+    };
+
+    try {
+      await runForceWrite();
+    } catch (fwErr) {
+      if (fwErr.message && fwErr.message.includes('is_admin_override')) {
+        await execute(req.db, "ALTER TABLE staff_competency_progress ADD COLUMN is_admin_override INTEGER DEFAULT 0");
+        await runForceWrite();
+      } else {
+        throw fwErr;
+      }
     }
     
     const actionType = 'ADMIN_FORCE_STATUS';
