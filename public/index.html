@@ -1004,26 +1004,80 @@
                 </div>
               </div>
               <div class="sm:col-span-2 mt-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Applicable User Groups</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Applicable User Groups ({{ selectedDb }})</label>
                 <div class="flex flex-wrap gap-4 bg-white p-3 border rounded shadow-sm items-center">
                   <label class="flex items-center space-x-2 cursor-pointer sm:border-r border-gray-200 sm:pr-4">
-                    <input type="checkbox" @change="newComp.target_groups = $event.target.checked ? userGroups.map(g => g.name) : []" :checked="newComp.target_groups.length === userGroups.length && userGroups.length > 0" class="h-4 w-4 text-indigo-600 rounded">
+                    <input type="checkbox" @change="toggleAllSectionGroups($event.target.checked)" :checked="isAllSectionGroupsSelected" class="h-4 w-4 text-indigo-600 rounded">
                     <span class="text-sm font-bold text-indigo-700">All Groups</span>
                   </label>
-                  <label v-for="g in userGroups" :key="g.id" class="flex items-center space-x-2 cursor-pointer">
+                  <label v-for="g in sectionUserGroups" :key="g.id" class="flex items-center space-x-2 cursor-pointer">
                     <input type="checkbox" :value="g.name" v-model="newComp.target_groups" class="h-4 w-4 text-blue-600 rounded">
                     <span class="text-sm font-medium text-gray-700">{{ g.name }}</span>
                   </label>
+                  <div v-if="sectionUserGroups.length === 0" class="text-xs text-gray-500 italic">No user groups with active users in {{ selectedDb }}.</div>
                 </div>
               </div>
               <div class="sm:col-span-2 mt-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Applicable Individual Users</label>
-                <div class="max-h-48 overflow-y-auto border border-gray-200 p-2 rounded bg-white shadow-sm">
-                  <label v-for="u in availableIndividualUsers" :key="u.id" class="flex items-center space-x-2 text-sm text-gray-800 mb-1.5 p-1 hover:bg-gray-50 rounded cursor-pointer">
-                    <input type="checkbox" :value="u.id" v-model="newComp.target_users" class="h-4 w-4 text-blue-600 rounded">
-                    <span class="font-medium">{{ u.full_name }} <span class="text-xs text-gray-500 font-normal">({{ u.designation }})</span></span>
-                  </label>
-                  <div v-if="availableIndividualUsers?.length === 0" class="text-xs text-gray-500 italic p-1">No additional users available.</div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  Applicable Individual Users
+                  <span class="text-xs text-gray-500 font-normal ml-1">({{ sectionUsers.length }} users attached to {{ selectedDb }})</span>
+                </label>
+                
+                <!-- Side-by-Side User Assignment Lists -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <!-- Assigned to Competency -->
+                  <div class="border border-green-200 rounded-lg p-3 bg-green-50/20 flex flex-col shadow-2xs">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-green-200">
+                      <span class="text-xs font-bold uppercase tracking-wider text-green-900 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        Assigned to Competency ({{ assignedCompUsers.length }})
+                      </span>
+                      <button v-if="assignedManualCount > 0" type="button" @click="clearAllManualUsers" class="text-xs text-red-600 hover:underline font-semibold" title="Remove all manually configured users">Clear Manual</button>
+                    </div>
+                    <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                      <div v-for="u in assignedCompUsers" :key="u.id" class="flex items-center justify-between text-sm p-1.5 rounded bg-white border border-green-100 hover:border-green-300 transition shadow-2xs">
+                        <div class="flex flex-col min-w-0 pr-2">
+                          <span class="font-medium text-gray-900 truncate">{{ u.full_name }}</span>
+                          <span class="text-xs text-gray-500 truncate">{{ u.designation }}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                          <span v-if="newComp.target_users && newComp.target_users.includes(u.id)" class="bg-blue-100 text-blue-800 text-2xs font-semibold px-1.5 py-0.5 rounded border border-blue-200" title="Manually assigned">Manual</span>
+                          <span v-else class="bg-gray-100 text-gray-600 text-2xs font-medium px-1.5 py-0.5 rounded border border-gray-200" title="Assigned via group">Group</span>
+                          <button v-if="newComp.target_users && newComp.target_users.includes(u.id)" type="button" @click="removeIndividualUser(u.id)" class="text-red-500 hover:text-red-700 hover:bg-red-50 rounded p-1 transition" title="Remove manual assignment">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div v-if="assignedCompUsers.length === 0" class="text-xs text-gray-500 italic p-3 text-center">
+                        No users assigned. Select applicable user groups above or add individual users from the right.
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Not Assigned -->
+                  <div class="border border-gray-200 rounded-lg p-3 bg-gray-50/50 flex flex-col shadow-2xs">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-200">
+                      <span class="text-xs font-bold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                        Not Assigned ({{ unassignedCompUsers.length }})
+                      </span>
+                      <button v-if="unassignedCompUsers.length > 0" type="button" @click="addAllUnassignedUsers" class="text-xs text-blue-600 hover:underline font-semibold" title="Assign all remaining users">Add All</button>
+                    </div>
+                    <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                      <div v-for="u in unassignedCompUsers" :key="u.id" class="flex items-center justify-between text-sm p-1.5 rounded bg-white border border-gray-200 hover:border-blue-300 transition shadow-2xs">
+                        <div class="flex flex-col min-w-0 pr-2">
+                          <span class="font-medium text-gray-800 truncate">{{ u.full_name }}</span>
+                          <span class="text-xs text-gray-500 truncate">{{ u.designation }}</span>
+                        </div>
+                        <button type="button" @click="addIndividualUser(u.id)" class="bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-1 rounded transition shrink-0 flex items-center gap-1">
+                          <span>+ Add</span>
+                        </button>
+                      </div>
+                      <div v-if="unassignedCompUsers.length === 0" class="text-xs text-gray-500 italic p-3 text-center">
+                        All users in {{ selectedDb }} are currently assigned to this competency.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="sm:col-span-2 flex gap-2 mt-2">
@@ -7042,9 +7096,91 @@
           return list.filter(u => u.designation === filter || (u.active_in || []).includes(filter));
         });
 
-        const availableIndividualUsers = computed(() => {
-          return sortedUsers.value.filter(u => !(newComp.value.target_groups || []).includes(u.designation));
+        // Section-specific users sorted alphabetically by first name
+        const sectionUsers = computed(() => {
+          return (users.value || [])
+            .filter(u => u.is_active !== 0 && (u.active_in || []).includes(selectedDb.value))
+            .sort((a, b) => (a.full_name || a.username || '').localeCompare(b.full_name || b.username || '', undefined, { sensitivity: 'base' }));
         });
+
+        // Section-specific user groups (groups that have active users in this section, plus groups currently selected on newComp)
+        const sectionUserGroups = computed(() => {
+          const secUsers = sectionUsers.value;
+          const currentGroups = newComp.value && Array.isArray(newComp.value.target_groups) ? newComp.value.target_groups : [];
+          return (userGroups.value || []).filter(g => {
+            return secUsers.some(u => u.designation === g.name) || currentGroups.includes(g.name);
+          });
+        });
+
+        const isAllSectionGroupsSelected = computed(() => {
+          const sGroups = sectionUserGroups.value;
+          if (sGroups.length === 0) return false;
+          const currentGroups = newComp.value && Array.isArray(newComp.value.target_groups) ? newComp.value.target_groups : [];
+          return sGroups.every(g => currentGroups.includes(g.name));
+        });
+
+        const toggleAllSectionGroups = (checked) => {
+          if (!newComp.value) return;
+          const sGroupNames = sectionUserGroups.value.map(g => g.name);
+          if (checked) {
+            const current = new Set(newComp.value.target_groups || []);
+            sGroupNames.forEach(name => current.add(name));
+            newComp.value.target_groups = Array.from(current);
+          } else {
+            newComp.value.target_groups = (newComp.value.target_groups || []).filter(name => !sGroupNames.includes(name));
+          }
+        };
+
+        // Assigned users for new/edited competency: in target_users (manual) OR group in target_groups
+        const assignedCompUsers = computed(() => {
+          if (!newComp.value) return [];
+          const groups = newComp.value.target_groups || [];
+          const manualUsers = newComp.value.target_users || [];
+          return sectionUsers.value.filter(u => manualUsers.includes(u.id) || groups.includes(u.designation));
+        });
+
+        // Unassigned users for new/edited competency: NOT in target_users AND group NOT in target_groups
+        const unassignedCompUsers = computed(() => {
+          if (!newComp.value) return [];
+          const groups = newComp.value.target_groups || [];
+          const manualUsers = newComp.value.target_users || [];
+          return sectionUsers.value.filter(u => !manualUsers.includes(u.id) && !groups.includes(u.designation));
+        });
+
+        const assignedManualCount = computed(() => {
+          if (!newComp.value || !Array.isArray(newComp.value.target_users)) return 0;
+          return sectionUsers.value.filter(u => newComp.value.target_users.includes(u.id)).length;
+        });
+
+        const addIndividualUser = (userId) => {
+          if (!newComp.value) return;
+          if (!Array.isArray(newComp.value.target_users)) newComp.value.target_users = [];
+          if (!newComp.value.target_users.includes(userId)) {
+            newComp.value.target_users.push(userId);
+          }
+        };
+
+        const removeIndividualUser = (userId) => {
+          if (!newComp.value || !Array.isArray(newComp.value.target_users)) return;
+          newComp.value.target_users = newComp.value.target_users.filter(id => id !== userId);
+        };
+
+        const addAllUnassignedUsers = () => {
+          if (!newComp.value) return;
+          if (!Array.isArray(newComp.value.target_users)) newComp.value.target_users = [];
+          unassignedCompUsers.value.forEach(u => {
+            if (!newComp.value.target_users.includes(u.id)) {
+              newComp.value.target_users.push(u.id);
+            }
+          });
+        };
+
+        const clearAllManualUsers = () => {
+          if (!newComp.value) return;
+          newComp.value.target_users = [];
+        };
+
+        const availableIndividualUsers = computed(() => unassignedCompUsers.value);
 
         const displayedUsers = computed(() => {
           let filtered = activeUsers.value;
@@ -11260,7 +11396,7 @@
           document.removeEventListener('click', handleDocumentClick);
         });
 
-        return { username, password, token, user, loginError, users, sortedUsers, availableIndividualUsers, displayedUsers, competencies, getProgressStatus, isTrainingPrerequisitesMet, getStatusBadgeClass, getAssessorName, isRenewalDue,
+        return { username, password, token, user, loginError, users, sortedUsers, availableIndividualUsers, sectionUsers, sectionUserGroups, isAllSectionGroupsSelected, toggleAllSectionGroups, assignedCompUsers, unassignedCompUsers, assignedManualCount, addIndividualUser, removeIndividualUser, addAllUnassignedUsers, clearAllManualUsers, displayedUsers, competencies, getProgressStatus, isTrainingPrerequisitesMet, getStatusBadgeClass, getAssessorName, isRenewalDue,
                  login, logout, selectedCell, openModal, closeModal, getMilestone, updateMilestone, requestAssessment, renewCompetency, requestReassessment, revertAssessment, signOff, userProgress, allUsersProgress, getUserCategoryProgress, designationAverage, groupedCompetencies, getProgressObj, isApplicable, canAccessUserCompetency,
                  currentTab, adminSubTab, newComp, isEditingComp, saveCompetency, saveAsNewComp, editComp, cancelEditComp, deleteComp, moveReadingPrereq, dragStartCompetency, dropCompetency, availableCategories, overviewAvailableCategories,
                  categoryOrder, dragStartCategory, dropCategory, orderedCompetenciesByGroup, getOrderedPrereqs,
