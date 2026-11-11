@@ -2713,9 +2713,8 @@ app.get('/api/competency/:id/assessment-records', authenticateToken, async (req,
   const competencyId = parseInt(req.params.id, 10);
   const targetUserId = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
   try {
-    const isAssessor = await isEligibleAssessorForCompetency(req.db, req.user, competencyId);
-    if (!isAssessor) {
-      return res.status(403).json({ error: 'Access Denied: Only assessors competent to train for this particular competency can view assessment records.' });
+    if (!req.user.is_admin && !req.user.is_superuser) {
+      return res.status(403).json({ error: 'Access Denied: Only assessors can view assessment records.' });
     }
     const records = await query(
       req.db,

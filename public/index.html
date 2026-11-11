@@ -2682,10 +2682,19 @@
                 <span>📋 Record of Assessment</span>
                 <span v-if="assessmentRecords.length > 0" class="text-xs bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded-full font-bold">{{ assessmentRecords.length }}</span>
               </h4>
-              <div v-if="canCarryOutAssessment" class="flex items-center gap-2">
-                <button v-if="!showAssessmentForm" 
+              <div v-if="canSeeAssessmentRecords" class="flex items-center gap-2">
+                <button v-if="!showAssessmentForm && canCarryOutAssessment" 
                         @click="openAssessmentForm('c', 'Pass')" 
-                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-2.5 py-1 rounded transition shadow-sm flex items-center gap-1">
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-2.5 py-1 rounded transition shadow-sm flex items-center gap-1 cursor-pointer">
+                  <span>+ Record Assessment</span>
+                </button>
+                <button v-else-if="!showAssessmentForm" 
+                        disabled
+                        :title="assessmentLockedTooltip"
+                        class="bg-gray-200 text-gray-400 border border-gray-300 text-xs font-semibold px-2.5 py-1 rounded cursor-not-allowed opacity-75 flex items-center gap-1 select-none">
+                  <svg class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                  </svg>
                   <span>+ Record Assessment</span>
                 </button>
               </div>
@@ -2804,6 +2813,51 @@
             </div>
           </div>
 
+          <!-- Assessor Overrides: Quizzes, Readings, Evaluations (Directly below Record of Assessment) -->
+          <div v-if="canAssessorOverride && (selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz || selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval)" class="mb-4 bg-slate-50 border border-slate-200 p-3.5 rounded-lg shadow-sm">
+            <h4 class="font-semibold text-slate-900 text-sm mb-2.5 flex items-center gap-1.5">
+              <span>⚡ Assessor Overrides</span>
+            </h4>
+            <div class="bg-white p-3 rounded-md border border-slate-200 flex flex-col gap-2.5">
+              <div v-if="selectedCell.comp.requires_instructions" class="flex flex-col gap-2 text-xs text-gray-800">
+                <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+                  <span class="font-medium text-gray-700">Task: {{ rp.name }}<span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)"> - <strong class="text-green-600">Done</strong></span></span>
+                  <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" @click="adminResetReading(rp.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded text-xs font-semibold transition">Force Redo</button>
+                  <button v-else @click="adminMarkReadingDone(rp.id)" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-semibold transition">Mark Done</button>
+                </div>
+              </div>
+              <div v-if="selectedCell.comp.requires_quiz" class="flex flex-col gap-2 text-xs text-gray-800">
+                <div v-for="qz in cellQuizzes" :key="qz.id" class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+                  <template v-if="qz.is_pre_assessment">
+                    <span class="font-medium text-gray-700">Pre-Assessment: {{ qz.name }}<span v-if="getLatestPreAssessment(qz.id)?.status === 'Completed' && getLatestPreAssessment(qz.id)?.is_passed === 1"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getLatestPreAssessment(qz.id)?.status === 'Needs_Retake' || (getLatestPreAssessment(qz.id)?.status === 'Completed' && getLatestPreAssessment(qz.id)?.is_passed === 0)"> - <strong class="text-red-600">Fail</strong></span><span v-else-if="getLatestPreAssessment(qz.id)?.status"> - <strong class="text-gray-500">{{ getLatestPreAssessment(qz.id).status.replace('_', ' ') }}</strong></span></span>
+                    <button v-if="getLatestPreAssessment(qz.id)" @click="adminResetQuiz(qz.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded text-xs font-semibold transition">Force Retake</button>
+                  </template>
+                  <template v-else-if="qz.is_viva">
+                    <span class="font-medium text-gray-700">Self Assessment: {{ qz.name }}<span v-if="getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getLatestViva(qz.id)?.status === 'Needs_Retake' || (getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 0)"> - <strong class="text-red-600">Failed</strong></span><span v-else-if="getLatestViva(qz.id)?.status"> - <strong class="text-gray-500">{{ getLatestViva(qz.id).status.replace('_', ' ') }}</strong></span></span>
+                    <button v-if="getLatestViva(qz.id)" @click="adminResetQuiz(qz.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded text-xs font-semibold transition">Force Retake</button>
+                  </template>
+                  <template v-else>
+                    <span class="font-medium text-gray-700">Quiz: {{ qz.name }}<span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false"> - <strong class="text-red-600">Failed</strong></span></span>
+                    <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded text-xs font-semibold transition">Force Retake</button>
+                    <button v-else @click="adminMarkQuizPassed(qz.id)" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-semibold transition">Mark Passed</button>
+                  </template>
+                </div>
+              </div>
+              <div v-if="selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="flex flex-col gap-2 text-xs text-gray-800">
+                <div v-if="selectedCell.comp.requires_pre_eval" class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+                  <span class="font-medium text-gray-700">Pre-Training Eval<span v-if="latestPreEvaluation"> - <strong class="text-green-600">Completed</strong></span></span>
+                  <button v-if="latestPreEvaluation" @click="adminResetEval('pre')" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded text-xs font-semibold transition">Force Retake</button>
+                  <button v-else @click="adminMarkEvalPassed('pre')" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-semibold transition">Mark Done</button>
+                </div>
+                <div v-if="selectedCell.comp.requires_post_eval" class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+                  <span class="font-medium text-gray-700">Post-Training Eval<span v-if="latestPostEvaluation"> - <strong class="text-green-600">Completed</strong></span></span>
+                  <button v-if="latestPostEvaluation" @click="adminResetEval('post')" class="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded text-xs font-semibold transition">Force Retake</button>
+                  <button v-else @click="adminMarkEvalPassed('post')" class="bg-green-100 hover:bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-semibold transition">Mark Done</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Renewal View -->
           <div v-if="selectedCell.user.id === user.id && (getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'm' || getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'c' || getProgressStatus(selectedCell.user.id, selectedCell.comp.id) === 'x') && isRenewalDue(selectedCell.user.id, selectedCell.comp.id)" class="mb-4 bg-red-50 border border-red-200 p-4 rounded-lg">
             <h4 class="font-bold text-red-800 mb-2">Renewal Due</h4>
@@ -2822,9 +2876,9 @@
             </div>
           </div>
           
-          <!-- Assessor Overrides Controls -->
-          <div v-if="canAssessorOverride" class="mt-4 pt-4 border-t border-red-200">
-            <h4 class="font-semibold text-red-800 mb-2">Assessor Overrides</h4>
+          <!-- Admin Overrides Controls (Bottom of page, admin rights only) -->
+          <div v-if="canAdminOverride" class="mt-4 pt-4 border-t border-red-200">
+            <h4 class="font-semibold text-red-800 mb-2">Admin Overrides</h4>
             
             <div class="flex items-center gap-2 mb-3">
               <span class="text-sm font-medium text-gray-700">Force Status:</span>
@@ -2845,45 +2899,6 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-700 mb-1">Sign-off / Concession Comment:</label>
                 <textarea v-model="adminEdit.signoff_comment" placeholder="Optional sign-off comment or concession" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-red-500 focus:border-red-500"></textarea>
-              </div>
-            </div>
-
-            <div v-if="selectedCell.comp.requires_instructions || selectedCell.comp.requires_quiz || selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="bg-red-50 p-3 rounded border border-red-100 flex flex-col gap-2">
-              <div v-if="selectedCell.comp.requires_instructions" class="flex flex-col gap-2 text-sm text-gray-800">
-                <div v-for="rp in selectedCell.comp.reading_prerequisites" :key="rp.id" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Task: {{ rp.name }}<span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)"> - <strong class="text-green-600">Done</strong></span></span>
-                  <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'reading', rp.id)" @click="adminResetReading(rp.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Redo</button>
-                  <button v-else @click="adminMarkReadingDone(rp.id)" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Done</button>
-                </div>
-              </div>
-              <div v-if="selectedCell.comp.requires_quiz" class="flex flex-col gap-2 text-sm text-gray-800">
-                <div v-for="qz in cellQuizzes" :key="qz.id" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <template v-if="qz.is_pre_assessment">
-                    <span>Pre-Assessment: {{ qz.name }}<span v-if="getLatestPreAssessment(qz.id)?.status === 'Completed' && getLatestPreAssessment(qz.id)?.is_passed === 1"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getLatestPreAssessment(qz.id)?.status === 'Needs_Retake' || (getLatestPreAssessment(qz.id)?.status === 'Completed' && getLatestPreAssessment(qz.id)?.is_passed === 0)"> - <strong class="text-red-600">Fail</strong></span><span v-else-if="getLatestPreAssessment(qz.id)?.status"> - <strong class="text-gray-500">{{ getLatestPreAssessment(qz.id).status.replace('_', ' ') }}</strong></span></span>
-                    <button v-if="getLatestPreAssessment(qz.id)" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
-                  </template>
-                  <template v-else-if="qz.is_viva">
-                    <span>Self Assessment: {{ qz.name }}<span v-if="getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 1"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getLatestViva(qz.id)?.status === 'Needs_Retake' || (getLatestViva(qz.id)?.status === 'Completed' && getLatestViva(qz.id)?.is_passed === 0)"> - <strong class="text-red-600">Failed</strong></span><span v-else-if="getLatestViva(qz.id)?.status"> - <strong class="text-gray-500">{{ getLatestViva(qz.id).status.replace('_', ' ') }}</strong></span></span>
-                    <button v-if="getLatestViva(qz.id)" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
-                  </template>
-                  <template v-else>
-                    <span>Quiz: {{ qz.name }}<span v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed"> - <strong class="text-green-600">Passed</strong></span><span v-else-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed === false"> - <strong class="text-red-600">Failed</strong></span></span>
-                    <button v-if="getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.passed || getMilestone(selectedCell.user.id, selectedCell.comp.id, 'quiz', qz.id)?.score !== undefined" @click="adminResetQuiz(qz.id)" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
-                    <button v-else @click="adminMarkQuizPassed(qz.id)" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Passed</button>
-                  </template>
-                </div>
-              </div>
-              <div v-if="selectedCell.comp.requires_pre_eval || selectedCell.comp.requires_post_eval" class="flex flex-col gap-2 text-sm text-gray-800">
-                <div v-if="selectedCell.comp.requires_pre_eval" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Pre-Training Eval<span v-if="latestPreEvaluation"> - <strong class="text-green-600">Completed</strong></span></span>
-                  <button v-if="latestPreEvaluation" @click="adminResetEval('pre')" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
-                  <button v-else @click="adminMarkEvalPassed('pre')" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Done</button>
-                </div>
-                <div v-if="selectedCell.comp.requires_post_eval" class="flex justify-between items-center border-b border-red-200 pb-1">
-                  <span>Post-Training Eval<span v-if="latestPostEvaluation"> - <strong class="text-green-600">Completed</strong></span></span>
-                  <button v-if="latestPostEvaluation" @click="adminResetEval('post')" class="bg-red-200 hover:bg-red-300 text-red-800 px-2 py-1 rounded text-xs font-semibold">Force Retake</button>
-                  <button v-else @click="adminMarkEvalPassed('post')" class="bg-green-200 hover:bg-green-300 text-green-800 px-2 py-1 rounded text-xs font-semibold">Mark Done</button>
-                </div>
               </div>
             </div>
           </div>
@@ -5104,17 +5119,33 @@
         });
 
         const canCarryOutAssessment = computed(() => {
-          if (!user.value || !selectedCell.value || !selectedCell.value.user) return false;
+          if (!user.value || !selectedCell.value || !selectedCell.value.user || !selectedCell.value.comp) return false;
+          if (!user.value.is_admin && !user.value.is_superuser) return false;
           if (selectedCell.value.user.id === user.value.id) return false;
-          return isAssessorForSelected.value;
+          if (user.value.username === 'admin') return true;
+          return isCompetentToTrainComp(user.value.id, selectedCell.value.comp.id);
         });
 
         const canSeeAssessmentRecords = computed(() => {
           if (!user.value || !selectedCell.value || !selectedCell.value.comp) return false;
-          return isAssessorForSelected.value;
+          return !!(user.value.is_admin || user.value.is_superuser);
+        });
+
+        const assessmentLockedTooltip = computed(() => {
+          if (!user.value || !selectedCell.value || !selectedCell.value.user || !selectedCell.value.comp) return '';
+          if (selectedCell.value.user.id === user.value.id) return 'Assessors cannot record assessments on themselves';
+          if (!isCompetentToTrainComp(user.value.id, selectedCell.value.comp.id) && user.value.username !== 'admin') {
+            return 'Assessment locked pending due to competency status';
+          }
+          return '';
         });
 
         const canAssessorOverride = computed(() => {
+          if (!user.value || !selectedCell.value) return false;
+          return !!(user.value.is_superuser || user.value.is_admin);
+        });
+
+        const canAdminOverride = computed(() => {
           if (!user.value || !selectedCell.value) return false;
           return !!(user.value.is_superuser || user.value.is_admin);
         });
@@ -7447,7 +7478,7 @@
               preAssessmentSummaries.value = [];
             }
             await fetchEvaluations(u, comp);
-            if (isAssessorForComp) {
+            if (user.value?.is_admin || user.value?.is_superuser) {
               await fetchAssessmentRecords(u.id, comp.id);
             } else {
               assessmentRecords.value = [];
@@ -9799,7 +9830,7 @@
 
         const openAssessmentForm = (targetType = 'c', defaultResult = 'Pass') => {
           if (!canCarryOutAssessment.value) {
-            customAlert("Only authorized assessors for this competency can record assessments.", "Access Denied");
+            customAlert(assessmentLockedTooltip.value || "Assessment locked pending due to competency status", "Access Restricted");
             return;
           }
           newAssessment.value.type = targetType;
@@ -9818,7 +9849,7 @@
 
         const fetchAssessmentRecords = async (userId, compId) => {
           if (!userId || !compId) return;
-          if (!isAssessorForCompetency(user.value?.id, compId)) {
+          if (!user.value?.is_admin && !user.value?.is_superuser) {
             assessmentRecords.value = [];
             return;
           }
@@ -11251,7 +11282,7 @@
                   showUnsavedReviewPrompt, handleLogReviewBackdropClick, handleCancelLogReview, handleUnsavedPromptSave, handleUnsavedPromptComplete, handleUnsavedPromptDiscard,
                   showReassignLogModal, activeReassignLog, reassignEligibleAssessors, selectedReassignAssessorId, reassignHandoverComments, loadingReassignAssessors, isReassigning, openReassignLogModal, closeReassignLogModal, confirmReassignLog, showAboutModal, showReleaseNotes,
                   showTransferLogModal, activeTransferLog, targetTransferCompId, targetTransferAssessorId, transferEligibleAssessors, loadingTransferAssessors, isTransferring, transferErrorMessage, transferAvailableCompetencies, openTransferLogModal, closeTransferLogModal, onTargetTransferCompChange, confirmTransferLog, getCompetencyName, handleAssessorOpenModal, signoffComment, saveSignoffCommentOnly, activeCellProgress,
-                  canCarryOutAssessment, canSeeAssessmentRecords, showConcessionToggle, showConcessionPanel, assessmentRecords, loadingAssessmentRecords, showAssessmentForm, isSubmittingAssessment, newAssessment, setAssessmentResult, onAssessmentTypeChange, openAssessmentForm, cancelAssessmentForm, fetchAssessmentRecords, submitAssessmentRecord, isCompetentToTrainComp, isAssessorForCompetency,
+                  canCarryOutAssessment, canSeeAssessmentRecords, assessmentLockedTooltip, canAdminOverride, showConcessionToggle, showConcessionPanel, assessmentRecords, loadingAssessmentRecords, showAssessmentForm, isSubmittingAssessment, newAssessment, setAssessmentResult, onAssessmentTypeChange, openAssessmentForm, cancelAssessmentForm, fetchAssessmentRecords, submitAssessmentRecord, isCompetentToTrainComp, isAssessorForCompetency,
                   userTimingModal, userTimingStats, cohortTimingStats, medianLeaderboard, openUserTimingStats, closeUserTimingModal, closeStatCompModal, formatDurationMins,
                   userProgressRecord, userTimeTakenDays, userTimeTakenDisplay, compAchieveStats, timeToAchieveIndicator, cohortAvgRecords, totalRecordsIndicator, cohortAvgMinMins, minTimeIndicator, cohortAvgMaxMins, maxTimeIndicator, meanTimeIndicator, medianTimeIndicator,
                   auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,
