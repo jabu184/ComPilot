@@ -2849,8 +2849,8 @@ app.post('/api/progress/admin-force-status', authenticateToken, async (req, res)
   }
 
   try {
-    if (!(await isEligibleAssessorForUserCompetency(req.db, req.user, user_id, competency_id))) {
-      return res.status(403).json({ error: "Access Denied: Requires Assessor privileges." });
+    if (!req.user || !req.user.is_superuser) {
+      return res.status(403).json({ error: "Access Denied: Requires Admin privileges." });
     }
 
     const progressCheck = await query(req.db, `SELECT current_status FROM staff_competency_progress WHERE user_id = ? AND competency_id = ?`, [user_id, competency_id]);
@@ -2889,9 +2889,8 @@ app.post('/api/progress/admin-force-status', authenticateToken, async (req, res)
       await execute(req.db, q, params);
     }
     
-    const isAssessor = !req.user.is_admin && !req.user.is_superuser;
-    const actionType = isAssessor ? 'ASSESSOR_FORCE_STATUS' : 'ADMIN_FORCE_STATUS';
-    const auditNotes = isAssessor ? `Assessor forced status change to '${status}'` : `Admin forced status change to '${status}'`;
+    const actionType = 'ADMIN_FORCE_STATUS';
+    const auditNotes = `Admin forced status change to '${status}'`;
 
     await execute(req.db, 
       `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, previous_status, new_status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,

@@ -5146,7 +5146,7 @@
 
         const canAdminOverride = computed(() => {
           if (!user.value || !selectedCell.value) return false;
-          return !!(user.value.is_superuser || user.value.is_admin);
+          return !!user.value.is_superuser;
         });
 
         const isDetailedCompetencyView = computed(() => {
