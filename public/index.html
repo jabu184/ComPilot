@@ -10989,18 +10989,27 @@
             if (!res.ok) throw new Error('Backup failed');
             const data = await res.json();
             
-            const blob = new Blob([JSON.stringify(data.backup)], { type: 'application/json' });
+            const backupPayload = {
+              version: data.version || '2.7',
+              app_version: data.app_version || '2.7.0',
+              scope: scope,
+              date: data.date,
+              databases: data.databases || data.backup,
+              backup: data.backup || data.databases
+            };
+
+            const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `backup_${scope}_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `backup_${scope}_v${backupPayload.version}_${new Date().toISOString().split('T')[0]}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
             await fetchDbInfo();
-            customAlert(`Backup of ${scope} downloaded successfully.`, "Success");
+            customAlert(`Backup of ${scope} (v${backupPayload.version}) downloaded successfully.`, "Success");
           } catch(e) { customAlert(e.message, "Error"); }
         };
 
@@ -11017,8 +11026,10 @@
               headers: getHeaders(true),
               body: JSON.stringify({ backup: backupData })
             });
-            if (!res.ok) throw new Error('Restore failed');
-            await customAlert(`Database restored successfully. The application will now reload to apply changes.`, "Success");
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Restore failed');
+            const vMsg = data.restored_version ? ` (Source version: ${data.restored_version}, Target: v${data.current_version || '2.7'})` : '';
+            await customAlert(`Database restored and migrated successfully${vMsg}. The application will now reload to apply changes.`, "Success");
             window.location.reload();
           } catch(e) { customAlert("Invalid backup file or restore failed: " + e.message, "Error"); }
         };

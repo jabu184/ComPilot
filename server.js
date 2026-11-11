@@ -7,6 +7,8 @@ const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const AdmZip = require('adm-zip');
 
+const APP_VERSION = '2.7.0';
+
 const app = express();
 const PORT = process.env.PORT || 3003;
 const SECRET_KEY = 'super-secret-key-for-development'; // Replace in production
@@ -3864,6 +3866,103 @@ app.get('/api/admin/db-info', authenticateToken, requireSuperuser, async (req, r
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
+const applyVersionMigrations = async (db, sourceVersion, dbName) => {
+  try {
+    console.log(`[Migration] Applying version fixes for database '${dbName}' from source version: ${sourceVersion}...`);
+
+    // Ensure staff_competency_progress has all modern columns
+    const progCols = (await query(db, "PRAGMA table_info(staff_competency_progress)")).map(c => c.name);
+    if (!progCols.includes('is_admin_override')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN is_admin_override INTEGER DEFAULT 0");
+    }
+    if (!progCols.includes('signoff_comment')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN signoff_comment TEXT");
+    }
+    if (!progCols.includes('date_reviewed')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN date_reviewed TEXT");
+    }
+    if (!progCols.includes('reviewer_id')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN reviewer_id INTEGER");
+    }
+    if (!progCols.includes('qatrack_timings')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN qatrack_timings TEXT DEFAULT '[]'");
+    }
+    if (!progCols.includes('qatrack_records_detail')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN qatrack_records_detail TEXT DEFAULT '{}'");
+    }
+    if (!progCols.includes('readings_completed')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN readings_completed TEXT DEFAULT '[]'");
+    }
+    if (!progCols.includes('quizzes_completed')) {
+      await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN quizzes_completed TEXT DEFAULT '{}'");
+    }
+
+    // Ensure assessment_records table & concession column exist
+    await execute(db, `CREATE TABLE IF NOT EXISTS assessment_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trainee_id INTEGER NOT NULL,
+      competency_id INTEGER NOT NULL,
+      assessor_id INTEGER NOT NULL,
+      assessment_type TEXT NOT NULL,
+      result TEXT NOT NULL,
+      status_outcome TEXT NOT NULL,
+      feedback TEXT,
+      concession TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    const arCols = (await query(db, "PRAGMA table_info(assessment_records)")).map(c => c.name);
+    if (!arCols.includes('concession')) {
+      await execute(db, "ALTER TABLE assessment_records ADD COLUMN concession TEXT");
+    }
+
+    // Ensure audit log exists
+    await execute(db, `CREATE TABLE IF NOT EXISTS competency_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      target_user_id INTEGER,
+      competency_id INTEGER,
+      action_type TEXT,
+      actioned_by_id INTEGER,
+      previous_status TEXT,
+      new_status TEXT,
+      notes TEXT
+    )`);
+
+    // Ensure competencies table has all modern columns
+    const compCols = (await query(db, "PRAGMA table_info(competencies)")).map(c => c.name);
+    if (!compCols.includes('renewal_period_months')) await execute(db, "ALTER TABLE competencies ADD COLUMN renewal_period_months INTEGER DEFAULT 36");
+    if (!compCols.includes('requires_pre_eval')) await execute(db, "ALTER TABLE competencies ADD COLUMN requires_pre_eval INTEGER DEFAULT 0");
+    if (!compCols.includes('requires_post_eval')) await execute(db, "ALTER TABLE competencies ADD COLUMN requires_post_eval INTEGER DEFAULT 0");
+    if (!compCols.includes('required_plan_count')) await execute(db, "ALTER TABLE competencies ADD COLUMN required_plan_count INTEGER DEFAULT 0");
+    if (!compCols.includes('display_order')) await execute(db, "ALTER TABLE competencies ADD COLUMN display_order INTEGER DEFAULT 0");
+    if (!compCols.includes('qatrack_requirements')) await execute(db, "ALTER TABLE competencies ADD COLUMN qatrack_requirements TEXT DEFAULT '[]'");
+    if (!compCols.includes('reading_prerequisites')) await execute(db, "ALTER TABLE competencies ADD COLUMN reading_prerequisites TEXT DEFAULT '[]'");
+    if (!compCols.includes('allow_file_uploads')) await execute(db, "ALTER TABLE competencies ADD COLUMN allow_file_uploads INTEGER DEFAULT 0");
+    if (!compCols.includes('target_users')) await execute(db, "ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'");
+    if (!compCols.includes('description')) await execute(db, "ALTER TABLE competencies ADD COLUMN description TEXT");
+
+    // Version-specific migrations
+    const isLegacy = sourceVersion === 'legacy' || !sourceVersion || String(sourceVersion).startsWith('1.') || String(sourceVersion).startsWith('2.0') || String(sourceVersion).startsWith('2.1') || String(sourceVersion).startsWith('2.2') || String(sourceVersion).startsWith('2.5') || String(sourceVersion).startsWith('2.6');
+
+    if (isLegacy) {
+      // Fix null/undefined is_admin_override in legacy progress rows
+      await execute(db, "UPDATE staff_competency_progress SET is_admin_override = 0 WHERE is_admin_override IS NULL");
+      
+      // Fix any null readings_completed or quizzes_completed
+      await execute(db, "UPDATE staff_competency_progress SET readings_completed = '[]' WHERE readings_completed IS NULL");
+      await execute(db, "UPDATE staff_competency_progress SET quizzes_completed = '{}' WHERE quizzes_completed IS NULL");
+
+      // Log migration in audit trail
+      try {
+        await execute(db, `INSERT INTO competency_audit_log (action_type, notes) VALUES ('BACKUP_MIGRATION', ?)`,
+          [`Database restored and migrated from ${sourceVersion || 'legacy'} to ${APP_VERSION}`]);
+      } catch (logErr) {}
+    }
+  } catch (err) {
+    console.warn(`[Migration Warning] applyVersionMigrations for ${dbName}:`, err.message);
+  }
+};
+
 app.post('/api/admin/backup/:scope', authenticateToken, requireSuperuser, async (req, res) => {
   const scope = req.params.scope; 
   try {
@@ -3884,20 +3983,49 @@ app.post('/api/admin/backup/:scope', authenticateToken, requireSuperuser, async 
     for (const db of filesToBackup) {
       await execute(sharedDb, "INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)", [`last_backup_${db}`, dateStr]);
     }
-    res.json({ backup: backupData, date: dateStr });
-  } catch(e) { res.status(500).json({error: e.message}); }
+    res.json({
+      success: true,
+      app_version: APP_VERSION,
+      version: '2.7',
+      scope: scope,
+      date: dateStr,
+      databases: backupData,
+      backup: backupData
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/admin/restore/:scope', authenticateToken, requireSuperuser, async (req, res) => {
   const { backup } = req.body;
-  if (!backup) return res.status(400).json({error: 'No backup data provided'});
+  if (!backup) return res.status(400).json({ error: 'No backup data provided' });
   try {
-    let backupData = backup;
-    if (backupData.backup && typeof backupData.backup === 'object') {
-      backupData = backupData.backup;
+    let payload = backup;
+    let backupVersion = 'legacy'; // Default to legacy (< 2.7) if unversioned
+
+    if (payload.app_version || payload.version) {
+      backupVersion = String(payload.app_version || payload.version);
+    } else if (payload.backup && (payload.backup.app_version || payload.backup.version)) {
+      backupVersion = String(payload.backup.app_version || payload.backup.version);
     }
 
-    const entries = Object.entries(backupData);
+    // Extract actual database entries
+    let rawDatabases = {};
+    if (payload.databases && typeof payload.databases === 'object') {
+      rawDatabases = payload.databases;
+    } else if (payload.backup && typeof payload.backup === 'object' && !payload.backup.databases) {
+      rawDatabases = payload.backup;
+    } else if (payload.backup && payload.backup.databases && typeof payload.backup.databases === 'object') {
+      rawDatabases = payload.backup.databases;
+    } else if (typeof payload === 'object') {
+      const metaKeys = ['version', 'app_version', 'backup_version', 'scope', 'date', 'created_at', 'backup', 'databases', 'success'];
+      for (const [k, v] of Object.entries(payload)) {
+        if (!metaKeys.includes(k) && typeof v === 'string') {
+          rawDatabases[k] = v;
+        }
+      }
+    }
+
+    const entries = Object.entries(rawDatabases);
     if (entries.length === 0) {
       return res.status(400).json({ error: 'No valid database files found in backup payload' });
     }
@@ -3927,16 +4055,22 @@ app.post('/api/admin/restore/:scope', authenticateToken, requireSuperuser, async
       const dbPath = path.resolve(__dirname, `${safeName}.db`);
       fs.writeFileSync(dbPath, Buffer.from(base64Data, 'base64'));
 
-      // Reconnect and run full migrations
+      // Reconnect and run full migrations + version-specific fixes
       const newDb = getDb(safeName);
       await new Promise(r => initDb(newDb, r));
       await ensureDbColumns(newDb);
+      await applyVersionMigrations(newDb, backupVersion, safeName);
     }
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      restored_version: backupVersion,
+      current_version: APP_VERSION,
+      message: `Database successfully restored and migrated from ${backupVersion} to ${APP_VERSION}.`
+    });
   } catch(e) {
     console.error("Restore error:", e);
-    res.status(500).json({error: e.message});
+    res.status(500).json({ error: e.message });
   }
 });
 
