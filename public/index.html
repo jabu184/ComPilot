@@ -2732,8 +2732,8 @@
                 <textarea v-model="newAssessment.feedback" rows="3" placeholder="Provide feedback detailing the assessment discussion, clinical observation, strengths, or areas for development..." class="w-full border border-gray-300 rounded px-2.5 py-2 text-xs focus:ring-indigo-500 focus:border-indigo-500"></textarea>
               </div>
 
-              <!-- Concession Toggle & Input Field inside Assessment Form (Only displayed when marking competent or competent to train) -->
-              <div v-if="newAssessment.result === 'Pass'" class="mb-3 p-2.5 bg-amber-50/70 border border-amber-200 rounded">
+              <!-- Concession Toggle & Input Field inside Assessment Form -->
+              <div class="mb-3 p-2.5 bg-amber-50/70 border border-amber-200 rounded">
                 <label class="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" v-model="showConcessionToggle" class="rounded text-amber-600 focus:ring-amber-500 h-4 w-4">
                   <span class="text-xs font-semibold text-amber-900">Attach Concession / Condition / Comment</span>
@@ -2769,10 +2769,19 @@
                 <div class="text-gray-600 text-[11px] mb-1">
                   Assessed by: <strong>{{ rec.assessor_name }}</strong>
                 </div>
-                <div v-if="rec.feedback" class="mt-1 bg-slate-50 p-2 rounded border border-slate-100 text-gray-800 whitespace-pre-wrap text-xs">
-                  {{ rec.feedback }}
+                <div v-if="rec.concession" class="mt-1.5 bg-amber-50 p-2 rounded border border-amber-200 text-xs text-amber-950">
+                  <div class="font-bold text-amber-900 flex items-center gap-1 mb-0.5">
+                    <svg class="w-3.5 h-3.5 text-amber-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span>Concession / Condition:</span>
+                  </div>
+                  <div class="italic whitespace-pre-wrap pl-4">{{ rec.concession }}</div>
                 </div>
-                <div v-else class="text-gray-400 italic text-[11px]">No additional written feedback recorded.</div>
+                <div v-if="rec.feedback" class="mt-1.5 bg-slate-50 p-2 rounded border border-slate-100 text-gray-800 whitespace-pre-wrap text-xs">
+                  <span class="font-bold text-slate-700">Comments / Notes:</span> {{ rec.feedback }}
+                </div>
+                <div v-else class="text-gray-400 italic text-[11px] mt-1">No additional written feedback recorded.</div>
               </div>
             </div>
             <div v-else-if="!showAssessmentForm" class="text-xs text-gray-500 italic py-1">
@@ -5067,10 +5076,16 @@
           return stat === 'x' || stat === 'x+';
         };
 
+        const isAssessorForCompetency = (userId, compId) => {
+          if (!user.value || !userId || !compId) return false;
+          if (!user.value.is_admin && !user.value.is_superuser) return false;
+          if (user.value.username === 'admin') return true;
+          return isCompetentToTrainComp(userId, compId);
+        };
+
         const isAssessorForSelected = computed(() => {
           if (!user.value || !selectedCell.value || !selectedCell.value.comp) return false;
-          const compId = selectedCell.value.comp.id;
-          return isCompetentToTrainComp(user.value.id, compId);
+          return isAssessorForCompetency(user.value.id, selectedCell.value.comp.id);
         });
 
         const canCarryOutAssessment = computed(() => {
@@ -7393,8 +7408,8 @@
             signoff_comment: p && p.signoff_comment ? p.signoff_comment : '',
             date_override: p && p.date_signed_off ? p.date_signed_off.split('T')[0] : ''
           };
-          const isAssessorForComp = isCompetentToTrainComp(user.value?.id, comp.id);
-          const canViewDetailed = !!(user.value?.is_admin || user.value?.is_superuser || u.id === user.value?.id || isAssessorForComp);
+          const isAssessorForComp = isAssessorForCompetency(user.value?.id, comp.id);
+          const canViewDetailed = !!(user.value?.is_admin || user.value?.is_superuser || u.id === user.value?.id || isCompetentToTrainComp(user.value?.id, comp.id));
 
           if (canViewDetailed) {
             if (comp.requires_quiz) {
@@ -9786,7 +9801,7 @@
 
         const fetchAssessmentRecords = async (userId, compId) => {
           if (!userId || !compId) return;
-          if (!isCompetentToTrainComp(user.value?.id, compId)) {
+          if (!isAssessorForCompetency(user.value?.id, compId)) {
             assessmentRecords.value = [];
             return;
           }
@@ -9821,7 +9836,7 @@
           try {
             const isPassing = newAssessment.value.result === 'Pass';
             const statusOutcome = isPassing ? newAssessment.value.type : newAssessment.value.outcome;
-            const chosenConcession = (isPassing && showConcessionToggle.value) ? (signoffComment.value || '').trim() : null;
+            const chosenConcession = showConcessionToggle.value ? (signoffComment.value || '').trim() : null;
 
             const res = await fetch(`/api/competency/${selectedCell.value.comp.id}/assessment-record`, {
               method: 'POST',
@@ -11218,7 +11233,7 @@
                   showUnsavedReviewPrompt, handleLogReviewBackdropClick, handleCancelLogReview, handleUnsavedPromptSave, handleUnsavedPromptComplete, handleUnsavedPromptDiscard,
                   showReassignLogModal, activeReassignLog, reassignEligibleAssessors, selectedReassignAssessorId, reassignHandoverComments, loadingReassignAssessors, isReassigning, openReassignLogModal, closeReassignLogModal, confirmReassignLog, showAboutModal, showReleaseNotes,
                   showTransferLogModal, activeTransferLog, targetTransferCompId, targetTransferAssessorId, transferEligibleAssessors, loadingTransferAssessors, isTransferring, transferErrorMessage, transferAvailableCompetencies, openTransferLogModal, closeTransferLogModal, onTargetTransferCompChange, confirmTransferLog, getCompetencyName, handleAssessorOpenModal, signoffComment, saveSignoffCommentOnly, activeCellProgress,
-                  canCarryOutAssessment, canSeeAssessmentRecords, showConcessionToggle, showConcessionPanel, assessmentRecords, loadingAssessmentRecords, showAssessmentForm, isSubmittingAssessment, newAssessment, setAssessmentResult, onAssessmentTypeChange, openAssessmentForm, cancelAssessmentForm, fetchAssessmentRecords, submitAssessmentRecord, isCompetentToTrainComp,
+                  canCarryOutAssessment, canSeeAssessmentRecords, showConcessionToggle, showConcessionPanel, assessmentRecords, loadingAssessmentRecords, showAssessmentForm, isSubmittingAssessment, newAssessment, setAssessmentResult, onAssessmentTypeChange, openAssessmentForm, cancelAssessmentForm, fetchAssessmentRecords, submitAssessmentRecord, isCompetentToTrainComp, isAssessorForCompetency,
                   userTimingModal, userTimingStats, cohortTimingStats, medianLeaderboard, openUserTimingStats, closeUserTimingModal, closeStatCompModal, formatDurationMins,
                   userProgressRecord, userTimeTakenDays, userTimeTakenDisplay, compAchieveStats, timeToAchieveIndicator, cohortAvgRecords, totalRecordsIndicator, cohortAvgMinMins, minTimeIndicator, cohortAvgMaxMins, maxTimeIndicator, meanTimeIndicator, medianTimeIndicator,
                   auditLogs, fetchAuditLogs, assessorQueue, fetchAssessorQueue, planningLogs, scoredPlanningLogs, planLogsChartMode, renderPlanLogsProgressionChart, eligibleAssessors, newPlanLog, submitPlanLog, submitLogReview, showingPlanLogs, expandedCaseLogIds, toggleExpandedCaseLog, groupedAssessorQueue, onlyAssignedToMeTrainer, onlyAssignedToMeAssessor, trainerUserSearch, assessorUserSearch, myAssignedLogsCount, otherTrainableLogsCount, totalTrainableLogsCount, myAssignedAssessmentsCount, totalAssessmentsCount, displayedAssessorQueue, filteredGroupedVivaQueue, filteredGroupedPreAssessmentQueue, editingPlanLogId, editingPlanLogAssessorComments, toggleLogbookView, toggleLogbookAdd, activeLogbookCompId, activeLogbookMode, editPlanLog, cancelEditPlanLog, deletePlanLog,

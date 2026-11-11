@@ -275,8 +275,15 @@ const initDb = (db, cb) => {
       result TEXT NOT NULL,
       status_outcome TEXT NOT NULL,
       feedback TEXT,
+      concession TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )`, () => {});
+    )`, () => {
+      db.all("PRAGMA table_info(assessment_records)", (err, cols) => {
+        if (cols && !cols.some(c => c.name === 'concession')) {
+          db.run("ALTER TABLE assessment_records ADD COLUMN concession TEXT", () => {});
+        }
+      });
+    });
     db.run(`CREATE TABLE IF NOT EXISTS competency_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT DEFAULT CURRENT_TIMESTAMP, target_user_id INTEGER, competency_id INTEGER, action_type TEXT, actioned_by_id INTEGER, previous_status TEXT, new_status TEXT, notes TEXT)`, () => {});
     
     db.run("CREATE TABLE IF NOT EXISTS competency_groups (competency_id INTEGER, group_name TEXT, UNIQUE(competency_id, group_name))", () => {
@@ -1496,6 +1503,13 @@ async function isEligibleToViewUserCompetency(db, reqUser, targetUserId, compete
   return trainerCheck.length > 0 && ['x', 'x+'].includes(trainerCheck[0].current_status);
 }
 
+async function isEligibleAssessorForCompetency(db, user, competencyId) {
+  if (!user || !competencyId) return false;
+  if (!user.is_admin && !user.is_superuser) return false;
+  if (user.username === 'admin') return true;
+  return await isCompetentToTrain(db, user.id, competencyId);
+}
+
 async function isEligibleAssessorForUserCompetency(db, reqUser, targetUserId, competencyId) {
   if (!reqUser || !targetUserId || !competencyId) return false;
   return !!(reqUser.is_admin || reqUser.is_superuser);
@@ -2699,7 +2713,7 @@ app.get('/api/competency/:id/assessment-records', authenticateToken, async (req,
   const competencyId = parseInt(req.params.id, 10);
   const targetUserId = req.query.user_id ? parseInt(req.query.user_id, 10) : req.user.id;
   try {
-    const isAssessor = await isCompetentToTrain(req.db, req.user.id, competencyId);
+    const isAssessor = await isEligibleAssessorForCompetency(req.db, req.user, competencyId);
     if (!isAssessor) {
       return res.status(403).json({ error: 'Access Denied: Only assessors competent to train for this particular competency can view assessment records.' });
     }
@@ -2756,16 +2770,18 @@ app.post('/api/competency/:id/assessment-record', authenticateToken, async (req,
   }
 
   try {
-    const isAssessor = await isCompetentToTrain(req.db, req.user.id, competencyId);
+    const isAssessor = await isEligibleAssessorForCompetency(req.db, req.user, competencyId);
     if (!isAssessor) {
       return res.status(403).json({ error: 'Access Denied: Requires Assessor privileges competent to train for this particular competency.' });
     }
 
+    const finalConcession = (concession !== undefined && concession !== null) ? String(concession).trim() : null;
+
     // Insert record of assessment
     await execute(
       req.db,
-      `INSERT INTO assessment_records (trainee_id, competency_id, assessor_id, assessment_type, result, status_outcome, feedback) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [trainee_id, competencyId, assessor_id, assessment_type, result, status_outcome, feedback || '']
+      `INSERT INTO assessment_records (trainee_id, competency_id, assessor_id, assessment_type, result, status_outcome, feedback, concession) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [trainee_id, competencyId, assessor_id, assessment_type, result, status_outcome, feedback || '', finalConcession]
     );
 
     // Update staff_competency_progress
