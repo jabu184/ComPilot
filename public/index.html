@@ -2737,7 +2737,7 @@
               </div>
 
               <div class="mb-2.5">
-                <label class="block text-xs font-semibold text-gray-700 mb-1">Assessor Feedback / Assessment Notes: <span class="text-red-500">*</span></label>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Assessor Feedback / Assessment Notes: <span class="text-gray-400 font-normal">(optional)</span></label>
                 <textarea v-model="newAssessment.feedback" rows="3" placeholder="Provide feedback detailing the assessment discussion, clinical observation, strengths, or areas for development..." class="w-full border border-gray-300 rounded px-2.5 py-2 text-xs focus:ring-indigo-500 focus:border-indigo-500"></textarea>
               </div>
 
@@ -2748,17 +2748,16 @@
                     <svg class="w-4 h-4 text-amber-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
                     </svg>
-                    <span>Concession / Conditions Attached to this Assessment:</span>
+                    <span>Concession / Conditions of Competency:</span>
                   </span>
                   <span class="text-[11px] font-normal text-amber-700">Optional</span>
                 </label>
-                <textarea v-model="newAssessment.concession" rows="2" placeholder="Detail any concessions, conditions, or review restrictions attached to this specific assessment (e.g. 'Signed off with concession: supervision required on stereotactic linac until 3 cases completed')..." class="w-full border border-amber-300 rounded px-2.5 py-1.5 text-xs bg-white text-gray-900 focus:ring-amber-500 focus:border-amber-500"></textarea>
-                <p class="text-[11px] text-amber-800/80 mt-1">Every assessment can have its own concession. Leave blank if signing off without concessions.</p>
+                <textarea v-model="newAssessment.concession" rows="2" class="w-full border border-amber-300 rounded px-2.5 py-1.5 text-xs bg-white text-gray-900 focus:ring-amber-500 focus:border-amber-500"></textarea>
               </div>
 
               <div class="flex justify-end gap-2">
                 <button type="button" @click="cancelAssessmentForm" class="px-3 py-1.5 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100 border border-gray-300">Cancel</button>
-                <button type="button" @click="submitAssessmentRecord" :disabled="isSubmittingAssessment || !newAssessment.feedback.trim()" class="px-4 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition">
+                <button type="button" @click="submitAssessmentRecord" :disabled="isSubmittingAssessment" class="px-4 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition">
                   {{ isSubmittingAssessment ? 'Saving Record...' : 'Save Record of Assessment' }}
                 </button>
               </div>
@@ -5135,7 +5134,7 @@
           if (!user.value || !selectedCell.value || !selectedCell.value.user || !selectedCell.value.comp) return '';
           if (selectedCell.value.user.id === user.value.id) return 'Assessors cannot record assessments on themselves';
           if (!isCompetentToTrainComp(user.value.id, selectedCell.value.comp.id) && user.value.username !== 'admin') {
-            return 'Assessment locked pending due to competency status';
+            return 'Assessment locked pending own competency';
           }
           return '';
         });
@@ -9830,7 +9829,7 @@
 
         const openAssessmentForm = (targetType = 'c', defaultResult = 'Pass') => {
           if (!canCarryOutAssessment.value) {
-            customAlert(assessmentLockedTooltip.value || "Assessment locked pending due to competency status", "Access Restricted");
+            customAlert(assessmentLockedTooltip.value || "Assessment locked pending own competency", "Access Restricted");
             return;
           }
           newAssessment.value.type = targetType;
@@ -9873,13 +9872,10 @@
 
         const submitAssessmentRecord = async () => {
           if (!canCarryOutAssessment.value) {
-            customAlert("Only authorized assessors for this competency can record assessments.", "Access Denied");
+            customAlert(assessmentLockedTooltip.value || "Assessment locked pending own competency", "Access Restricted");
             return;
           }
-          if (!newAssessment.value.feedback || !newAssessment.value.feedback.trim()) {
-            customAlert("Please provide assessor feedback / notes for this assessment record.", "Feedback Required");
-            return;
-          }
+
           isSubmittingAssessment.value = true;
           try {
             const isPassing = newAssessment.value.result === 'Pass';
@@ -9894,7 +9890,7 @@
                 assessment_type: newAssessment.value.type,
                 result: newAssessment.value.result,
                 status_outcome: statusOutcome,
-                feedback: newAssessment.value.feedback.trim(),
+                feedback: (newAssessment.value.feedback || '').trim(),
                 concession: chosenConcession
               })
             });
