@@ -7,7 +7,7 @@ const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const AdmZip = require('adm-zip');
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -1287,6 +1287,72 @@ app.put('/api/competencies/:id', authenticateToken, requireAdmin, async (req, re
   }
 });
 
+app.get('/api/competencies/:id/impact', authenticateToken, requireAdmin, async (req, res) => {
+  const compId = req.params.id;
+  try {
+    const compRows = await query(req.db, `SELECT task_name, category FROM competencies WHERE id = ?`, [compId]);
+    const comp = compRows.length > 0 ? compRows[0] : null;
+
+    const fileUploads = await query(req.db, `SELECT file_name, file_path, user_id FROM file_uploads WHERE competency_id = ?`, [compId]);
+    const progressRows = await query(req.db, `SELECT user_id, current_status, date_started, date_signed_off FROM staff_competency_progress WHERE competency_id = ?`, [compId]);
+    const planLogs = await query(req.db, `SELECT id, trainee_id, status FROM patient_plan_logs WHERE competency_id = ?`, [compId]);
+    const assessments = await query(req.db, `SELECT id, trainee_id, result FROM assessment_records WHERE competency_id = ?`, [compId]);
+    const vivas = await query(req.db, `SELECT id, trainee_id FROM viva_evaluations WHERE competency_id = ?`, [compId]);
+    const selfEvals = await query(req.db, `SELECT id, user_id FROM self_evaluations WHERE competency_id = ?`, [compId]);
+
+    const affectedUserMap = {};
+    const recordUser = (userId, detail) => {
+      if (!userId) return;
+      if (!affectedUserMap[userId]) {
+        affectedUserMap[userId] = { id: userId, progress: null, files: 0, planLogs: 0, assessments: 0, evals: 0 };
+      }
+      if (detail.progress) affectedUserMap[userId].progress = detail.progress;
+      if (detail.files) affectedUserMap[userId].files += detail.files;
+      if (detail.planLogs) affectedUserMap[userId].planLogs += detail.planLogs;
+      if (detail.assessments) affectedUserMap[userId].assessments += detail.assessments;
+      if (detail.evals) affectedUserMap[userId].evals += detail.evals;
+    };
+
+    progressRows.forEach(p => recordUser(p.user_id, { progress: p.current_status || 'started' }));
+    fileUploads.forEach(f => recordUser(f.user_id, { files: 1 }));
+    planLogs.forEach(l => recordUser(l.trainee_id, { planLogs: 1 }));
+    assessments.forEach(a => recordUser(a.trainee_id, { assessments: 1 }));
+    vivas.forEach(v => recordUser(v.trainee_id, { evals: 1 }));
+    selfEvals.forEach(s => recordUser(s.user_id, { evals: 1 }));
+
+    const userIds = Object.keys(affectedUserMap).map(id => parseInt(id, 10));
+    const userDetails = [];
+    if (userIds.length > 0) {
+      const placeholders = userIds.map(() => '?').join(',');
+      const usersList = await query(sharedDb, `SELECT id, full_name, username, designation FROM users WHERE id IN (${placeholders}) ORDER BY full_name ASC`, userIds);
+      usersList.forEach(u => {
+        const stats = affectedUserMap[u.id] || {};
+        userDetails.push({
+          id: u.id,
+          full_name: u.full_name || u.username,
+          designation: u.designation || 'Staff',
+          current_status: stats.progress || null,
+          files_count: stats.files || 0,
+          plan_logs_count: stats.planLogs || 0,
+          assessments_count: stats.assessments || 0
+        });
+      });
+    }
+
+    res.json({
+      competency: comp,
+      fileCount: fileUploads.length,
+      progressCount: progressRows.length,
+      planLogCount: planLogs.length,
+      assessmentCount: assessments.length,
+      evalCount: vivas.length + selfEvals.length,
+      affectedUsers: userDetails
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/api/competencies/:id', authenticateToken, requireAdmin, async (req, res) => {
   const compId = req.params.id;
   try {
@@ -2223,11 +2289,12 @@ app.put('/api/planning-logs/:id/reassign', authenticateToken, async (req, res) =
 
     const prevTrainerUser = await query(sharedDb, `SELECT full_name, username FROM users WHERE id = ?`, [log.assigned_assessor_id]);
     const prevTrainerName = prevTrainerUser.length > 0 ? (prevTrainerUser[0].full_name || prevTrainerUser[0].username) : (req.user.full_name || req.user.username || `Trainer ID ${log.assigned_assessor_id}`);
+    const currentUserName = req.user.full_name || req.user.username || `Trainer ID ${req.user.id}`;
 
     let finalComments = log.assessor_comments || '';
     const candidateComment = (assessor_comments || handover_notes || '').trim();
     if (candidateComment) {
-      finalComments = updateAssessorCommentsTrail(finalComments, prevTrainerName, candidateComment, true, null);
+      finalComments = updateAssessorCommentsTrail(finalComments, currentUserName, candidateComment, true, null);
     } else if (finalComments && !finalComments.includes('[')) {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB');
@@ -3986,7 +4053,7 @@ app.post('/api/admin/backup/:scope', authenticateToken, requireSuperuser, async 
     res.json({
       success: true,
       app_version: APP_VERSION,
-      version: '2.7',
+      version: '2.8',
       scope: scope,
       date: dateStr,
       databases: backupData,
@@ -4527,7 +4594,7 @@ app.get('/api/admin/reports/all-training-records-zip', authenticateToken, requir
         // Header
         doc.rect(36, 36, 523, 40).fill('#1e3a8a');
         doc.fillColor('#ffffff').fontSize(14).font('Helvetica-Bold').text('IR(ME)R Clinical Competency & Training Record', 46, 45);
-        doc.fontSize(9).font('Helvetica').text(`System: Compilot Competency Matrix | Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}`, 46, 62);
+        doc.fontSize(9).font('Helvetica').text(`System: Compass Competency Matrix | Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}`, 46, 62);
         
         doc.y = 88;
 
@@ -4972,7 +5039,7 @@ function renderCompetencyAssessmentForm(doc, data) {
   // Footer
   doc.rect(36, 785, 523, 0.5).fill('#cbd5e1');
   doc.fillColor('#64748b').fontSize(6.5).font('Helvetica').text(
-    'This document is a formal record of clinical training and competency under IR(ME)R 2017. Generated electronically by Compilot.',
+    'This document is a formal record of clinical training and competency under IR(ME)R 2017. Generated electronically by Compass.',
     36,
     792,
     { align: 'center', width: 523, lineBreak: false }
@@ -5162,7 +5229,7 @@ async function generateOverviewMatrixPdfBuffer(targetSection = 'all') {
       const secLabel = pageSectionMap[i] || 'Overview';
       doc.rect(tableLeft, 578, tableWidth, 0.5).fill('#cbd5e1');
       doc.fillColor('#64748b').fontSize(6).font('Helvetica').text(
-        `Compilot Competency Matrix System - Formal Record under IR(ME)R 2017 | Section: ${secLabel} | Page ${i + 1} of ${pages.count}`,
+        `Compass Competency Matrix System - Formal Record under IR(ME)R 2017 | Section: ${secLabel} | Page ${i + 1} of ${pages.count}`,
         tableLeft,
         582,
         { align: 'center', width: tableWidth, lineBreak: false }
