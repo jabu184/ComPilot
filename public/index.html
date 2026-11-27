@@ -16,11 +16,11 @@
     };
   </script>
   <!-- Load Tailwind CSS -->
-  <script src="js/tailwindcss.js?v=2.8"></script>
+  <script src="js/tailwindcss.js?v=2.9"></script>
   <!-- Load Vue.js -->
-  <script src="js/vue.global.prod.js?v=2.8"></script>
+  <script src="js/vue.global.prod.js?v=2.9"></script>
   <!-- Load Chart.js -->
-  <script src="js/chart.js?v=2.8"></script>
+  <script src="js/chart.js?v=2.9"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans p-8">
   <div id="app" class="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-6">
@@ -922,6 +922,24 @@
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label><textarea v-model="newComp.description" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" placeholder="Provide additional details about this competency..."></textarea></div>
               <div class="sm:col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">Renewal Period (Months)</label><input v-model.number="newComp.renewal_period_months" type="number" min="1" class="block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border px-3 py-2" :placeholder="`Default: ${globalSettings.default_renewal_period || 36}`"></div>
               <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Leaderboard Tracking Basis</label>
+                <div class="flex flex-wrap items-center gap-4 mt-2">
+                  <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="radio" value="default" v-model="newComp.leaderboard_type" class="h-4 w-4 text-blue-600">
+                    <span class="text-sm font-medium text-gray-700">Section Default ({{ (activeSectionLeaderboardBasis || 'qa') === 'qa' ? 'QA Records' : 'Logbooks' }})</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="radio" value="qa" v-model="newComp.leaderboard_type" class="h-4 w-4 text-blue-600">
+                    <span class="text-sm font-medium text-gray-700">QA Records</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="radio" value="logbook" v-model="newComp.leaderboard_type" class="h-4 w-4 text-blue-600">
+                    <span class="text-sm font-medium text-gray-700">Logbooks (Case Logs)</span>
+                  </label>
+                </div>
+                <p class="text-xs text-gray-500 mt-1.5">Determines whether leaderboards and statistics track completed QATrack tests or clinical logbook case entries for this competency.</p>
+              </div>
+              <div class="sm:col-span-2 bg-white p-3 border rounded shadow-sm mt-1">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Self-Evaluation Questionnaires</label>
                 <div class="flex flex-col gap-2 pl-4">
                   <label class="flex items-center space-x-2 cursor-pointer">
@@ -1117,7 +1135,10 @@
               <div class="flex items-center flex-grow text-sm">
                 <span class="text-gray-400 w-6 flex-shrink-0" title="Drag to reorder">☰</span>
                 <span class="font-medium text-gray-700 w-1/4 truncate pr-2" :title="c.category">{{ c.category }}</span>
-                <span class="flex-grow truncate pr-2" :title="c.task_name">{{ c.task_name }}</span>
+                <span class="flex-grow truncate pr-2 flex items-center gap-1.5" :title="c.task_name">
+                  <span>{{ c.task_name }}</span>
+                  <span v-if="c.leaderboard_type && c.leaderboard_type !== 'default'" class="text-[10px] bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-semibold">{{ c.leaderboard_type === 'qa' ? 'QA Records' : 'Logbooks' }}</span>
+                </span>
               </div>
               <div class="flex justify-end gap-2 items-center mt-2 sm:mt-0 w-full sm:w-32">
                 <button @click="editComp(c)" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-semibold transition shadow-sm">Edit</button>
@@ -1982,7 +2003,7 @@
                   <th class="px-3 py-2 text-left text-sm font-semibold">Section Name</th>
                   <th class="px-3 py-2 text-center text-sm font-semibold">Status</th>
                   <th class="px-3 py-2 text-center text-sm font-semibold">Achievements</th>
-                  <th class="px-3 py-2 text-center text-sm font-semibold">Leaderboard Basis</th>
+                  <th class="px-3 py-2 text-center text-sm font-semibold">Default Leaderboard Basis</th>
                   <th class="px-3 py-2 text-right text-sm font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -1997,7 +2018,7 @@
                   </td>
                   <td class="px-3 py-2 text-sm text-center">
                     <button @click="toggleSectionLeaderboardType(idx)" :class="['px-2 py-1 rounded text-xs font-bold transition shadow-sm', (section.leaderboardType || (section.name === 'QA' ? 'qa' : 'logbook')) === 'qa' ? 'bg-amber-100 text-amber-850 border border-amber-200' : 'bg-purple-100 text-purple-855 border border-purple-200']">
-                      {{ (section.leaderboardType || (section.name === 'QA' ? 'qa' : 'logbook')) === 'qa' ? 'QA Records' : 'Logbooks' }}
+                      {{ (section.leaderboardType || (section.name === 'QA' ? 'qa' : 'logbook')) === 'qa' ? 'QA Records (Default)' : 'Logbooks (Default)' }}
                     </button>
                   </td>
                   <td class="px-3 py-2 text-sm text-right">
@@ -2017,7 +2038,7 @@
       </div>
 
       <!-- Interactive Cell Modal -->
-      <div v-if="selectedCell" @click.self="closeModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
+      <div v-if="selectedCell" @click.self="closeModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-[85] p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
           <div class="flex justify-between items-start mb-4">
             <div>
@@ -3160,17 +3181,223 @@
       </div>
     </div>
 
+    <!-- Individual Category User Competencies Breakdown Splash Modal -->
+    <div v-if="categoryBreakdownModal.isOpen && categoryBreakdownModal.user" 
+         @click.self="closeCategoryUserBreakdown" 
+         class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[75] p-4">
+      <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-gray-200 flex flex-col gap-4">
+        
+        <!-- Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-200 gap-3">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl">📂</span>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-xl font-bold text-gray-900">
+                  {{ categoryBreakdownModal.user.fullName }}
+                </h3>
+                <span class="text-xs bg-indigo-100 text-indigo-800 font-bold px-2.5 py-0.5 rounded-full border border-indigo-200">
+                  {{ categoryBreakdownModal.user.designation }}
+                </span>
+                <span :class="getStatusBadgeClassByCode(categoryBreakdownModal.user.status)" class="uppercase font-bold text-xs">
+                  Category Status: {{ categoryBreakdownModal.user.status }}
+                </span>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                Individual Competency Breakdown for <strong class="text-blue-900">{{ statCompModal.competency?.category }}</strong>
+                ({{ (categoryBreakdownModal.user.competencies || []).length }} competencies)
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button 
+              type="button" 
+              @click="syncCategoryUserQATrack(categoryBreakdownModal.user, statCompModal.competency?.category)" 
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              title="Sync QATrack records for this user across all competencies in this category"
+            >
+              <span>↻</span>
+              <span>Sync Category QATrack</span>
+            </button>
+            <button 
+              type="button" 
+              @click="closeCategoryUserBreakdown" 
+              class="text-gray-400 hover:text-gray-600 font-bold text-2xl leading-none px-2 ml-1"
+              title="Close breakdown"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+
+        <!-- Table similar to All Tasks Combined table -->
+        <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-2xs bg-white">
+          <table class="min-w-full divide-y divide-gray-200 text-xs">
+            <thead class="bg-gray-100 text-gray-700">
+              <tr>
+                <th @click="toggleUserCompSort('task_name')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Competency / Task <span v-if="userCompSortCol === 'task_name'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th @click="toggleUserCompSort('status')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Status <span v-if="userCompSortCol === 'status'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th @click="toggleUserCompSort('prereq_completed')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Prerequisites Progress <span v-if="userCompSortCol === 'prereq_completed'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th @click="toggleUserCompSort('completed_records')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Completed Logs / QA <span v-if="userCompSortCol === 'completed_records'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th @click="toggleUserCompSort('days_value')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Days (Achieve / In Progress) <span v-if="userCompSortCol === 'days_value'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th @click="toggleUserCompSort('median_mins')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Median Completion Time <span v-if="userCompSortCol === 'median_mins'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th @click="toggleUserCompSort('last_interaction_timestamp')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                  Last Interaction <span v-if="userCompSortCol === 'last_interaction_timestamp'">{{ userCompSortDir === 1 ? '▲' : '▼' }}</span>
+                </th>
+                <th class="px-3 py-2.5 text-center font-semibold">
+                  Timing Analytics
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              <tr v-for="comp in sortedSelectedUserComps" :key="comp.id" class="hover:bg-blue-50/50 transition">
+                <td class="px-3 py-2 font-bold text-gray-900">
+                  {{ comp.task_name }}
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <button 
+                    type="button"
+                    @click="openUserCompSplashFromBreakdown(categoryBreakdownModal.user, comp)"
+                    :class="getStatusBadgeClassByCode(comp.status)"
+                    class="uppercase font-bold cursor-pointer hover:opacity-80 hover:scale-105 active:scale-95 transition-transform duration-100 shadow-2xs"
+                    title="Click to open competency modal"
+                  >
+                    {{ comp.status }}
+                  </button>
+                </td>
+                <td class="px-3 py-2 text-center font-medium">
+                  <span v-if="comp.prereq_total > 0" :class="comp.prereq_completed >= comp.prereq_total ? 'text-green-700 font-bold' : 'text-gray-700'">
+                    {{ comp.prereq_display }}
+                  </span>
+                  <span v-else class="text-gray-400">-</span>
+                </td>
+                <td class="px-3 py-2 text-center font-semibold">
+                  <span v-if="comp.required_records > 0" :class="comp.records_met ? 'text-green-700 font-bold' : 'text-gray-800'">
+                    {{ comp.completed_records }} / {{ comp.required_records }}
+                  </span>
+                  <span v-else class="text-gray-800">
+                    {{ comp.completed_records }}
+                  </span>
+                  <span class="text-[10px] text-gray-500 font-normal ml-1">({{ comp.leaderboard_basis === 'logbook' ? 'Logs' : 'QA' }})</span>
+                </td>
+                <td class="px-3 py-2 text-center font-medium">
+                  <span :class="comp.days_display && comp.days_display.includes('progress') ? 'text-amber-700' : 'text-gray-800'">
+                    {{ comp.days_display }}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-center font-medium text-gray-700">
+                  {{ comp.median_display }}
+                </td>
+                <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                  {{ comp.last_interaction_display }}
+                </td>
+                <td class="px-3 py-2 text-center whitespace-nowrap">
+                  <button 
+                    type="button" 
+                    @click.stop="openUserTimingStatsForComp(categoryBreakdownModal.user, comp)"
+                    class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded text-xs font-semibold transition flex items-center gap-1 mx-auto"
+                    title="View timing analytics for this task"
+                  >
+                    <span>Analytics</span>
+                    <span>&rarr;</span>
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!categoryBreakdownModal.user.competencies || categoryBreakdownModal.user.competencies.length === 0">
+                <td colspan="8" class="px-3 py-6 text-center text-gray-400 italic">No competencies assigned for this user in this category.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-end pt-3 border-t border-gray-200">
+          <button 
+            type="button" 
+            @click="closeCategoryUserBreakdown" 
+            class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1.5 px-4 rounded text-xs transition"
+          >
+            Close
+          </button>
+        </div>
+
+      </div>
+    </div>
+
     <!-- Stat Competency Modal -->
     <div v-if="statCompModal.isOpen" @click.self="closeStatCompModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-[60] p-4">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-start mb-4 border-b pb-2">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-3 gap-3">
           <div>
-            <h3 class="text-xl font-bold text-gray-900">Competency Records Details</h3>
-            <p class="text-sm font-semibold text-blue-900 mt-1">{{ statCompModal.competency?.category }} - {{ statCompModal.competency?.task_name }}</p>
+            <div class="flex items-center gap-2">
+              <h3 class="text-xl font-bold text-gray-900">
+                {{ statCompModal.competency?.task_name === 'All Tasks Combined' ? 'Category Records Overview' : 'Competency Records Overview' }}
+              </h3>
+              <span v-if="statCompModal.competency?.task_name === 'All Tasks Combined'" class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-200">
+                All Tasks Combined
+              </span>
+            </div>
+            <p class="text-sm font-semibold text-blue-900 mt-1">
+              {{ statCompModal.competency?.category }} - {{ statCompModal.competency?.task_name }}
+            </p>
           </div>
-          <button @click="closeStatCompModal" class="text-gray-400 hover:text-gray-600">
-            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
+          <div class="flex items-center gap-3">
+            <!-- Sync Section QATrack (all categories/users in the section) -->
+            <button 
+              v-if="statCompModal.competency?.task_name === 'All Tasks Combined'"
+              type="button" 
+              @click="syncAllUsersQATrack" 
+              :disabled="isSyncingAll"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-xs disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              title="Sync QATrack records for all categories and active users in this section"
+            >
+              <span v-if="isSyncingAll" class="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"></span>
+              <span v-else>↻</span>
+              <span>Sync Section QATrack</span>
+            </button>
+
+            <!-- Sync Single Competency QATrack (when viewing individual competency with QATrack) -->
+            <button 
+              v-else-if="statCompModal.competency?.hasQATrack"
+              type="button" 
+              @click="syncSingleCompetencyAllUsers(statCompModal.competency)" 
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-xs disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              title="Sync QATrack records for this competency across all users"
+            >
+              <span v-if="syncProgressModal.isOpen && syncProgressModal.title.includes(statCompModal.competency?.task_name)" class="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full inline-block"></span>
+              <span v-else>↻</span>
+              <span>Sync Competency QATrack</span>
+            </button>
+
+            <!-- Switch Category dropdown when viewing All Tasks Combined -->
+            <div v-if="statCompModal.competency?.task_name === 'All Tasks Combined'" class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 shadow-2xs">
+              <span class="text-xs font-bold text-gray-600">Switch Category:</span>
+              <select 
+                :value="statCompModal.competency?.category" 
+                @change="onStatCategoryChange($event.target.value)" 
+                class="border border-gray-300 rounded px-2 py-0.5 text-xs bg-white focus:ring-blue-500 focus:border-blue-500 font-semibold text-gray-800 max-w-[220px]"
+              >
+                <option v-for="cat in availableSectionCategories" :key="cat" :value="cat">
+                  {{ cat }}
+                </option>
+              </select>
+            </div>
+            <button @click="closeStatCompModal" class="text-gray-400 hover:text-gray-600">
+              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
         </div>
 
         <div v-if="statCompModal.loading" class="text-center text-gray-500 py-8">
@@ -3180,75 +3407,212 @@
           No applicable staff found for this competency.
         </div>
         <div v-else class="space-y-6">
-          <!-- Combined QATrack or Logbook Records Leaderboard -->
-          <div v-if="statCompModal.competency?.hasQATrack || statCompModal.competency?.hasCaseLogs" class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-6">
-            <div class="flex justify-between items-center border-b pb-3">
-              <h4 class="text-md font-bold text-gray-800 uppercase tracking-wide">
-                {{ statCompModal.competency?.hasCaseLogs ? 'Logbook Records Leaderboard' : 'QA Records Leaderboard' }}
-              </h4>
+          <!-- Active Staff Progress Overview Table (For BOTH Category and Single Competency) -->
+          <div class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div>
+                  <h4 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                    <span>👥 Active Staff Progress Overview</span>
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full font-medium">
+                      {{ filteredStatCategorySummary.length }} of {{ statCompModal.summary.length }}
+                    </span>
+                  </h4>
+                  <p class="text-xs text-gray-500">
+                    {{ statCompModal.competency?.task_name === 'All Tasks Combined' ? ('Combined figures across all competencies in ' + statCompModal.competency?.category) : ('Staff progress and records for ' + statCompModal.competency?.task_name) }}
+                  </p>
+                </div>
+
+                  <!-- Search Bar -->
+                  <div class="relative w-full sm:w-60">
+                    <input 
+                      v-model="statCategorySearchQuery" 
+                      type="text" 
+                      placeholder="Search staff or designation..." 
+                      class="w-full text-xs pl-8 pr-7 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition"
+                    />
+                    <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <button 
+                      v-if="statCategorySearchQuery" 
+                      @click="statCategorySearchQuery = ''" 
+                      class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold px-1"
+                      title="Clear search"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Status Filter Toggle Pills -->
+                <div class="flex items-center gap-1.5 flex-wrap text-xs">
+                  <span class="text-gray-500 font-medium mr-1">Filter Status:</span>
+                  <button 
+                    type="button" 
+                    @click="toggleStatCategoryStatusFilter('all')" 
+                    :class="statCategoryStatusFilters.length === 0 ? 'bg-blue-600 text-white font-bold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium'" 
+                    class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer"
+                  >
+                    All
+                  </button>
+                  <button 
+                    type="button" 
+                    @click="toggleStatCategoryStatusFilter('t')" 
+                    :class="statCategoryStatusFilters.includes('t') ? 'bg-yellow-500 text-white font-bold shadow-xs' : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border border-yellow-200 font-medium'" 
+                    class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                  >
+                    <span>In Training (T)</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    @click="toggleStatCategoryStatusFilter('m')" 
+                    :class="statCategoryStatusFilters.includes('m') ? 'bg-purple-600 text-white font-bold shadow-xs' : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-medium'" 
+                    class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Meets Reqs (M)</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    @click="toggleStatCategoryStatusFilter('a')" 
+                    :class="statCategoryStatusFilters.includes('a') ? 'bg-orange-500 text-white font-bold shadow-xs' : 'bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 font-medium'" 
+                    class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Assessment (A)</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    @click="toggleStatCategoryStatusFilter('c')" 
+                    :class="statCategoryStatusFilters.includes('c') ? 'bg-green-600 text-white font-bold shadow-xs' : 'bg-green-50 hover:bg-green-100 text-green-800 border border-green-200 font-medium'" 
+                    class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Competent (C)</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    @click="toggleStatCategoryStatusFilter('x')" 
+                    :class="statCategoryStatusFilters.includes('x') ? 'bg-blue-600 text-white font-bold shadow-xs' : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-medium'" 
+                    class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Assessor (X)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Combined Staff Overview Table -->
+              <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-2xs">
+                <table class="min-w-full divide-y divide-gray-200 text-xs">
+                  <thead class="bg-gray-100 text-gray-700">
+                    <tr>
+                      <th @click="toggleStatCategorySort('fullName')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        Trainee / Staff <span v-if="statCategorySortCol === 'fullName'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th @click="toggleStatCategorySort('status')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        {{ statCompModal.competency?.task_name === 'All Tasks Combined' ? 'Category Status' : 'Status' }} <span v-if="statCategorySortCol === 'status'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th @click="toggleStatCategorySort('prereq_completed')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        Total Prerequisites Progress <span v-if="statCategorySortCol === 'prereq_completed'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th @click="toggleStatCategorySort('completed_records')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        Completed Logs / QA <span v-if="statCategorySortCol === 'completed_records'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th @click="toggleStatCategorySort('days_value')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        Days (Achieve / In Progress) <span v-if="statCategorySortCol === 'days_value'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th @click="toggleStatCategorySort('median_mins')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        Median Completion Time <span v-if="statCategorySortCol === 'median_mins'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th @click="toggleStatCategorySort('last_interaction_timestamp')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                        Last Interaction <span v-if="statCategorySortCol === 'last_interaction_timestamp'">{{ statCategorySortDir === 1 ? '▲' : '▼' }}</span>
+                      </th>
+                      <th class="px-3 py-2.5 text-center font-semibold">
+                        Timing Analytics
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 bg-white">
+                    <tr v-for="userSummary in filteredStatCategorySummary" :key="userSummary.userId" class="hover:bg-blue-50/50 transition">
+                      <td class="px-3 py-2 cursor-pointer group" @click="openUserTimingStats(userSummary)">
+                        <div class="font-bold text-gray-900 group-hover:text-blue-600 transition flex items-center gap-1.5">
+                          <span>{{ userSummary.fullName }}</span>
+                          <span class="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition">🔍</span>
+                        </div>
+                        <div class="text-[11px] text-gray-500">{{ userSummary.designation }}</div>
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <button 
+                          type="button"
+                          @click.stop="handleStatUserStatusClick(userSummary)"
+                          :class="getStatusBadgeClassByCode(userSummary.status)"
+                          class="uppercase font-bold cursor-pointer hover:scale-110 active:scale-95 transition-transform duration-100 shadow-2xs px-2.5 py-0.5 rounded-full"
+                          :title="statCompModal.competency?.task_name === 'All Tasks Combined' ? 'Click to view individual competency breakdown for this user' : 'Click to view competency details and sign-off'"
+                        >
+                          {{ userSummary.status }}
+                        </button>
+                      </td>
+                      <td class="px-3 py-2 text-center font-medium">
+                        <span v-if="userSummary.prereq_total > 0" :class="userSummary.prereq_completed >= userSummary.prereq_total ? 'text-green-700 font-bold' : 'text-gray-700'">
+                          {{ userSummary.prereq_display }}
+                        </span>
+                        <span v-else class="text-gray-400">-</span>
+                      </td>
+                      <td class="px-3 py-2 text-center font-semibold">
+                        <span v-if="userSummary.required_records > 0" :class="userSummary.records_met ? 'text-green-700 font-bold' : 'text-gray-800'">
+                          {{ userSummary.completed_records }} / {{ userSummary.required_records }}
+                        </span>
+                        <span v-else class="text-gray-800">
+                          {{ userSummary.completed_records }}
+                        </span>
+                        <span class="text-[10px] text-gray-500 font-normal ml-1">({{ userSummary.leaderboard_basis === 'logbook' ? 'Logs' : 'QA' }})</span>
+                      </td>
+                      <td class="px-3 py-2 text-center font-medium">
+                        <span :class="userSummary.days_display && userSummary.days_display.includes('progress') ? 'text-amber-700' : 'text-gray-800'">
+                          {{ userSummary.days_display }}
+                        </span>
+                      </td>
+                      <td class="px-3 py-2 text-center font-medium text-gray-700">
+                        {{ userSummary.median_display }}
+                      </td>
+                      <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                        {{ userSummary.last_interaction_display }}
+                      </td>
+                      <td class="px-3 py-2 text-center whitespace-nowrap">
+                        <button 
+                          type="button" 
+                          @click.stop="openUserTimingStats(userSummary)"
+                          class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded text-xs font-semibold transition flex items-center gap-1 mx-auto"
+                          title="View timing analytics for this user"
+                        >
+                          <span>Analytics</span>
+                          <span>&rarr;</span>
+                        </button>
+                      </td>
+                    </tr>
+                    <tr v-if="filteredStatCategorySummary.length === 0">
+                      <td colspan="8" class="px-3 py-6 text-center text-gray-400 italic">No staff members match the selected filter.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Cohort-Wide Timing Statistics & Median Leaderboard (For BOTH Category and Single Task) -->
+            <div v-if="statCompModal.competency?.hasQATrack || statCompModal.competency?.hasCaseLogs || cohortTimingStats.count > 0" class="bg-white p-6 rounded-lg border border-gray-200 shadow-sm space-y-6">
+              <div class="flex justify-between items-center border-b pb-3">
+                <h4 class="text-md font-bold text-gray-800 uppercase tracking-wide">
+                  {{ (statCompModal.competency?.hasCaseLogs || statCompModal.competency?.leaderboard_basis === 'logbook') ? 'Cohort Timing Statistics' : 'QA Cohort Timing Statistics' }}
+                </h4>
               <div class="flex items-center gap-2">
-                <!-- Year Filter Dropdown -->
+                <span class="text-xs font-semibold text-gray-600">Period:</span>
                 <select v-model="selectedLeaderboardYear" class="border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:ring-blue-500 focus:border-blue-500 font-semibold text-gray-700">
                   <option value="all">All Years</option>
                   <option v-for="yr in availableLeaderboardYears" :key="yr" :value="yr">{{ yr }}</option>
                 </select>
-
-                <button v-if="statCompModal.competency?.hasQATrack" @click="syncSingleCompetencyAllUsers(statCompModal.competency)" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-[11px] font-bold py-1.5 px-3 rounded shadow-sm transition flex items-center gap-1.5" title="Sync QATrack for all users">
-                  <span v-if="syncProgressModal.isOpen && syncProgressModal.title.includes(statCompModal.competency?.task_name)" class="animate-spin h-3 w-3 border-2 border-indigo-800 border-t-transparent rounded-full inline-block"></span>
-                  <span v-else>↻</span>
-                  <span>Sync Records</span>
-                </button>
-                <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
-                  Max: {{ maxQaRecords }} records
-                </span>
-              </div>
-            </div>
-            
-            <div class="space-y-4">
-              <div v-for="(userSummary, index) in sortedQaSummary" :key="userSummary.userId" 
-                   @click="openUserTimingStats(userSummary)"
-                   class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 p-3 rounded-lg hover:bg-blue-50/70 transition-all duration-200 border border-gray-150 hover:border-blue-300 cursor-pointer shadow-2xs group">
-                
-                <!-- Rank Badge & User Info -->
-                <div class="w-full sm:w-1/3 flex items-center gap-3">
-                  <!-- Rank Badge -->
-                  <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
-                       :class="{
-                         'bg-amber-100 text-amber-800 border border-amber-200': index === 0 && userSummary.qaTotalCount > 0,
-                         'bg-slate-100 text-slate-700 border border-slate-200': index !== 0 || userSummary.qaTotalCount === 0
-                       }">
-                    <span v-if="index === 0 && userSummary.qaTotalCount > 0">🏆</span>
-                    <span v-else>{{ index + 1 }}</span>
-                  </div>
-                  
-                  <div class="flex flex-col gap-0.5">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="font-semibold text-gray-900 text-sm leading-tight group-hover:text-blue-900 transition">{{ userSummary.fullName }}</span>
-                    </div>
-                    <span class="text-xs text-gray-500 font-medium">{{ userSummary.designation }}</span>
-                    <span v-if="userSummary.status !== undefined" :class="getStatusBadgeClassByCode(userSummary.status)" class="w-fit">
-                      {{ getStatusLabelByCode(userSummary.status) }}
-                    </span>
-                  </div>
-                </div>
-                
-                <!-- Horizontal Bar & Count -->
-                <div class="flex-grow flex items-center gap-4 w-full sm:w-2/3">
-                  <div class="flex-grow bg-gray-100 rounded-full h-5 overflow-hidden relative shadow-inner border border-gray-200">
-                    <div 
-                      class="bg-gradient-to-r from-blue-500 via-indigo-500 to-indigo-600 h-full rounded-full transition-all duration-700 ease-out shadow-sm" 
-                      :style="`width: ${maxQaRecords > 0 ? (userSummary.qaTotalCount / maxQaRecords) * 100 : 0}%`"
-                    ></div>
-                  </div>
-                  <span class="font-mono text-sm font-bold text-gray-800 w-24 text-right bg-gray-50 border border-gray-200 px-2 py-0.5 rounded shadow-sm group-hover:border-blue-300 transition">
-                    {{ userSummary.qaTotalCount }} {{ statCompModal.competency?.hasCaseLogs ? 'Logs' : 'QA' }}
-                  </span>
-                </div>
               </div>
             </div>
 
-            <!-- Cohort-Wide Timing Statistics (All Users for Competency) -->
-            <div class="mt-8 pt-6 border-t border-gray-200">
+            <!-- Cohort-Wide Timing Statistics (All Users for Competency/Category) -->
+            <div :class="statCompModal.competency?.task_name === 'All Tasks Combined' ? '' : 'mt-8 pt-6 border-t border-gray-200'">
               <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
                 <div>
                   <h5 class="text-sm font-bold text-gray-900 uppercase tracking-wide flex items-center gap-2">
@@ -3389,42 +3753,13 @@
             </div>
           </div>
 
-          <!-- Original view for non-QATrack competencies (e.g. Case Logs only) -->
-          <template v-else>
-            <div v-for="userSummary in statCompModal.summary" :key="userSummary.userId" class="border border-gray-200 rounded p-4 bg-gray-50 flex flex-col gap-3 shadow-sm hover:shadow-md transition">
-              <div class="flex justify-between items-start">
-                <div>
-                  <span class="font-bold text-gray-800 text-sm">{{ userSummary.fullName }}</span>
-                  <span class="text-xs font-normal text-gray-500 ml-2">({{ userSummary.designation }})</span>
-                </div>
-              </div>
 
-              <!-- Case Logbook Requirements -->
-              <div v-if="userSummary.requiredCaseLogs > 0" class="space-y-2">
-                <h5 class="text-xs font-bold text-gray-600 uppercase tracking-wider">Case Logs</h5>
-                <div class="bg-white p-2.5 rounded border border-gray-150 shadow-inner flex flex-col gap-1.5">
-                  <div class="flex justify-between text-xs font-semibold">
-                    <span class="text-gray-700">Approved Logs</span>
-                    <span class="text-gray-900">{{ userSummary.caseLogApproved }} / {{ userSummary.requiredCaseLogs }} (Total Submitted: {{ userSummary.caseLogTotal }})</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden relative shadow-inner">
-                    <div :class="userSummary.caseLogApproved >= userSummary.requiredCaseLogs ? 'bg-green-500' : 'bg-blue-500'" class="h-full rounded-full transition-all" :style="`width: ${Math.min(100, (userSummary.caseLogApproved / (userSummary.requiredCaseLogs || 1)) * 100)}%`"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Neither -->
-              <div v-if="userSummary.qaBreakdown.length === 0 && userSummary.requiredCaseLogs === 0" class="text-xs text-gray-400 italic">
-                No QATrack or Case Log requirements for this competency.
-              </div>
-            </div>
-          </template>
         </div>
       </div>
     </div>
 
     <!-- Individual User Timing Details Modal Card -->
-    <div v-if="userTimingModal.isOpen" @click.self="closeUserTimingModal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[70] p-4">
+    <div v-if="userTimingModal.isOpen" @click.self="closeUserTimingModal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[85] p-4">
       <div class="bg-white rounded-lg shadow-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-gray-200">
         <div class="flex justify-between items-start mb-4 border-b pb-3">
           <div>
@@ -3434,7 +3769,7 @@
               <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">{{ userTimingModal.user?.designation }}</span>
             </div>
             <p class="text-xs text-gray-600 mt-1">
-              Timing Analytics for: <strong class="text-blue-900">{{ statCompModal.competency?.category }} - {{ statCompModal.competency?.task_name }}</strong>
+              Timing Analytics for: <strong class="text-blue-900">{{ statCompModal.competency?.category }} - {{ userTimingModal.customTaskName || statCompModal.competency?.task_name }}</strong>
             </p>
           </div>
           <div class="flex items-center gap-3">
@@ -3454,7 +3789,7 @@
 
         <div v-else>
           <div class="text-xs text-gray-500 mb-3">
-            Basis: <strong class="text-gray-700">{{ statCompModal.competency?.hasCaseLogs ? 'Logbook Turnaround Time (Submitted to Completed)' : 'QATrack Completion Time (Work Started to Work Completed)' }}</strong>
+            Basis: <strong class="text-gray-700">{{ (userTimingModal.user?.leaderboard_basis === 'logbook' || statCompModal.competency?.hasCaseLogs) ? 'Logbook Turnaround Time (Submitted to Completed)' : 'QATrack Completion Time (Work Started to Work Completed)' }}</strong>
           </div>
 
           <!-- KPI Cards with Benchmarks & Comparison Indicators (Soft Pastel: Green/Red, Grey, Purple) -->
@@ -3584,37 +3919,344 @@
       </div>
     </div>
 
-    <!-- Stat User Modal -->
+    <!-- User Analysis Modal (Overhauled) -->
     <div v-if="statUserModal.isOpen" @click.self="statUserModal.isOpen = false" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-[60] p-4">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-start mb-4">
-          <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-            <h3 class="text-xl font-bold text-gray-900">{{ statUserModal.user.full_name }} - Self-Evaluation Analysis</h3>
-            <select v-model="userStatEvalDateRange" class="border border-gray-300 rounded px-3 py-1 text-sm bg-white focus:ring-blue-500 focus:border-blue-500">
-              <option value="all">All Time</option>
-              <option value="12">Last 12 Months</option>
-              <option value="6">Last 6 Months</option>
-              <option value="3">Last 3 Months</option>
-            </select>
+      <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-6xl max-h-[92vh] overflow-y-auto border border-gray-200 flex flex-col gap-6">
+        
+        <!-- Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-200 gap-3">
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="text-2xl font-bold text-gray-900">{{ statUserModal.user?.full_name }}</h3>
+              <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-blue-200">User Analysis</span>
+            </div>
+            <p class="text-xs text-gray-500">
+              <span class="font-semibold text-gray-700">{{ statUserModal.user?.designation }}</span>
+              <span v-if="statUserModal.user?.date_in_post" class="ml-2">· In Post: {{ getTimeInPost(statUserModal.user?.date_in_post) }} ({{ formatDate(statUserModal.user?.date_in_post) }})</span>
+            </p>
           </div>
-          <button @click="statUserModal.isOpen = false" class="text-gray-400 hover:text-gray-600">
-            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          <div class="flex items-center gap-3 flex-wrap">
+            <!-- Sync User QATrack (all competencies for displayed user) -->
+            <button 
+              type="button" 
+              @click="syncUserQATrack(statUserModal.user)" 
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded text-xs transition shadow-xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              title="Sync QATrack records for all competencies for this user"
+            >
+              <span>↻</span>
+              <span>Sync User QATrack</span>
+            </button>
+
+            <!-- User Selector Dropdown -->
+            <div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 shadow-2xs">
+              <span class="text-xs font-bold text-gray-600">User:</span>
+              <select 
+                :value="statUserModal.user?.id" 
+                @change="onUserAnalysisUserChange($event.target.value)" 
+                class="border border-gray-300 rounded px-2 py-0.5 text-xs bg-white focus:ring-blue-500 focus:border-blue-500 font-semibold text-gray-800 max-w-[200px]"
+              >
+                <option v-for="u in sectionApplicableUsers" :key="u.id" :value="u.id">
+                  {{ u.full_name }} ({{ u.designation }})
+                </option>
+              </select>
+            </div>
+
+            <!-- Category Selector Dropdown -->
+            <div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 shadow-2xs">
+              <span class="text-xs font-bold text-gray-600">Category:</span>
+              <select 
+                v-model="userAnalysisSelectedCategory" 
+                class="border border-gray-300 rounded px-2 py-0.5 text-xs bg-white focus:ring-blue-500 focus:border-blue-500 font-semibold text-gray-800 max-w-[200px]"
+              >
+                <option value="all">All Categories</option>
+                <option v-for="cat in availableCategoriesForUserAnalysis" :key="cat" :value="cat">
+                  {{ cat }}
+                </option>
+              </select>
+            </div>
+
+            <button @click="statUserModal.isOpen = false" class="text-gray-400 hover:text-gray-600 font-bold text-2xl leading-none px-2 ml-1" title="Close">&times;</button>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="userAnalysisLoading" class="py-12 text-center text-gray-500 flex flex-col items-center justify-center gap-2">
+          <div class="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+          <span class="text-sm font-semibold">Loading user analysis...</span>
+        </div>
+
+        <template v-else>
+          <!-- Section 1: Active Competencies Overview Table -->
+          <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex flex-col gap-3">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div>
+                  <h4 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                    <span>🎯 Active Competencies Overview</span>
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full font-medium">{{ filteredUserAnalysisComps.length }} of {{ userAnalysisData.competencies?.length || 0 }}</span>
+                  </h4>
+                  <p class="text-xs text-gray-500">Summary of all competencies assigned to this user in {{ selectedDb }}</p>
+                </div>
+
+                <!-- Search Bar for Category or Task Name -->
+                <div class="relative w-full sm:w-60">
+                  <input 
+                    v-model="userAnalysisSearchQuery" 
+                    type="text" 
+                    placeholder="Search category or task..." 
+                    class="w-full text-xs pl-8 pr-7 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition"
+                  />
+                  <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                  <button 
+                    v-if="userAnalysisSearchQuery" 
+                    @click="userAnalysisSearchQuery = ''" 
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold px-1"
+                    title="Clear search"
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+
+              <!-- Status Filter Toggle Pills (T, M, A, C, X) -->
+              <div class="flex items-center gap-1.5 flex-wrap text-xs">
+                <span class="text-gray-500 font-medium mr-1">Filter Status:</span>
+                <button 
+                  type="button" 
+                  @click="toggleUserAnalysisStatusFilter('all')" 
+                  :class="userAnalysisStatusFilters.length === 0 ? 'bg-blue-600 text-white font-bold' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium'" 
+                  class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer"
+                >
+                  All
+                </button>
+                <button 
+                  type="button" 
+                  @click="toggleUserAnalysisStatusFilter('t')" 
+                  :class="userAnalysisStatusFilters.includes('t') ? 'bg-yellow-500 text-white font-bold shadow-xs' : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-800 border border-yellow-200 font-medium'" 
+                  class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>In Training (T)</span>
+                </button>
+                <button 
+                  type="button" 
+                  @click="toggleUserAnalysisStatusFilter('m')" 
+                  :class="userAnalysisStatusFilters.includes('m') ? 'bg-purple-600 text-white font-bold shadow-xs' : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-medium'" 
+                  class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>Meets Reqs (M)</span>
+                </button>
+                <button 
+                  type="button" 
+                  @click="toggleUserAnalysisStatusFilter('a')" 
+                  :class="userAnalysisStatusFilters.includes('a') ? 'bg-orange-500 text-white font-bold shadow-xs' : 'bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 font-medium'" 
+                  class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>Assessment (A)</span>
+                </button>
+                <button 
+                  type="button" 
+                  @click="toggleUserAnalysisStatusFilter('c')" 
+                  :class="userAnalysisStatusFilters.includes('c') ? 'bg-green-600 text-white font-bold shadow-xs' : 'bg-green-50 hover:bg-green-100 text-green-800 border border-green-200 font-medium'" 
+                  class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>Competent (C)</span>
+                </button>
+                <button 
+                  type="button" 
+                  @click="toggleUserAnalysisStatusFilter('x')" 
+                  :class="userAnalysisStatusFilters.includes('x') ? 'bg-blue-600 text-white font-bold shadow-xs' : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-medium'" 
+                  class="px-2.5 py-1 rounded-full text-xs transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>Assessor (X)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Competencies Table with Column Ordering -->
+            <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-2xs">
+              <table class="min-w-full divide-y divide-gray-200 text-xs">
+                <thead class="bg-gray-100 text-gray-700">
+                  <tr>
+                    <th @click="toggleUserAnalysisSort('category')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Category <span v-if="userAnalysisSortCol === 'category'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('task_name')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Competency / Task <span v-if="userAnalysisSortCol === 'task_name'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('status')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Status <span v-if="userAnalysisSortCol === 'status'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('prereq_completed')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Prerequisites Progress <span v-if="userAnalysisSortCol === 'prereq_completed'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('completed_records')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Completed Logs / QA <span v-if="userAnalysisSortCol === 'completed_records'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('days_value')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Days (Achieve / In Progress) <span v-if="userAnalysisSortCol === 'days_value'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('median_mins')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Median Completion Time <span v-if="userAnalysisSortCol === 'median_mins'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAnalysisSort('last_interaction_timestamp')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Last Interaction <span v-if="userAnalysisSortCol === 'last_interaction_timestamp'">{{ userAnalysisSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                  <tr v-for="comp in filteredUserAnalysisComps" :key="comp.id" class="hover:bg-gray-50 transition">
+                    <td class="px-3 py-2 text-gray-600 font-medium">{{ comp.category }}</td>
+                    <td class="px-3 py-2 text-gray-900 font-semibold">{{ comp.task_name }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <button 
+                        type="button" 
+                        @click="openUserCompSplash(comp)"
+                        :class="getStatusBadgeClassByCode(comp.status)" 
+                        class="uppercase cursor-pointer hover:opacity-80 hover:scale-105 active:scale-95 transition-transform duration-100 shadow-2xs font-bold"
+                        title="Click to open competency modal"
+                      >
+                        {{ comp.status }}
+                      </button>
+                    </td>
+                    <td class="px-3 py-2 text-center font-medium">
+                      <span v-if="comp.prereq_total > 0" :class="comp.prereq_completed >= comp.prereq_total ? 'text-green-700 font-bold' : 'text-gray-700'">
+                        {{ comp.prereq_display }}
+                      </span>
+                      <span v-else class="text-gray-400">-</span>
+                    </td>
+                    <td class="px-3 py-2 text-center font-semibold">
+                      <span v-if="comp.required_records > 0" :class="comp.records_met ? 'text-green-700 font-bold' : 'text-gray-800'">
+                        {{ comp.completed_records }} / {{ comp.required_records }}
+                      </span>
+                      <span v-else class="text-gray-800">
+                        {{ comp.completed_records }}
+                      </span>
+                      <span class="text-[10px] text-gray-500 font-normal ml-1">({{ comp.leaderboard_basis === 'logbook' ? 'Logs' : 'QA' }})</span>
+                    </td>
+                    <td class="px-3 py-2 text-center font-medium">
+                      <span :class="comp.days_display.includes('progress') ? 'text-amber-700' : 'text-gray-800'">
+                        {{ comp.days_display }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2 text-center font-medium text-gray-700">
+                      {{ comp.median_display }}
+                    </td>
+                    <td class="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                      {{ comp.last_interaction_display }}
+                    </td>
+                  </tr>
+                  <tr v-if="filteredUserAnalysisComps.length === 0">
+                    <td colspan="8" class="px-3 py-6 text-center text-gray-400 italic">No competencies match the selected filter.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: Assessment Records Table -->
+          <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex flex-col gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-gray-100 gap-2">
+              <div>
+                <h4 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                  <span>📋 Assessment Records History</span>
+                  <span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full font-medium">{{ (userAnalysisData.assessmentRecords || []).length }} record{{ (userAnalysisData.assessmentRecords || []).length === 1 ? '' : 's' }}</span>
+                </h4>
+                <p class="text-xs text-gray-500">Chronological history of all formal assessments and sign-offs for this user</p>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-2xs">
+              <table class="min-w-full divide-y divide-gray-200 text-xs">
+                <thead class="bg-gray-100 text-gray-700">
+                  <tr>
+                    <th @click="toggleUserAssessSort('created_at')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Date / Time <span v-if="userAssessSortCol === 'created_at'">{{ userAssessSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAssessSort('category')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Category <span v-if="userAssessSortCol === 'category'">{{ userAssessSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAssessSort('task_name')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Competency <span v-if="userAssessSortCol === 'task_name'">{{ userAssessSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAssessSort('assessment_type')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Type <span v-if="userAssessSortCol === 'assessment_type'">{{ userAssessSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAssessSort('result')" class="px-3 py-2.5 text-center font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Result / Outcome <span v-if="userAssessSortCol === 'result'">{{ userAssessSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th @click="toggleUserAssessSort('assessor_name')" class="px-3 py-2.5 text-left font-semibold cursor-pointer hover:bg-gray-200 select-none">
+                      Assessor <span v-if="userAssessSortCol === 'assessor_name'">{{ userAssessSortDir === 1 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th class="px-3 py-2.5 text-left font-semibold">Feedback & Notes</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                  <tr v-for="rec in sortedUserAssessRecords" :key="rec.id" class="hover:bg-gray-50 transition">
+                    <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ formatDate(rec.created_at, true) }}</td>
+                    <td class="px-3 py-2 text-gray-600">{{ rec.category }}</td>
+                    <td class="px-3 py-2 text-gray-900 font-semibold">{{ rec.task_name }}</td>
+                    <td class="px-3 py-2 text-gray-700 capitalize">{{ (rec.assessment_type || '').replace('_', ' ') }}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span :class="getStatusBadgeClassByCode(rec.status_outcome || rec.result)" class="uppercase font-bold">
+                        {{ rec.result }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2 text-gray-800 font-medium">{{ rec.assessor_name }}</td>
+                    <td class="px-3 py-2 text-gray-600">
+                      <div class="line-clamp-2" :title="rec.feedback">{{ rec.feedback || '-' }}</div>
+                      <div v-if="rec.concession" class="text-amber-800 font-medium text-[11px] mt-0.5">Condition: {{ rec.concession }}</div>
+                    </td>
+                  </tr>
+                  <tr v-if="(userAnalysisData.assessmentRecords || []).length === 0">
+                    <td colspan="7" class="px-3 py-6 text-center text-gray-400 italic">No formal assessment records recorded for this user.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 3: Self-Evaluation Analysis (Charts) -->
+          <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex flex-col gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-gray-100 gap-3">
+              <div>
+                <h4 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                  <span>📊 Self-Evaluation Analysis</span>
+                </h4>
+                <p class="text-xs text-gray-500">Trainee self-assessment scores across section and global competencies</p>
+              </div>
+              <select v-model="userStatEvalDateRange" class="border border-gray-300 rounded px-3 py-1 text-xs bg-white focus:ring-blue-500 focus:border-blue-500 font-semibold">
+                <option value="all">All Time</option>
+                <option value="12">Last 12 Months</option>
+                <option value="6">Last 6 Months</option>
+                <option value="3">Last 3 Months</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              <div class="bg-gray-50 border border-gray-200 p-3 rounded">
+                <h5 class="font-semibold text-center mb-2 text-xs text-gray-800">Section Average</h5>
+                <div class="relative h-64 w-full">
+                  <canvas id="statChart-user-eval-section"></canvas>
+                </div>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 p-3 rounded">
+                <h5 class="font-semibold text-center mb-2 text-xs text-gray-800">Global Average</h5>
+                <div class="relative h-64 w-full">
+                  <canvas id="statChart-user-eval-global"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Footer -->
+        <div class="flex justify-end pt-3 border-t border-gray-200">
+          <button @click="statUserModal.isOpen = false" type="button" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1.5 px-4 rounded text-xs transition">
+            Close
           </button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="bg-gray-50 border border-gray-200 p-3 rounded">
-            <h4 class="font-semibold text-center mb-2 text-gray-800">Section Average</h4>
-            <div class="relative h-64 w-full">
-              <canvas id="statChart-user-eval-section"></canvas>
-            </div>
-          </div>
-          <div class="bg-gray-50 border border-gray-200 p-3 rounded">
-            <h4 class="font-semibold text-center mb-2 text-gray-800">Global Average</h4>
-            <div class="relative h-64 w-full">
-              <canvas id="statChart-user-eval-global"></canvas>
-            </div>
-          </div>
-        </div>
+
       </div>
     </div>
 
@@ -3625,7 +4267,7 @@
         <img src="compass-logo.png" alt="Compass Logo" class="h-11 w-auto object-contain bg-white cursor-pointer hover:opacity-80 transition transform hover:scale-105" @click="showAboutModal = true" title="About Compass & Release Notes">
       </div>
       <div class="flex-1 text-center sm:text-right">
-        James Burnley v2.8
+        James Burnley v2.9
       </div>
     </div>
 
@@ -3883,7 +4525,7 @@
         <div class="flex items-start justify-between pb-3 border-b border-gray-200">
           <div class="flex items-center gap-3">
             <img src="compass-logo.png" alt="Compass Logo" class="h-12 w-auto object-contain bg-white">
-            <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded-full border border-blue-200">v2.8</span>
+            <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded-full border border-blue-200">v2.9</span>
           </div>
           <button @click="showAboutModal = false" class="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none px-1">&times;</button>
         </div>
@@ -3891,7 +4533,7 @@
         <div class="py-4 space-y-4 text-sm text-gray-700">
           <div class="flex items-center justify-between text-xs text-gray-700 border border-gray-200 py-2.5 px-3 bg-gray-50 rounded-lg">
             <div><strong class="text-gray-900">Author:</strong> James Burnley</div>
-            <div><strong class="text-gray-900">Release Date:</strong> 10/11/2026</div>
+            <div><strong class="text-gray-900">Release Date:</strong> 25/11/2026</div>
           </div>
 
           <!-- Nested Collapsible Version Release Notes -->
@@ -3906,11 +4548,25 @@
               </span>
             </button>
             <div v-if="showReleaseNotes" class="p-4 bg-white space-y-4 text-xs divide-y divide-gray-100 max-h-72 overflow-y-auto">
-              <!-- v2.8 -->
+              <!-- v2.9 -->
               <div class="pt-1 first:pt-0">
                 <div class="flex items-center justify-between mb-1.5">
-                  <span class="font-bold text-blue-900 text-sm">Release v2.8 (Current)</span>
+                  <span class="font-bold text-blue-900 text-sm">Release v2.9 (Current)</span>
                   <span class="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold border border-blue-200">Latest</span>
+                </div>
+                <ul class="list-disc pl-5 space-y-1 text-gray-600 mb-3">
+                  <li><strong>Compass Rebranding:</strong> Updated branding, application name and visual identity to Compass with refreshed layout and prominent logo placement.</li>
+                  <li><strong>Per-Competency Leaderboard Basis:</strong> Enabled individual competencies to be customized as Logbook or QA records independently from section defaults, with dynamic system-wide links.</li>
+                  <li><strong>Overhauled User Analysis Workspace:</strong> Transformed self-evaluation analysis into a full User Analysis dashboard featuring an Active Competencies Overview table with sorting across 8 key metrics and status filtering.</li>
+                  <li><strong>Active Competencies Search &amp; Direct Access:</strong> Real-time search filter by category or competency name, and direct one-click status badge interaction to launch competency splash modals.</li>
+                  <li><strong>Chronological Assessment Records History:</strong> Dedicated assessment history table tracking candidate progress, assessor feedback, concessions, and outcomes in date order.</li>
+                  <li><strong>Accurate Last Interaction Tracking:</strong> Re-engineered interaction tracking capturing real user activity (prerequisites, case logs, evaluations, quizzes, file uploads, QA tests, sign-offs) while omitting automated initial progress timestamps.</li>
+                </ul>
+              </div>
+              <!-- v2.8 -->
+              <div class="pt-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-bold text-gray-800 text-sm">Release v2.8</span>
                 </div>
                 <ul class="list-disc pl-5 space-y-1 text-gray-600 mb-3">
                   <li><strong>Accurate Reassignment Attribution:</strong> Comments and handover notes recorded when reassigning clinical case logs are now correctly attributed to the logged-in trainer or administrator taking the action.</li>
@@ -4447,7 +5103,7 @@
         
         const adminSubTab = ref('users');
         const isEditingComp = ref(false);
-        const newComp = ref({ category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0 });
+        const newComp = ref({ category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0, leaderboard_type: 'default' });
         
         const categoryOrder = ref([]);
 
@@ -5913,7 +6569,12 @@
           if (!userSummary) return [];
           const records = [];
           const comp = statCompModal.value.competency || {};
-          const isCaseLogs = !!comp.hasCaseLogs;
+          let isCaseLogs = !!comp.hasCaseLogs;
+          if (userSummary.leaderboard_basis) {
+            isCaseLogs = userSummary.leaderboard_basis === 'logbook';
+          } else if (comp.task_name === 'All Tasks Combined') {
+            isCaseLogs = (userSummary.logs && userSummary.logs.length > 0) && (!userSummary.qatrackTimings || userSummary.qatrackTimings.length === 0);
+          }
           const yearInt = year !== 'all' ? parseInt(year, 10) : null;
 
           if (isCaseLogs) {
@@ -6530,7 +7191,7 @@
         const openUserTimingStats = async (userSummary) => {
           userTimingModal.value = { isOpen: true, user: userSummary, loading: false };
           const comp = statCompModal.value.competency;
-          if (comp && !comp.hasCaseLogs && (!userSummary.evidence || userSummary.evidence.length === 0) && userSummary.qaTotalCount > 0) {
+          if (comp && comp.id && !comp.hasCaseLogs && (!userSummary.evidence || userSummary.evidence.length === 0) && userSummary.qaTotalCount > 0) {
             userTimingModal.value.loading = true;
             try {
               const eRes = await fetch(`/api/competency/${comp.id}/qatrack-evidence?user_id=${userSummary.userId}`, { headers: getHeaders() });
@@ -6551,6 +7212,7 @@
         const closeUserTimingModal = () => {
           userTimingModal.value.isOpen = false;
           userTimingModal.value.user = null;
+          userTimingModal.value.customTaskName = null;
           if (timingChartInstances.userTimingHistogram) {
             timingChartInstances.userTimingHistogram.destroy();
             timingChartInstances.userTimingHistogram = null;
@@ -6563,6 +7225,7 @@
 
         const closeStatCompModal = () => {
           statCompModal.value.isOpen = false;
+          closeCategoryUserBreakdown();
           closeUserTimingModal();
           if (timingChartInstances.cohortTimingHistogram) {
             timingChartInstances.cohortTimingHistogram.destroy();
@@ -6679,10 +7342,7 @@
         });
         
         watch(userStatEvalDateRange, () => {
-            if (statUserModal.value.isOpen && statUserModal.value.user) {
-                renderEvalChart('statChart-user-eval-section', aggregateEvals(statUserModal.value.user.evaluations.section, userStatEvalDateRange.value));
-                renderEvalChart('statChart-user-eval-global', aggregateEvals(statUserModal.value.user.evaluations.overall, userStatEvalDateRange.value));
-            }
+            renderUserEvalCharts();
         });
         
         const renderEvalChart = (ctxId, data, title) => {
@@ -6709,13 +7369,179 @@
           });
         };
 
-        const openStatUserModal = (u) => {
-          statUserModal.value = { isOpen: true, user: u };
-          userStatEvalDateRange.value = 'all';
-          nextTick(() => {
+        const activeSectionLeaderboardBasis = computed(() => {
+          const current = (globalSettings.value?.sections || []).find(s => s.name === selectedDb.value);
+          return current?.leaderboardType || (selectedDb.value === 'QA' ? 'qa' : 'logbook');
+        });
+
+        const userAnalysisLoading = ref(false);
+        const userAnalysisData = ref({ competencies: [], assessmentRecords: [] });
+        const userAnalysisStatusFilters = ref([]);
+        const userAnalysisSearchQuery = ref('');
+        const userAnalysisSortCol = ref('category');
+        const userAnalysisSortDir = ref(1);
+        const userAnalysisSelectedCategory = ref('all');
+
+        const availableCategoriesForUserAnalysis = computed(() => {
+          const set = new Set();
+          (statCompetencies.value || []).forEach(c => { if (c.category) set.add(c.category); });
+          (userAnalysisData.value.competencies || []).forEach(c => { if (c.category) set.add(c.category); });
+          return Array.from(set).sort((a, b) => a.localeCompare(b));
+        });
+
+        const toggleUserAnalysisStatusFilter = (st) => {
+          if (st === 'all') {
+            userAnalysisStatusFilters.value = [];
+            return;
+          }
+          const idx = userAnalysisStatusFilters.value.indexOf(st);
+          if (idx > -1) {
+            userAnalysisStatusFilters.value.splice(idx, 1);
+          } else {
+            userAnalysisStatusFilters.value.push(st);
+          }
+        };
+
+        const toggleUserAnalysisSort = (col) => {
+          if (userAnalysisSortCol.value === col) {
+            userAnalysisSortDir.value *= -1;
+          } else {
+            userAnalysisSortCol.value = col;
+            userAnalysisSortDir.value = 1;
+          }
+        };
+
+        const filteredUserAnalysisComps = computed(() => {
+          let list = (userAnalysisData.value.competencies || []).slice();
+          if (userAnalysisSelectedCategory.value && userAnalysisSelectedCategory.value !== 'all') {
+            list = list.filter(c => c.category === userAnalysisSelectedCategory.value);
+          }
+          const filters = userAnalysisStatusFilters.value;
+          if (filters.length > 0) {
+            list = list.filter(c => filters.includes((c.status || '').toLowerCase()));
+          }
+          const q = (userAnalysisSearchQuery.value || '').trim().toLowerCase();
+          if (q) {
+            list = list.filter(c => 
+              (c.category || '').toLowerCase().includes(q) || 
+              (c.task_name || '').toLowerCase().includes(q)
+            );
+          }
+
+          return list.sort((a, b) => {
+            let valA = a[userAnalysisSortCol.value];
+            let valB = b[userAnalysisSortCol.value];
+            if (valA === null || valA === undefined) valA = userAnalysisSortDir.value === 1 ? Infinity : -Infinity;
+            if (valB === null || valB === undefined) valB = userAnalysisSortDir.value === 1 ? Infinity : -Infinity;
+            let res = 0;
+            if (typeof valA === 'string' && typeof valB === 'string') {
+              res = valA.localeCompare(valB) * userAnalysisSortDir.value;
+            } else {
+              res = (valA - valB) * userAnalysisSortDir.value;
+            }
+            if (res === 0) return (a.task_name || '').localeCompare(b.task_name || '');
+            return res;
+          });
+        });
+
+        const openUserCompSplash = (compItem) => {
+          if (!compItem) return;
+          const fullComp = (competencies.value || []).find(c => c.id === compItem.id) || compItem;
+          const targetUser = statUserModal.value.user;
+          if (targetUser && fullComp) {
+            openModal(targetUser, fullComp);
+          }
+        };
+
+        const reloadUserAnalysis = async () => {
+          if (!statUserModal.value?.isOpen || !statUserModal.value?.user?.id) return;
+          try {
+            const res = await fetch(`/api/user/${statUserModal.value.user.id}/analysis`, { headers: getHeaders() });
+            if (res.ok) {
+              const data = await res.json();
+              userAnalysisData.value = data;
+            }
+          } catch (e) {
+            console.error("Error refreshing user analysis:", e);
+          }
+        };
+
+        const userAssessSortCol = ref('created_at');
+        const userAssessSortDir = ref(-1);
+        const toggleUserAssessSort = (col) => {
+          if (userAssessSortCol.value === col) {
+            userAssessSortDir.value *= -1;
+          } else {
+            userAssessSortCol.value = col;
+            userAssessSortDir.value = -1;
+          }
+        };
+
+        const sortedUserAssessRecords = computed(() => {
+          const list = (userAnalysisData.value.assessmentRecords || []).slice();
+          return list.sort((a, b) => {
+            let valA = a[userAssessSortCol.value];
+            let valB = b[userAssessSortCol.value];
+            if (valA === null || valA === undefined) valA = '';
+            if (valB === null || valB === undefined) valB = '';
+            if (typeof valA === 'string' && typeof valB === 'string') {
+              return valA.localeCompare(valB) * userAssessSortDir.value;
+            }
+            return (valA - valB) * userAssessSortDir.value;
+          });
+        });
+
+        const renderUserEvalCharts = () => {
+          if (!statUserModal.value?.isOpen || !statUserModal.value?.user) return;
+          const u = statUserModal.value.user;
+          if (u.evaluations) {
             renderEvalChart('statChart-user-eval-section', aggregateEvals(u.evaluations.section, userStatEvalDateRange.value));
             renderEvalChart('statChart-user-eval-global', aggregateEvals(u.evaluations.overall, userStatEvalDateRange.value));
-          });
+          }
+        };
+
+        const openStatUserModal = async (u, resetFilters = true) => {
+          // If u doesn't have evaluations loaded, check sectionApplicableUsers or statistics
+          if (!u.evaluations && statistics.value?.userStats) {
+            const found = statistics.value.userStats.find(x => x.id === u.id);
+            if (found && found.evaluations) {
+              u = { ...u, evaluations: found.evaluations };
+            }
+          }
+
+          statUserModal.value = { isOpen: true, user: u };
+          if (resetFilters) {
+            userStatEvalDateRange.value = 'all';
+            userAnalysisStatusFilters.value = [];
+            userAnalysisSearchQuery.value = '';
+            userAnalysisSelectedCategory.value = 'all';
+          }
+          userAnalysisLoading.value = true;
+          userAnalysisData.value = { competencies: [], assessmentRecords: [] };
+
+          try {
+            const res = await fetch(`/api/user/${u.id}/analysis`, { headers: getHeaders() });
+            if (res.ok) {
+              const data = await res.json();
+              userAnalysisData.value = data;
+            }
+          } catch (e) {
+            console.error("Error loading user analysis:", e);
+          } finally {
+            userAnalysisLoading.value = false;
+            nextTick(() => {
+              renderUserEvalCharts();
+            });
+          }
+        };
+
+        const onUserAnalysisUserChange = (newUserId) => {
+          const targetUser = (sectionApplicableUsers.value || []).find(u => String(u.id) === String(newUserId)) ||
+                             (statistics.value?.userStats || []).find(u => String(u.id) === String(newUserId)) ||
+                             (users.value || []).find(u => String(u.id) === String(newUserId));
+          if (targetUser) {
+            openStatUserModal(targetUser, false);
+          }
         };
 
         const showLeaderboardControls = (comp) => {
@@ -6732,11 +7558,18 @@
           availableLeaderboardYears.value = Array.from(yearSet).sort((a, b) => b - a);
         };
 
-        const openStatCompModal = async (c) => {
+        const openStatCompModal = async (c, resetFilters = true) => {
           statCompModal.value.isOpen = true;
           statCompModal.value.competency = c;
           statCompModal.value.loading = true;
           statCompModal.value.summary = [];
+          closeCategoryUserBreakdown();
+          if (resetFilters) {
+            statCategorySearchQuery.value = '';
+            statCategoryStatusFilters.value = [];
+            statCategorySortCol.value = 'fullName';
+            statCategorySortDir.value = 1;
+          }
           selectedLeaderboardYear.value = 'all';
           initializeDefaultYears();
           
@@ -6771,13 +7604,182 @@
           }
         };
 
-        const openStatCategoryModal = async (categoryName) => {
+        // Category All Tasks Combined state and methods
+        const statCategorySearchQuery = ref('');
+        const statCategoryStatusFilters = ref([]);
+        const statCategorySortCol = ref('fullName');
+        const statCategorySortDir = ref(1);
+        const categoryBreakdownModal = ref({ isOpen: false, user: null });
+        const userCompSortCol = ref('task_name');
+        const userCompSortDir = ref(1);
+
+        const openCategoryUserBreakdown = (userSummary) => {
+          categoryBreakdownModal.value = { isOpen: true, user: userSummary };
+        };
+
+        const closeCategoryUserBreakdown = () => {
+          categoryBreakdownModal.value = { isOpen: false, user: null };
+        };
+
+        const toggleCategoryUserBreakdown = (userSummary) => {
+          if (categoryBreakdownModal.value.isOpen && categoryBreakdownModal.value.user?.userId === userSummary.userId) {
+            closeCategoryUserBreakdown();
+          } else {
+            openCategoryUserBreakdown(userSummary);
+          }
+        };
+
+        const toggleUserCompSort = (col) => {
+          if (userCompSortCol.value === col) {
+            userCompSortDir.value *= -1;
+          } else {
+            userCompSortCol.value = col;
+            userCompSortDir.value = 1;
+          }
+        };
+
+        const sortedSelectedUserComps = computed(() => {
+          const u = categoryBreakdownModal.value.user;
+          if (!u || !u.competencies) return [];
+          const list = u.competencies.slice();
+          return list.sort((a, b) => {
+            let valA = a[userCompSortCol.value];
+            let valB = b[userCompSortCol.value];
+            if (valA === null || valA === undefined) valA = userCompSortDir.value === 1 ? Infinity : -Infinity;
+            if (valB === null || valB === undefined) valB = userCompSortDir.value === 1 ? Infinity : -Infinity;
+            let res = 0;
+            if (typeof valA === 'string' && typeof valB === 'string') {
+              res = valA.localeCompare(valB) * userCompSortDir.value;
+            } else {
+              res = (valA - valB) * userCompSortDir.value;
+            }
+            if (res === 0) return (a.task_name || '').localeCompare(b.task_name || '');
+            return res;
+          });
+        });
+
+        const openUserCompSplashFromBreakdown = (userSummary, compItem) => {
+          if (!compItem || !userSummary) return;
+          const fullComp = (competencies.value || []).find(c => c.id === compItem.id) || compItem;
+          const targetUser = (users.value || []).find(u => u.id === userSummary.userId) ||
+                             (sectionApplicableUsers.value || []).find(u => u.id === userSummary.userId) ||
+                             { id: userSummary.userId, full_name: userSummary.fullName, designation: userSummary.designation };
+          if (targetUser && fullComp) {
+            openModal(targetUser, fullComp);
+          }
+        };
+
+        const handleStatUserStatusClick = (userSummary) => {
+          if (!userSummary) return;
+          if (statCompModal.value.competency?.task_name === 'All Tasks Combined') {
+            openCategoryUserBreakdown(userSummary);
+          } else {
+            const comp = statCompModal.value.competency;
+            const fullComp = (competencies.value || []).find(c => c.id === comp.id) || comp;
+            const targetUser = (users.value || []).find(u => u.id === userSummary.userId) ||
+                               (sectionApplicableUsers.value || []).find(u => u.id === userSummary.userId) ||
+                               { id: userSummary.userId, full_name: userSummary.fullName, designation: userSummary.designation };
+            if (targetUser && fullComp) {
+              openModal(targetUser, fullComp);
+            }
+          }
+        };
+
+        const openUserTimingStatsForComp = (userSummary, comp) => {
+          if (!userSummary || !comp) return;
+          const targetUserSummary = {
+            ...userSummary,
+            logs: comp.logs || [],
+            qatrackTimings: comp.qatrackTimings || [],
+            leaderboard_basis: comp.leaderboard_basis,
+            qaTotalCount: comp.completed_records || 0,
+            evidence: []
+          };
+          userTimingModal.value = {
+            isOpen: true,
+            user: targetUserSummary,
+            customTaskName: comp.task_name,
+            loading: false
+          };
+          nextTick(() => {
+            renderTimingCharts('userTiming', userTimingStats.value);
+          });
+        };
+
+        const availableSectionCategories = computed(() => {
+          const set = new Set();
+          (statCompetencies.value || []).forEach(c => {
+            if (c.category) set.add(c.category);
+          });
+          return Array.from(set).sort((a, b) => a.localeCompare(b));
+        });
+
+        const toggleStatCategoryStatusFilter = (st) => {
+          if (st === 'all') {
+            statCategoryStatusFilters.value = [];
+            return;
+          }
+          const idx = statCategoryStatusFilters.value.indexOf(st);
+          if (idx > -1) {
+            statCategoryStatusFilters.value.splice(idx, 1);
+          } else {
+            statCategoryStatusFilters.value.push(st);
+          }
+        };
+
+        const toggleStatCategorySort = (col) => {
+          if (statCategorySortCol.value === col) {
+            statCategorySortDir.value *= -1;
+          } else {
+            statCategorySortCol.value = col;
+            statCategorySortDir.value = 1;
+          }
+        };
+
+        const filteredStatCategorySummary = computed(() => {
+          let list = (statCompModal.value.summary || []).slice();
+          const filters = statCategoryStatusFilters.value;
+          if (filters.length > 0) {
+            list = list.filter(u => filters.includes((u.status || '').toLowerCase()));
+          }
+          const q = (statCategorySearchQuery.value || '').trim().toLowerCase();
+          if (q) {
+            list = list.filter(u => 
+              (u.fullName || '').toLowerCase().includes(q) || 
+              (u.designation || '').toLowerCase().includes(q)
+            );
+          }
+
+          return list.sort((a, b) => {
+            let valA = a[statCategorySortCol.value];
+            let valB = b[statCategorySortCol.value];
+            if (valA === null || valA === undefined) valA = statCategorySortDir.value === 1 ? Infinity : -Infinity;
+            if (valB === null || valB === undefined) valB = statCategorySortDir.value === 1 ? Infinity : -Infinity;
+            let res = 0;
+            if (typeof valA === 'string' && typeof valB === 'string') {
+              res = valA.localeCompare(valB) * statCategorySortDir.value;
+            } else {
+              res = (valA - valB) * statCategorySortDir.value;
+            }
+            if (res === 0) return (a.fullName || '').localeCompare(b.fullName || '');
+            return res;
+          });
+        });
+
+        const openStatCategoryModal = async (categoryName, resetFilters = true) => {
           statCompModal.value.isOpen = true;
           statCompModal.value.competency = {
             task_name: 'All Tasks Combined',
             category: categoryName,
             hasQATrack: true
           };
+          closeCategoryUserBreakdown();
+          if (resetFilters) {
+            statCategorySearchQuery.value = '';
+            statCategoryStatusFilters.value = [];
+            statCategorySortCol.value = 'fullName';
+            statCategorySortDir.value = 1;
+          }
           statCompModal.value.loading = true;
           statCompModal.value.summary = [];
           selectedLeaderboardYear.value = 'all';
@@ -6811,6 +7813,11 @@
               renderTimingCharts('cohortTiming', cohortTimingStats.value);
             });
           }
+        };
+
+        const onStatCategoryChange = async (cat) => {
+          if (!cat) return;
+          await openStatCategoryModal(cat, false);
         };
 
         const openStatSectionModal = async () => {
@@ -7707,15 +8714,19 @@
 
         const STATUS_LABELS = { t: 'In Training', m: 'Meets Requirements', a: 'Assessment Pending', c: 'Competent', x: 'Competent to Train' };
 
-        const getStatusLabelByCode = (status) => STATUS_LABELS[status] || 'Not Started';
+        const getStatusLabelByCode = (status) => {
+          const s = (status || '').toLowerCase().trim();
+          return STATUS_LABELS[s] || (s ? status : 'Not Started');
+        };
 
         const getStatusBadgeClassByCode = (status) => {
+          const s = (status || '').toLowerCase().trim();
           const baseClass = "inline-flex items-center rounded-md px-2 py-1 text-xs font-bold ring-1 ring-inset ";
-          if (status === 't') return baseClass + "bg-yellow-50 text-yellow-800 ring-yellow-600/20";
-          if (status === 'a') return baseClass + "bg-orange-50 text-orange-800 ring-orange-600/20";
-          if (status === 'm') return baseClass + "bg-purple-50 text-purple-700 ring-purple-600/20";
-          if (status === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
-          if (status === 'x') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
+          if (s === 't') return baseClass + "bg-yellow-50 text-yellow-800 ring-yellow-600/20";
+          if (s === 'a') return baseClass + "bg-orange-50 text-orange-800 ring-orange-600/20";
+          if (s === 'm') return baseClass + "bg-purple-50 text-purple-700 ring-purple-600/20";
+          if (s === 'c') return baseClass + "bg-green-50 text-green-700 ring-green-600/20";
+          if (s === 'x' || s === 'x+') return baseClass + "bg-blue-50 text-blue-700 ring-blue-700/10";
           return baseClass + "bg-gray-50 text-gray-400 ring-gray-200"; // Empty / not started
         };
 
@@ -7859,6 +8870,9 @@
         };
         const closeModal = () => { 
           selectedCell.value = null; 
+          if (statUserModal.value?.isOpen) {
+            reloadUserAnalysis();
+          }
           showAssessmentForm.value = false;
           assessmentRecords.value = [];
           showConcessionToggle.value = false;
@@ -8440,13 +9454,19 @@
         const isSyncingUser = ref({});
 
         const syncUserQATrack = async (u) => {
+          if (!u) return;
+          const userId = u.id || u.userId;
+          const userName = u.full_name || u.fullName || 'User';
           const qatrackComps = competencies.value.filter(c => hasQATrackRequirements(c));
-          if (qatrackComps.length === 0) return;
+          if (qatrackComps.length === 0) {
+            customAlert("No QATrack competencies found in this section.", "Information");
+            return;
+          }
           
           isSyncCancelled.value = false;
           syncProgressModal.value = {
             isOpen: true,
-            title: `Syncing QATrack Records: ${u.full_name}`,
+            title: `Syncing QATrack Records: ${userName}`,
             progress: 0,
             currentUser: "Initializing...",
             logs: [],
@@ -8460,7 +9480,7 @@
               const resBefore = await fetch(`/api/admin/competency/${comp.id}/records-summary`, { headers: getHeaders() });
               if (resBefore.ok) {
                 const dataBefore = await resBefore.json();
-                const userSummary = (dataBefore.summary || []).find(s => s.userId === u.id);
+                const userSummary = (dataBefore.summary || []).find(s => s.userId === userId);
                 initialCounts[comp.id] = userSummary ? (userSummary.qaTotalCount || 0) : 0;
               }
             }
@@ -8472,7 +9492,7 @@
               const comp = qatrackComps[i];
               syncProgressModal.value.currentUser = comp.task_name;
               try {
-                await syncProgress(comp.id, u.id);
+                await syncProgress(comp.id, userId);
               } catch(err) {
                 console.error(err);
               }
@@ -8485,7 +9505,7 @@
               const resAfter = await fetch(`/api/admin/competency/${comp.id}/records-summary`, { headers: getHeaders() });
               if (resAfter.ok) {
                 const dataAfter = await resAfter.json();
-                const userSummary = (dataAfter.summary || []).find(s => s.userId === u.id);
+                const userSummary = (dataAfter.summary || []).find(s => s.userId === userId);
                 finalCounts[comp.id] = userSummary ? (userSummary.qaTotalCount || 0) : 0;
               }
             }
@@ -8506,6 +9526,95 @@
             }
             syncProgressModal.value.isFinished = true;
             await fetchData();
+            if (statUserModal.value.isOpen && statUserModal.value.user) {
+              await openStatUserModal(statUserModal.value.user, false);
+            }
+          } catch(e) {
+            customAlert("Error syncing QATrack records: " + e.message, "Error");
+            syncProgressModal.value.isOpen = false;
+          }
+        };
+
+        const syncCategoryUserQATrack = async (u, categoryName) => {
+          if (!u) return;
+          const userId = u.id || u.userId;
+          const userName = u.fullName || u.full_name || 'User';
+          const catComps = competencies.value.filter(c => c.category === categoryName && hasQATrackRequirements(c));
+          if (catComps.length === 0) {
+            customAlert("No QATrack competencies found in this category.", "Information");
+            return;
+          }
+          
+          isSyncCancelled.value = false;
+          syncProgressModal.value = {
+            isOpen: true,
+            title: `Syncing QATrack Records: ${userName} (${categoryName})`,
+            progress: 0,
+            currentUser: "Initializing...",
+            logs: [],
+            isFinished: false
+          };
+          
+          try {
+            // 1. Fetch initial counts per competency
+            const initialCounts = {};
+            for (const comp of catComps) {
+              const resBefore = await fetch(`/api/admin/competency/${comp.id}/records-summary`, { headers: getHeaders() });
+              if (resBefore.ok) {
+                const dataBefore = await resBefore.json();
+                const userSummary = (dataBefore.summary || []).find(s => s.userId === userId);
+                initialCounts[comp.id] = userSummary ? (userSummary.qaTotalCount || 0) : 0;
+              }
+            }
+            
+            // 2. Loop and sync tasks sequentially
+            let totalSteps = catComps.length;
+            for (let i = 0; i < catComps.length; i++) {
+              if (isSyncCancelled.value) break;
+              const comp = catComps[i];
+              syncProgressModal.value.currentUser = comp.task_name;
+              try {
+                await syncProgress(comp.id, userId);
+              } catch(err) {
+                console.error(err);
+              }
+              syncProgressModal.value.progress = ((i + 1) / totalSteps) * 100;
+            }
+            
+            // 3. Fetch final counts per competency
+            const finalCounts = {};
+            for (const comp of catComps) {
+              const resAfter = await fetch(`/api/admin/competency/${comp.id}/records-summary`, { headers: getHeaders() });
+              if (resAfter.ok) {
+                const dataAfter = await resAfter.json();
+                const userSummary = (dataAfter.summary || []).find(s => s.userId === userId);
+                finalCounts[comp.id] = userSummary ? (userSummary.qaTotalCount || 0) : 0;
+              }
+            }
+            
+            // 4. Generate summary diff logs for each task
+            const logs = [];
+            catComps.forEach(comp => {
+              const before = initialCounts[comp.id] || 0;
+              const after = finalCounts[comp.id] || 0;
+              logs.push({ name: comp.task_name, newRecords: Math.max(0, after - before) });
+            });
+            
+            syncProgressModal.value.logs = logs;
+            if (isSyncCancelled.value) {
+              syncProgressModal.value.currentUser = "Cancelled";
+            } else {
+              syncProgressModal.value.currentUser = "Finished";
+            }
+            syncProgressModal.value.isFinished = true;
+            await fetchData();
+            if (statCompModal.value.isOpen && statCompModal.value.competency?.category) {
+              await openStatCategoryModal(statCompModal.value.competency.category, false);
+              const updatedUser = (statCompModal.value.summary || []).find(s => s.userId === userId);
+              if (updatedUser) {
+                categoryBreakdownModal.value.user = updatedUser;
+              }
+            }
           } catch(e) {
             customAlert("Error syncing QATrack records: " + e.message, "Error");
             syncProgressModal.value.isOpen = false;
@@ -8590,6 +9699,9 @@
             }
             syncProgressModal.value.isFinished = true;
             await fetchData();
+            if (statCompModal.value.isOpen && statCompModal.value.competency?.category) {
+              await openStatCategoryModal(statCompModal.value.competency.category, false);
+            }
           } catch(e) {
             customAlert("Error during bulk sync: " + e.message, "Error");
             syncProgressModal.value.isOpen = false;
@@ -10571,7 +11683,7 @@
         };
         
         const editComp = (c) => { 
-          newComp.value = JSON.parse(JSON.stringify(c)); 
+          newComp.value = JSON.parse(JSON.stringify(c)); newComp.value.leaderboard_type = c.leaderboard_type || 'default'; 
           newComp.value.requires_case_logs = c.required_plan_count > 0;
           newComp.value.requires_qatrack = newComp.value.qatrack_requirements && newComp.value.qatrack_requirements.length > 0; 
           if (!newComp.value.qatrack_requirements) newComp.value.qatrack_requirements = []; 
@@ -10590,7 +11702,7 @@
           isEditingComp.value = true; 
           window.scrollTo({ top: 0, behavior: 'smooth' });
         };
-        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0 }; isEditingComp.value = false; };
+        const cancelEditComp = () => { newComp.value = { category: '', task_name: '', description: '', requires_case_logs: false, requires_qatrack: false, qatrack_requirements: [], requires_instructions: false, requires_quiz: false, quiz_ids: [], requires_prerequisite_competencies: false, prerequisite_competencies: [], target_groups: [], target_users: [], reading_prerequisites: [{id: Date.now().toString(), name: ''}], renewal_period_months: globalSettings.value.default_renewal_period || 36, requires_pre_eval: false, requires_post_eval: false, allow_file_uploads: false, required_plan_count: 0, leaderboard_type: 'default' }; isEditingComp.value = false; };
         
         const moveReadingPrereq = (index, direction) => {
           if (!newComp.value || !newComp.value.reading_prerequisites) return;
@@ -11461,8 +12573,8 @@
             const data = await res.json();
             
             const backupPayload = {
-              version: data.version || '2.8',
-              app_version: data.app_version || '2.8.0',
+              version: data.version || '2.9',
+              app_version: data.app_version || '2.9.0',
               scope: scope,
               date: data.date,
               databases: data.databases || data.backup,
@@ -11499,7 +12611,7 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Restore failed');
-            const vMsg = data.restored_version ? ` (Source version: ${data.restored_version}, Target: v${data.current_version || '2.8'})` : '';
+            const vMsg = data.restored_version ? ` (Source version: ${data.restored_version}, Target: v${data.current_version || '2.9'})` : '';
             await customAlert(`Database restored and migrated successfully${vMsg}. The application will now reload to apply changes.`, "Success");
             window.location.reload();
           } catch(e) { customAlert("Invalid backup file or restore failed: " + e.message, "Error"); }
@@ -11748,13 +12860,13 @@
                   overviewFilterName, overviewFilterTask, overviewFilterCategory, overviewFilterGroup,
                   statistics, sectionSummaryStats, sectionPendingLogsCount, statCompetencies, groupedStatCompetencies, statCompSortCol, statCompSortDir, toggleStatCompSort, expandedStatCategories, toggleStatCategory,
                   selectedStatCompetencyId, statCompetenciesByCategory, isSelectedCompEmpty, renderOverallChart,
-                  sectionApplicableUsers, statUserSortCol, statUserSortDir, toggleStatUserSort, getTimeInPost, getStatSectionDesignationAverage, getStatOverallDesignationAverage, statUserModal, openStatUserModal, statCompModal, openStatCompModal, statEvalDateRange, userStatEvalDateRange, sortedQaSummary, maxQaRecords, openStatCategoryModal, openStatSectionModal, getStatusLabelByCode, getStatusBadgeClassByCode,
+                  sectionApplicableUsers, statUserSortCol, statUserSortDir, toggleStatUserSort, getTimeInPost, getStatSectionDesignationAverage, getStatOverallDesignationAverage, statUserModal, openStatUserModal, activeSectionLeaderboardBasis, userAnalysisLoading, userAnalysisData, userAnalysisStatusFilters, toggleUserAnalysisStatusFilter, userAnalysisSearchQuery, userAnalysisSortCol, userAnalysisSortDir, toggleUserAnalysisSort, filteredUserAnalysisComps, userAnalysisSelectedCategory, availableCategoriesForUserAnalysis, onUserAnalysisUserChange, renderUserEvalCharts, openUserCompSplash, reloadUserAnalysis, userAssessSortCol, userAssessSortDir, toggleUserAssessSort, sortedUserAssessRecords, statCategorySearchQuery, statCategoryStatusFilters, statCategorySortCol, statCategorySortDir, toggleStatCategoryStatusFilter, toggleStatCategorySort, filteredStatCategorySummary, availableSectionCategories, onStatCategoryChange, categoryBreakdownModal, openCategoryUserBreakdown, closeCategoryUserBreakdown, userCompSortCol, userCompSortDir, toggleCategoryUserBreakdown, toggleUserCompSort, sortedSelectedUserComps, openUserCompSplashFromBreakdown, handleStatUserStatusClick, openUserTimingStatsForComp, statCompModal, openStatCompModal, statEvalDateRange, userStatEvalDateRange, sortedQaSummary, maxQaRecords, openStatCategoryModal, openStatSectionModal, getStatusLabelByCode, getStatusBadgeClassByCode,
                   dbInfo, backupFile, frontendFile, globalSettings, newSectionName, activeSections, fetchDbInfo, onBackupFileSelected, onFrontendFileSelected, backupDatabase, restoreDatabase, uploadFrontend, saveGlobalSettings, testQATrackConnection, toggleSectionActive, addSection, deleteSection, individualRestoreInput, restoreScope, triggerRestore, onIndividualRestoreFileSelected,
                   loadingPublicMatrix, sectionSwitchProgress,
                   publicSummaryData, publicDisplayedUsers, publicGroupedCompetencies, publicAllUsersProgress, isPublicApplicable, getPublicUserCategoryProgress, getPublicProgressStatus, getPublicStatusBadgeClass, getPublicProgressObj, getPublicAssessorName, getPublicSignoffAssessorDisplay, getPublicProgressCellTooltip,
                   publicSelectedCell, openPublicModal, closePublicModal,
                   customDialog, closeDialog, topScroll, bottomScroll, matrixTable, syncScroll, tableWidth, publicTopScroll, publicBottomScroll, publicMatrixTable, publicTableWidth, syncPublicScroll,
-                  qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, formatDuration, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, exportReportScope, downloadOverviewMatrixPDF, isDownloadingMatrixPdf, downloadAllTrainingRecordsZip, isDownloadingTrainingRecordsZip, downloadCompetencyTemplatesZip, isDownloadingCompetencyTemplatesZip, downloadUserCompetencyFormsZip, isDownloadingUserCompetencyFormsZip, downloadMasterBackupBundleZip, isDownloadingMasterBundleZip, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
+                  qaEvidenceCache, showQaEvidenceFor, toggleQATrackEvidence, formatDate, formatDuration, syncSelectedCompetency, isSyncing, isSyncingAll, isSyncingUser, syncUserQATrack, syncCategoryUserQATrack, syncAllUsersQATrack, exportMatrixCSV, printTrainingRecord, exportReportScope, downloadOverviewMatrixPDF, isDownloadingMatrixPdf, downloadAllTrainingRecordsZip, isDownloadingTrainingRecordsZip, downloadCompetencyTemplatesZip, isDownloadingCompetencyTemplatesZip, downloadUserCompetencyFormsZip, isDownloadingUserCompetencyFormsZip, downloadMasterBackupBundleZip, isDownloadingMasterBundleZip, activeUserMenuId, toggleUserMenu, isSyncingSingleComp, hasQATrackRequirements, showLeaderboardControls, syncSingleCompetencyAllUsers, syncProgressModal, selectedLeaderboardYear, availableLeaderboardYears, cancelCurrentSync, onQuestionFileChange, onTraineeQuizFileChange, traineeQuizFiles, parseQuestionText, adminPreAssessmentUploads, adminQuestionAttachments,
                   selectedFile, cellFiles, isUploading, onFileSelected, uploadFile, deleteFile,
                   uploadStats, fetchUploadStats, formatBytes, downloadUploadsBackup, deleteSectionUploads, expandedSectionUploads, loadingSectionUserStats, sectionUserStats, toggleSectionUploadsExpand, activeLogReview, openLogReviewModal, submitLogReviewModal, saveDraftLogReviewModal, saveDraftLogReview, adminDeleteLogReview,
                   showUnsavedReviewPrompt, handleLogReviewBackdropClick, handleCancelLogReview, handleUnsavedPromptSave, handleUnsavedPromptComplete, handleUnsavedPromptDiscard,

@@ -7,7 +7,7 @@ const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const AdmZip = require('adm-zip');
 
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.9.0';
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -448,6 +448,7 @@ const ensureDbColumns = async (db) => {
     if (!compCols.includes('allow_file_uploads')) await execute(db, "ALTER TABLE competencies ADD COLUMN allow_file_uploads INTEGER DEFAULT 0");
     if (!compCols.includes('target_users')) await execute(db, "ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'");
     if (!compCols.includes('description')) await execute(db, "ALTER TABLE competencies ADD COLUMN description TEXT");
+    if (!compCols.includes('leaderboard_type')) await execute(db, "ALTER TABLE competencies ADD COLUMN leaderboard_type TEXT DEFAULT 'default'");
     
     const progCols = (await query(db, "PRAGMA table_info(staff_competency_progress)")).map(c => c.name);
     if (!progCols.includes('is_admin_override')) await execute(db, "ALTER TABLE staff_competency_progress ADD COLUMN is_admin_override INTEGER DEFAULT 0");
@@ -1216,16 +1217,17 @@ app.get('/api/competencies', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/competencies', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count } = req.body;
+  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count, leaderboard_type } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
     const tuStr = JSON.stringify(target_users || []);
     const qaStr = JSON.stringify(qatrack_requirements || []);
     const planCount = parseInt(required_plan_count, 10) || 0;
+    const lbType = leaderboard_type || 'default';
     await execute(req.db, 
-      `INSERT INTO competencies (category, task_name, qatrack_requirements, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, planCount]
+      `INSERT INTO competencies (category, task_name, qatrack_requirements, requires_instructions, requires_quiz, requires_prerequisite_competencies, prerequisite_competencies, reading_prerequisites, renewal_period_months, target_users, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count, leaderboard_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, planCount, lbType]
     );
     const result = await query(req.db, `SELECT last_insert_rowid() AS id`);
     const comp_id = result[0].id;
@@ -1258,16 +1260,17 @@ app.put('/api/competencies/reorder', authenticateToken, requireAdmin, async (req
 });
 
 app.put('/api/competencies/:id', authenticateToken, requireAdmin, async (req, res) => {
-  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count } = req.body;
+  const { category, task_name, qatrack_requirements, requires_instructions, requires_quiz, quiz_ids, requires_prerequisite_competencies, prerequisite_competencies, target_groups, target_users, reading_prerequisites, renewal_period_months, description, requires_pre_eval, requires_post_eval, allow_file_uploads, required_plan_count, leaderboard_type } = req.body;
   try {
     const rpStr = JSON.stringify(reading_prerequisites || []);
     const pcStr = JSON.stringify(prerequisite_competencies || []);
     const tuStr = JSON.stringify(target_users || []);
     const qaStr = JSON.stringify(qatrack_requirements || []);
     const planCount = parseInt(required_plan_count, 10) || 0;
+    const lbType = leaderboard_type || 'default';
     await execute(req.db, 
-      `UPDATE competencies SET category = ?, task_name = ?, qatrack_requirements = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ?, requires_pre_eval = ?, requires_post_eval = ?, allow_file_uploads = ?, required_plan_count = ? WHERE id = ?`,
-      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, planCount, req.params.id]
+      `UPDATE competencies SET category = ?, task_name = ?, qatrack_requirements = ?, requires_instructions = ?, requires_quiz = ?, requires_prerequisite_competencies = ?, prerequisite_competencies = ?, reading_prerequisites = ?, renewal_period_months = ?, target_users = ?, description = ?, requires_pre_eval = ?, requires_post_eval = ?, allow_file_uploads = ?, required_plan_count = ?, leaderboard_type = ? WHERE id = ?`,
+      [category, task_name, qaStr, requires_instructions ? 1 : 0, requires_quiz ? 1 : 0, requires_prerequisite_competencies ? 1 : 0, pcStr, rpStr, renewal_period_months || 36, tuStr, description || null, requires_pre_eval ? 1 : 0, requires_post_eval ? 1 : 0, allow_file_uploads ? 1 : 0, planCount, lbType, req.params.id]
     );
     await execute(req.db, `DELETE FROM competency_groups WHERE competency_id = ?`, [req.params.id]);
     if (target_groups && target_groups.length > 0) {
@@ -2142,6 +2145,9 @@ app.post('/api/competency/:id/evaluations', authenticateToken, async (req, res) 
   }
   try {
     await execute(req.db, `INSERT INTO self_evaluations (user_id, competency_id, evaluation_type, score_a, score_b, score_c) VALUES (?, ?, ?, ?, ?, ?)`, [user_id, competency_id, evaluation_type, sA, sB, sC]);
+    try {
+      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'SELF_EVALUATION_SUBMITTED', ?, ?)`, [user_id, competency_id, user_id, `Submitted ${evaluation_type}-evaluation (scores: ${sA}, ${sB}, ${sC})`]);
+    } catch(e) {}
     
     await syncCompetencyInternal(req.db, user_id, null, competency_id);
 
@@ -2166,6 +2172,9 @@ app.post('/api/competency/:id/upload', authenticateToken, async (req, res) => {
     const webPath = `/uploads/${encodeURIComponent(dbName)}/competency_${competency_id}/user_${user_id}/${encodeURIComponent(file_name)}`;
     await execute(req.db, `DELETE FROM file_uploads WHERE user_id = ? AND competency_id = ? AND file_name = ?`, [user_id, competency_id, file_name]);
     await execute(req.db, `INSERT INTO file_uploads (user_id, competency_id, file_name, file_path) VALUES (?, ?, ?, ?)`, [user_id, competency_id, file_name, webPath]);
+    try {
+      await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'FILE_UPLOADED', ?, ?)`, [user_id, competency_id, user_id, `Uploaded file '${file_name}'`]);
+    } catch(e) {}
     res.json({success: true});
   } catch(e) { res.status(500).json({error: e.message}); }
 });
@@ -2648,6 +2657,9 @@ app.post('/api/competency/milestone', authenticateToken, async (req, res) => {
         if (value && !readings_completed.includes(reading_id)) readings_completed.push(reading_id);
         else if (!value) readings_completed = readings_completed.filter(id => id !== reading_id);
         await execute(req.db, `UPDATE staff_competency_progress SET readings_completed = ? WHERE user_id = ? AND competency_id = ?`, [JSON.stringify(readings_completed), user_id, competency_id]);
+        try {
+          await execute(req.db, `INSERT INTO competency_audit_log (target_user_id, competency_id, action_type, actioned_by_id, notes) VALUES (?, ?, 'PREREQUISITE_TOGGLED', ?, ?)`, [user_id, competency_id, user_id, `Toggled reading prerequisite '${reading_id}' to ${value ? 'completed' : 'incomplete'}`]);
+        } catch(e) {}
       }
     }
     
@@ -3260,12 +3272,11 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
     const dbName = req.headers['x-database'] || 'QA';
     const sections = await getSections();
     const currentSection = sections.find(s => s.name === dbName);
-    const leaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
+    const sectionLeaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
+    const compLeaderboardType = (competency.leaderboard_type && competency.leaderboard_type !== 'default') ? competency.leaderboard_type : sectionLeaderboardType;
 
-    // Which leaderboard to show is dictated by the section's "leaderboard basis"
-    // toggle, not by which data the competency happens to have.
-    const hasCaseLogs = leaderboardType === 'logbook';
-    const hasQATrack = leaderboardType === 'qa';
+    const hasCaseLogs = compLeaderboardType === 'logbook';
+    const hasQATrack = compLeaderboardType === 'qa';
 
     const allUsers = await query(sharedDb, 'SELECT id, username, full_name, designation, active_in FROM users WHERE is_active = 1');
     const activeUsers = allUsers.filter(u => {
@@ -3285,7 +3296,7 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
     });
 
     // Get QATrack counts and timings from progress
-    const progressRows = await query(req.db, 'SELECT user_id, qatrack_records_detail, qatrack_timings, current_status FROM staff_competency_progress WHERE competency_id = ?', [competencyId]);
+    const progressRows = await query(req.db, 'SELECT user_id, qatrack_records_detail, qatrack_timings, current_status, readings_completed, quizzes_completed, date_started, date_signed_off, date_reviewed FROM staff_competency_progress WHERE competency_id = ?', [competencyId]);
     const progressMap = {};
     const statusMap = {};
     const timingsMap = {};
@@ -3294,14 +3305,72 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
       try { detail = JSON.parse(row.qatrack_records_detail || '{}'); } catch(e) {}
       let timings = [];
       try { timings = JSON.parse(row.qatrack_timings || '[]'); if (!Array.isArray(timings)) timings = []; } catch(e) {}
-      progressMap[row.user_id] = detail;
+      progressMap[row.user_id] = { ...row, qatrack_records_detail: detail, qatrack_timings: timings };
       statusMap[row.user_id] = row.current_status;
       timingsMap[row.user_id] = timings;
     });
 
+    // Prerequisite competencies map if needed
+    let allProgressMap = {};
+    if (competency.requires_prerequisite_competencies) {
+      const allProg = await query(req.db, 'SELECT user_id, competency_id, current_status FROM staff_competency_progress');
+      allProg.forEach(r => { allProgressMap[`${r.user_id}_${r.competency_id}`] = r.current_status; });
+    }
+
     const competencyQuizzes = await query(req.db, 'SELECT quiz_id FROM competency_quizzes WHERE competency_id = ?', [competencyId]);
     const quizzesByComp = { [competencyId]: competencyQuizzes.map(q => q.quiz_id) };
     const defaultStatus = computeDefaultStatus(competency, quizzesByComp);
+
+    // Self evaluations
+    const selfEvals = await query(req.db, 'SELECT user_id, evaluation_type, submission_date FROM self_evaluations WHERE competency_id = ?', [competencyId]);
+    const selfEvalsByUser = {};
+    selfEvals.forEach(e => {
+      if (!selfEvalsByUser[e.user_id]) selfEvalsByUser[e.user_id] = [];
+      selfEvalsByUser[e.user_id].push(e);
+    });
+
+    // Assessment records
+    const assessRecords = await query(req.db, 'SELECT trainee_id, created_at FROM assessment_records WHERE competency_id = ?', [competencyId]);
+    const assessRecordsByUser = {};
+    assessRecords.forEach(a => {
+      if (!assessRecordsByUser[a.trainee_id]) assessRecordsByUser[a.trainee_id] = [];
+      assessRecordsByUser[a.trainee_id].push(a);
+    });
+
+    // Audit logs
+    let auditLogs = [];
+    try {
+      auditLogs = await query(req.db, 'SELECT target_user_id, timestamp FROM competency_audit_log WHERE competency_id = ?', [competencyId]);
+    } catch(e) {}
+    const auditLogsByUser = {};
+    auditLogs.forEach(a => {
+      if (a.target_user_id) {
+        if (!auditLogsByUser[a.target_user_id]) auditLogsByUser[a.target_user_id] = [];
+        auditLogsByUser[a.target_user_id].push(a);
+      }
+    });
+
+    // File uploads
+    let fileUploads = [];
+    try {
+      fileUploads = await query(req.db, 'SELECT user_id, upload_date FROM file_uploads WHERE competency_id = ?', [competencyId]);
+    } catch(e) {}
+    const fileUploadsByUser = {};
+    fileUploads.forEach(f => {
+      if (!fileUploadsByUser[f.user_id]) fileUploadsByUser[f.user_id] = [];
+      fileUploadsByUser[f.user_id].push(f);
+    });
+
+    // QA timings
+    let qaTimingsRows = [];
+    try {
+      qaTimingsRows = await query(req.db, 'SELECT id, user_id, work_completed, work_started, duration_minutes, date, created_at FROM qatrack_timings WHERE competency_id = ?', [competencyId]);
+    } catch(e) {}
+    const qaTimingsByUser = {};
+    qaTimingsRows.forEach(q => {
+      if (!qaTimingsByUser[q.user_id]) qaTimingsByUser[q.user_id] = [];
+      qaTimingsByUser[q.user_id].push(q);
+    });
 
     // Get case log counts and detailed records
     const caseLogRows = await query(req.db, 'SELECT trainee_id, COUNT(*) as total_logs, SUM(CASE WHEN status = \'Completed\' THEN 1 ELSE 0 END) as approved_logs FROM patient_plan_logs WHERE competency_id = ? GROUP BY trainee_id', [competencyId]);
@@ -3320,33 +3389,232 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
       caseLogsDetailMap[row.trainee_id].push(row);
     });
 
-    // Build summary list
+    // Build rich summary list
     const summary = applicableUsers.map(user => {
-      const qaDetail = progressMap[user.id] || {};
+      const p = progressMap[user.id] || null;
+      const statusRaw = (p?.current_status || defaultStatus || 't').toLowerCase();
+      const qaDetail = p?.qatrack_records_detail || {};
+
+      let compPrereqTotal = 0;
+      let compPrereqCompleted = 0;
+
+      // Reading prerequisites
+      let readingPrereqs = [];
+      try { readingPrereqs = JSON.parse(competency.reading_prerequisites || '[]'); } catch(e) {}
+      if (Array.isArray(readingPrereqs) && readingPrereqs.length > 0) {
+        compPrereqTotal += readingPrereqs.length;
+        let completedReadings = [];
+        try { completedReadings = JSON.parse(p?.readings_completed || '[]'); } catch(e) {}
+        const completedSet = new Set((completedReadings || []).map(String));
+        readingPrereqs.forEach(r => {
+          if (completedSet.has(String(r.id))) compPrereqCompleted++;
+        });
+      }
+
+      // Quiz prerequisites
+      if (competency.requires_quiz && quizzesByComp[competencyId] && quizzesByComp[competencyId].length > 0) {
+        const qList = quizzesByComp[competencyId];
+        compPrereqTotal += qList.length;
+        let completedQuizzes = {};
+        try { completedQuizzes = JSON.parse(p?.quizzes_completed || '{}'); } catch(e) {}
+        qList.forEach(qId => {
+          const qRecord = completedQuizzes[qId] || completedQuizzes[String(qId)];
+          if (qRecord && qRecord.passed) compPrereqCompleted++;
+        });
+      }
+
+      // Prerequisite competencies
+      let prereqComps = [];
+      try { prereqComps = JSON.parse(competency.prerequisite_competencies || '[]'); } catch(e) {}
+      if (competency.requires_prerequisite_competencies && Array.isArray(prereqComps) && prereqComps.length > 0) {
+        compPrereqTotal += prereqComps.length;
+        prereqComps.forEach(pcId => {
+          const s = (allProgressMap[`${user.id}_${pcId}`] || '').toLowerCase();
+          if (s === 'c' || s === 'x' || s === 'x+') compPrereqCompleted++;
+        });
+      }
+
+      // Pre-evaluation
+      if (competency.requires_pre_eval) {
+        compPrereqTotal++;
+        const evals = selfEvalsByUser[user.id] || [];
+        if (evals.some(e => e.evaluation_type === 'pre')) compPrereqCompleted++;
+      }
+
+      // QATrack requirements
       let qaTotalCount = 0;
       const qaBreakdown = qatrackReqs.map(req => {
         const count = qaDetail[req.identifier] || 0;
         qaTotalCount += count;
         return { identifier: req.identifier, count, required: req.count };
       });
+      if (Array.isArray(qatrackReqs) && qatrackReqs.length > 0) {
+        compPrereqTotal += qatrackReqs.length;
+        qatrackReqs.forEach(req => {
+          if ((parseInt(qaDetail[req.identifier], 10) || 0) >= req.count) compPrereqCompleted++;
+        });
+      }
+
+      // Case logs
+      const reqPlanCount = parseInt(competency.required_plan_count, 10) || 0;
+      const userLogs = caseLogsDetailMap[user.id] || [];
+      const approvedLogs = userLogs.filter(l => l.status === 'Completed').length;
+      if (reqPlanCount > 0) {
+        compPrereqTotal++;
+        if (approvedLogs >= reqPlanCount) compPrereqCompleted++;
+      }
+
+      // Completed & required records
+      let compCompletedRecords = 0;
+      let compRequiredRecords = 0;
+      if (hasCaseLogs) {
+        compCompletedRecords = approvedLogs;
+        compRequiredRecords = reqPlanCount;
+      } else {
+        Object.values(qaDetail).forEach(cnt => { compCompletedRecords += (parseInt(cnt, 10) || 0); });
+        let qaReqSum = 0;
+        qatrackReqs.forEach(req => { qaReqSum += (parseInt(req.count, 10) || 0); });
+        compRequiredRecords = qaReqSum;
+      }
+
+      // Days tracking
+      let compDaysValue = null;
+      let compDaysDisplay = '-';
+      if (['c', 'x', 'x+'].includes(statusRaw) && p?.date_started && p?.date_signed_off) {
+        const t1 = new Date(p.date_started).getTime();
+        const t2 = new Date(p.date_signed_off).getTime();
+        if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
+          compDaysValue = Math.round((t2 - t1) / 86400000);
+          compDaysDisplay = `${compDaysValue} days`;
+        }
+      } else if (p?.date_started) {
+        const t1 = new Date(p.date_started).getTime();
+        if (!isNaN(t1)) {
+          compDaysValue = Math.max(0, Math.round((Date.now() - t1) / 86400000));
+          compDaysDisplay = `${compDaysValue} days (in progress)`;
+        }
+      }
+
+      // Durations & Median
+      let compDurations = [];
+      if (hasCaseLogs) {
+        userLogs.forEach(l => {
+          if (l.created_at && l.reviewed_at) {
+            const start = new Date(l.created_at).getTime();
+            const end = new Date(l.reviewed_at).getTime();
+            if (!isNaN(start) && !isNaN(end) && end >= start) compDurations.push((end - start) / 60000);
+          }
+        });
+      } else {
+        (qaTimingsByUser[user.id] || []).forEach(t => {
+          if (t.duration_minutes != null && !isNaN(t.duration_minutes)) {
+            compDurations.push(parseFloat(t.duration_minutes));
+          } else if (t.work_started && t.work_completed) {
+            const start = new Date(t.work_started).getTime();
+            const end = new Date(t.work_completed).getTime();
+            if (!isNaN(start) && !isNaN(end) && end >= start) compDurations.push((end - start) / 60000);
+          }
+        });
+        (timingsMap[user.id] || []).forEach(t => {
+          if (t.duration_minutes != null && !isNaN(t.duration_minutes)) {
+            compDurations.push(parseFloat(t.duration_minutes));
+          } else if (t.work_started && t.work_completed) {
+            const start = new Date(t.work_started).getTime();
+            const end = new Date(t.work_completed).getTime();
+            if (!isNaN(start) && !isNaN(end) && end >= start) compDurations.push((end - start) / 60000);
+          }
+        });
+      }
+
+      let compMedianMins = null;
+      let compMedianDisplay = '-';
+      if (compDurations.length > 0) {
+        compDurations.sort((a, b) => a - b);
+        const mid = Math.floor(compDurations.length / 2);
+        compMedianMins = (compDurations.length % 2 !== 0) ? compDurations[mid] : (compDurations[mid - 1] + compDurations[mid]) / 2;
+        compMedianMins = Math.round(compMedianMins * 10) / 10;
+        if (compMedianMins < 60) {
+          compMedianDisplay = `${compMedianMins} mins`;
+        } else {
+          const hrs = Math.floor(compMedianMins / 60);
+          const mins = Math.round(compMedianMins % 60);
+          compMedianDisplay = mins > 0 ? `${hrs}h ${mins}m` : `${hrs} hrs`;
+        }
+      }
+
+      // Interaction dates
+      let compInteractionDates = [];
+      if (p?.date_signed_off) compInteractionDates.push(new Date(p.date_signed_off).getTime());
+      if (p?.date_reviewed) compInteractionDates.push(new Date(p.date_reviewed).getTime());
+      (auditLogsByUser[user.id] || []).forEach(a => {
+        if (a.timestamp) compInteractionDates.push(new Date(a.timestamp.includes('T') ? a.timestamp : a.timestamp.replace(' ', 'T')).getTime());
+      });
+      userLogs.forEach(l => {
+        if (l.reviewed_at) compInteractionDates.push(new Date(l.reviewed_at).getTime());
+        if (l.created_at) compInteractionDates.push(new Date(l.created_at).getTime());
+        if (l.log_date) compInteractionDates.push(new Date(l.log_date).getTime());
+      });
+      (selfEvalsByUser[user.id] || []).forEach(e => {
+        if (e.submission_date) compInteractionDates.push(new Date(e.submission_date).getTime());
+      });
+      (assessRecordsByUser[user.id] || []).forEach(a => {
+        if (a.created_at) compInteractionDates.push(new Date(a.created_at).getTime());
+      });
+      (fileUploadsByUser[user.id] || []).forEach(f => {
+        if (f.upload_date) compInteractionDates.push(new Date(f.upload_date).getTime());
+      });
+      (qaTimingsByUser[user.id] || []).forEach(q => {
+        if (q.work_completed) compInteractionDates.push(new Date(q.work_completed).getTime());
+        if (q.date) compInteractionDates.push(new Date(q.date).getTime());
+      });
+
+      const compValidDates = compInteractionDates.filter(d => !isNaN(d) && d > 0);
+      const compLastInteraction = compValidDates.length > 0 ? Math.max(...compValidDates) : null;
+      let compLastInteractionDisplay = '-';
+      if (compLastInteraction) {
+        const d = new Date(compLastInteraction);
+        const day = String(d.getDate()).padStart(2, '0');
+        const mon = String(d.getMonth() + 1).padStart(2, '0');
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        compLastInteractionDisplay = `${day}/${mon}/${yr} ${hr}:${min}`;
+      }
 
       const caseLogs = caseLogMap[user.id] || { total: 0, approved: 0 };
-      const userLogs = caseLogsDetailMap[user.id] || [];
-      const leaderboardCount = hasCaseLogs ? caseLogs.approved : qaTotalCount;
-      const status = statusMap[user.id] || defaultStatus;
+      const leaderboardCount = hasCaseLogs ? caseLogs.approved : compCompletedRecords;
+
+      let allTimings = [...(timingsMap[user.id] || [])];
+      (qaTimingsByUser[user.id] || []).forEach(t => {
+        if (!allTimings.some(at => at.id && at.id === t.id)) allTimings.push(t);
+      });
 
       return {
         userId: user.id,
         fullName: user.full_name,
         designation: user.designation,
+        status: statusRaw.toUpperCase(),
+        prereq_total: compPrereqTotal,
+        prereq_completed: compPrereqCompleted,
+        prereq_display: compPrereqTotal > 0 ? `${compPrereqCompleted} / ${compPrereqTotal}` : 'N/A',
+        completed_records: compCompletedRecords,
+        required_records: compRequiredRecords,
+        records_met: compRequiredRecords > 0 ? (compCompletedRecords >= compRequiredRecords) : null,
+        records_display: compRequiredRecords > 0 ? `${compCompletedRecords} / ${compRequiredRecords}` : `${compCompletedRecords}`,
+        days_value: compDaysValue,
+        days_display: compDaysDisplay,
+        median_mins: compMedianMins,
+        median_display: compMedianDisplay,
+        last_interaction_timestamp: compLastInteraction,
+        last_interaction_display: compLastInteractionDisplay,
+        leaderboard_basis: compLeaderboardType,
         qaTotalCount: leaderboardCount,
         qaBreakdown,
         caseLogTotal: caseLogs.total,
         caseLogApproved: caseLogs.approved,
-        requiredCaseLogs: competency.required_plan_count || 0,
+        requiredCaseLogs: reqPlanCount,
         logs: userLogs,
-        qatrackTimings: timingsMap[user.id] || [],
-        status
+        qatrackTimings: allTimings
       };
     });
 
@@ -3355,6 +3623,7 @@ app.get('/api/admin/competency/:id/records-summary', authenticateToken, requireA
         id: competency.id,
         task_name: competency.task_name,
         category: competency.category,
+        description: competency.description || '',
         hasQATrack,
         hasCaseLogs
       },
@@ -3369,7 +3638,7 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
   const category = req.query.category;
   if (!category) return res.status(400).json({ error: 'Category is required' });
   try {
-    const competencies = await query(req.db, 'SELECT * FROM competencies WHERE category = ?', [category]);
+    const competencies = await query(req.db, 'SELECT * FROM competencies WHERE category = ? ORDER BY display_order ASC, id ASC', [category]);
     if (competencies.length === 0) return res.status(404).json({ error: 'No competencies found for this category' });
     const competencyIds = competencies.map(c => c.id);
 
@@ -3384,7 +3653,6 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
 
     // Check if any of these competencies are applicable to each user
     const competencyGroups = await query(req.db, `SELECT competency_id, group_name FROM competency_groups WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
-    
     const compGroupsMap = {};
     competencyGroups.forEach(cg => {
       if (!compGroupsMap[cg.competency_id]) compGroupsMap[cg.competency_id] = [];
@@ -3400,9 +3668,47 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
       });
     });
 
-    // Compute each user's overall status across all applicable competencies
-    // in this category: the lowest-ranked status is shown (one weak link
-    // drags the whole group's displayed status down).
+    // Progress rows
+    const progressRows = await query(req.db, `SELECT * FROM staff_competency_progress WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    const progressMap = {};
+    progressRows.forEach(p => {
+      if (!progressMap[p.user_id]) progressMap[p.user_id] = {};
+      progressMap[p.user_id][p.competency_id] = p;
+    });
+
+    // All progress for prerequisite competency check
+    const allProgressRows = await query(req.db, 'SELECT user_id, competency_id, current_status FROM staff_competency_progress');
+    const allProgressMap = {};
+    allProgressRows.forEach(p => { allProgressMap[`${p.user_id}_${p.competency_id}`] = p.current_status; });
+
+    // Case logs
+    const caseLogs = await query(req.db, `SELECT * FROM patient_plan_logs WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    const caseLogsByUserComp = {};
+    caseLogs.forEach(l => {
+      if (!caseLogsByUserComp[l.trainee_id]) caseLogsByUserComp[l.trainee_id] = {};
+      if (!caseLogsByUserComp[l.trainee_id][l.competency_id]) caseLogsByUserComp[l.trainee_id][l.competency_id] = [];
+      caseLogsByUserComp[l.trainee_id][l.competency_id].push(l);
+    });
+
+    // Self evaluations
+    const selfEvals = await query(req.db, `SELECT * FROM self_evaluations WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    const selfEvalsByUserComp = {};
+    selfEvals.forEach(e => {
+      if (!selfEvalsByUserComp[e.user_id]) selfEvalsByUserComp[e.user_id] = {};
+      if (!selfEvalsByUserComp[e.user_id][e.competency_id]) selfEvalsByUserComp[e.user_id][e.competency_id] = [];
+      selfEvalsByUserComp[e.user_id][e.competency_id].push(e);
+    });
+
+    // Assessment records
+    const assessRecords = await query(req.db, `SELECT * FROM assessment_records WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    const assessRecordsByUserComp = {};
+    assessRecords.forEach(a => {
+      if (!assessRecordsByUserComp[a.trainee_id]) assessRecordsByUserComp[a.trainee_id] = {};
+      if (!assessRecordsByUserComp[a.trainee_id][a.competency_id]) assessRecordsByUserComp[a.trainee_id][a.competency_id] = [];
+      assessRecordsByUserComp[a.trainee_id][a.competency_id].push(a);
+    });
+
+    // Quizzes
     const competencyQuizzes = await query(req.db, `SELECT competency_id, quiz_id FROM competency_quizzes WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
     const quizzesByComp = {};
     competencyQuizzes.forEach(cq => {
@@ -3410,107 +3716,392 @@ app.get('/api/admin/category/records-summary', authenticateToken, requireAdmin, 
       quizzesByComp[cq.competency_id].push(cq.quiz_id);
     });
 
-    const statusProgressRows = await query(req.db, `SELECT user_id, competency_id, current_status FROM staff_competency_progress WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
-    const statusProgressMap = {};
-    statusProgressRows.forEach(row => {
-      if (!statusProgressMap[row.user_id]) statusProgressMap[row.user_id] = {};
-      statusProgressMap[row.user_id][row.competency_id] = row.current_status;
+    // Audit logs
+    let auditLogs = [];
+    try {
+      auditLogs = await query(req.db, `SELECT competency_id, timestamp, target_user_id, actioned_by_id FROM competency_audit_log WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    } catch(e) {}
+    const auditLogsByUserComp = {};
+    auditLogs.forEach(a => {
+      const uid = a.target_user_id;
+      if (uid) {
+        if (!auditLogsByUserComp[uid]) auditLogsByUserComp[uid] = {};
+        if (!auditLogsByUserComp[uid][a.competency_id]) auditLogsByUserComp[uid][a.competency_id] = [];
+        auditLogsByUserComp[uid][a.competency_id].push(a);
+      }
     });
 
-    const userOverallStatus = {};
-    applicableUsers.forEach(u => {
+    // File uploads
+    let fileUploads = [];
+    try {
+      fileUploads = await query(req.db, `SELECT user_id, competency_id, upload_date FROM file_uploads WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    } catch(e) {}
+    const fileUploadsByUserComp = {};
+    fileUploads.forEach(f => {
+      if (!fileUploadsByUserComp[f.user_id]) fileUploadsByUserComp[f.user_id] = {};
+      if (!fileUploadsByUserComp[f.user_id][f.competency_id]) fileUploadsByUserComp[f.user_id][f.competency_id] = [];
+      fileUploadsByUserComp[f.user_id][f.competency_id].push(f);
+    });
+
+    // QA timings
+    let qaTimingsRows = [];
+    try {
+      qaTimingsRows = await query(req.db, `SELECT user_id, competency_id, work_completed, work_started, duration_minutes, date, created_at FROM qatrack_timings WHERE competency_id IN (${competencyIds.map(() => '?').join(',')})`, competencyIds);
+    } catch(e) {}
+    const qaTimingsByUserComp = {};
+    qaTimingsRows.forEach(q => {
+      if (!qaTimingsByUserComp[q.user_id]) qaTimingsByUserComp[q.user_id] = {};
+      if (!qaTimingsByUserComp[q.user_id][q.competency_id]) qaTimingsByUserComp[q.user_id][q.competency_id] = [];
+      qaTimingsByUserComp[q.user_id][q.competency_id].push(q);
+    });
+
+    const sections = await getSections();
+    const currentSection = sections.find(s => s.name === dbName);
+    const sectionLeaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
+
+    const summary = applicableUsers.map(user => {
+      const targetUserId = user.id;
       const applicableCompsForUser = competencies.filter(c => {
         const targetGroups = compGroupsMap[c.id] || [];
         let targetUsers = [];
         try { targetUsers = JSON.parse(c.target_users || '[]'); } catch(e) {}
-        return targetGroups.includes(u.designation) || targetUsers.includes(u.id);
+        return targetGroups.includes(user.designation) || targetUsers.includes(user.id);
       });
-      const statuses = applicableCompsForUser.map(c => {
-        const existing = statusProgressMap[u.id]?.[c.id];
-        return existing || computeDefaultStatus(c, quizzesByComp);
-      });
-      userOverallStatus[u.id] = lowestCommonStatus(statuses);
-    });
 
-    // Separate competencies into QATrack and logbook
-    const sections = await getSections();
-    const currentSection = sections.find(s => s.name === dbName);
-    const leaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
-    const isQA = leaderboardType === 'qa';
-    // Follow the section's leaderboard toggle for ALL competencies in the
-    // category, rather than guessing per-competency based on which fields
-    // happen to be populated.
-    const caseComps = isQA ? [] : competencies;
-    const qaComps = isQA ? competencies : [];
+      let catPrereqTotal = 0;
+      let catPrereqCompleted = 0;
+      let catCompletedRecords = 0;
+      let catRequiredRecords = 0;
+      let userDurations = [];
+      let userInteractionDates = [];
+      let userStatuses = [];
+      let userEarliestStart = null;
+      let userLatestSignOff = null;
+      let allCompetent = applicableCompsForUser.length > 0;
+      const userCompetencies = [];
 
-    const userRecordsMap = {};
-    applicableUsers.forEach(u => { userRecordsMap[u.id] = 0; });
+      applicableCompsForUser.forEach(c => {
+        const p = progressMap[targetUserId]?.[c.id];
+        const compLeaderboardType = (c.leaderboard_type && c.leaderboard_type !== 'default') ? c.leaderboard_type : sectionLeaderboardType;
+        const isLogbook = compLeaderboardType === 'logbook';
+        const status = (p && p.current_status) ? p.current_status.toLowerCase() : 't';
+        userStatuses.push(status);
+        if (!['c', 'x', 'x+'].includes(status)) allCompetent = false;
 
-    // 1. Fetch Completed Logbook (Case Log) counts and records
-    const caseLogsDetailMap = {};
-    if (caseComps.length > 0) {
-      const caseCompIds = caseComps.map(c => c.id);
-      const caseLogRows = await query(req.db, `SELECT trainee_id, COUNT(*) as count FROM patient_plan_logs WHERE status = 'Completed' AND competency_id IN (${caseCompIds.map(() => '?').join(',')}) GROUP BY trainee_id`, caseCompIds);
-      caseLogRows.forEach(row => {
-        if (userRecordsMap[row.trainee_id] !== undefined) {
-          userRecordsMap[row.trainee_id] += (row.count || 0);
+        let compPrereqTotal = 0;
+        let compPrereqCompleted = 0;
+        let compCompletedRecords = 0;
+        let compRequiredRecords = 0;
+        let compDurations = [];
+        let compInteractionDates = [];
+
+        // Reading prerequisites
+        let readingPrereqs = [];
+        try { readingPrereqs = JSON.parse(c.reading_prerequisites || '[]'); } catch(e) {}
+        if (Array.isArray(readingPrereqs) && readingPrereqs.length > 0) {
+          compPrereqTotal += readingPrereqs.length;
+          let completedReadings = [];
+          try { completedReadings = JSON.parse(p?.readings_completed || '[]'); } catch(e) {}
+          const completedSet = new Set((completedReadings || []).map(String));
+          readingPrereqs.forEach(r => {
+            if (completedSet.has(String(r.id))) compPrereqCompleted++;
+          });
         }
-      });
-      const completedCaseLogs = await query(req.db, `SELECT id, trainee_id, competency_id, status, created_at, reviewed_at, log_date, patient_reference FROM patient_plan_logs WHERE status = 'Completed' AND competency_id IN (${caseCompIds.map(() => '?').join(',')})`, caseCompIds);
-      completedCaseLogs.forEach(row => {
-        if (!caseLogsDetailMap[row.trainee_id]) caseLogsDetailMap[row.trainee_id] = [];
-        caseLogsDetailMap[row.trainee_id].push(row);
-      });
-    }
 
-    // 2. Fetch QATrack records & timings
-    const userTimingsMap = {};
-    if (qaComps.length > 0) {
-      const qaCompIds = qaComps.map(c => c.id);
-      const progressRows = await query(req.db, `SELECT user_id, competency_id, qatrack_records_detail, qatrack_timings FROM staff_competency_progress WHERE competency_id IN (${qaCompIds.map(() => '?').join(',')})`, qaCompIds);
-      progressRows.forEach(row => {
-        let detail = {};
-        try { detail = JSON.parse(row.qatrack_records_detail || '{}'); } catch(e) {}
-        
-        let sum = 0;
-        Object.values(detail).forEach(count => {
-          sum += (parseInt(count, 10) || 0);
+        // Quiz prerequisites
+        if (c.requires_quiz && quizzesByComp[c.id] && quizzesByComp[c.id].length > 0) {
+          const qList = quizzesByComp[c.id];
+          compPrereqTotal += qList.length;
+          let completedQuizzes = {};
+          try { completedQuizzes = JSON.parse(p?.quizzes_completed || '{}'); } catch(e) {}
+          qList.forEach(qId => {
+            const qRecord = completedQuizzes[qId] || completedQuizzes[String(qId)];
+            if (qRecord && qRecord.passed) compPrereqCompleted++;
+          });
+        }
+
+        // Prerequisite competencies
+        let prereqComps = [];
+        try { prereqComps = JSON.parse(c.prerequisite_competencies || '[]'); } catch(e) {}
+        if (c.requires_prerequisite_competencies && Array.isArray(prereqComps) && prereqComps.length > 0) {
+          compPrereqTotal += prereqComps.length;
+          prereqComps.forEach(pcId => {
+            const s = (allProgressMap[`${targetUserId}_${pcId}`] || '').toLowerCase();
+            if (s === 'c' || s === 'x' || s === 'x+') compPrereqCompleted++;
+          });
+        }
+
+        // Pre-evaluation
+        if (c.requires_pre_eval) {
+          compPrereqTotal++;
+          const evals = selfEvalsByUserComp[targetUserId]?.[c.id] || [];
+          if (evals.some(e => e.evaluation_type === 'pre')) compPrereqCompleted++;
+        }
+
+        // QATrack requirements
+        let qaReqs = [];
+        try { qaReqs = JSON.parse(c.qatrack_requirements || '[]'); } catch(e) {}
+        let qaDetails = {};
+        try { qaDetails = JSON.parse(p?.qatrack_records_detail || '{}'); } catch(e) {}
+        if (Array.isArray(qaReqs) && qaReqs.length > 0) {
+          compPrereqTotal += qaReqs.length;
+          qaReqs.forEach(req => {
+            if ((parseInt(qaDetails[req.identifier], 10) || 0) >= req.count) compPrereqCompleted++;
+          });
+        }
+
+        // Case logs
+        const reqPlanCount = parseInt(c.required_plan_count, 10) || 0;
+        const userLogs = caseLogsByUserComp[targetUserId]?.[c.id] || [];
+        const approvedLogs = userLogs.filter(l => l.status === 'Completed').length;
+        if (reqPlanCount > 0) {
+          compPrereqTotal++;
+          if (approvedLogs >= reqPlanCount) compPrereqCompleted++;
+        }
+
+        // Completed & required records count
+        if (isLogbook) {
+          compCompletedRecords = approvedLogs;
+          compRequiredRecords = reqPlanCount;
+        } else {
+          Object.values(qaDetails).forEach(cnt => { compCompletedRecords += (parseInt(cnt, 10) || 0); });
+          let qaReqSum = 0;
+          qaReqs.forEach(req => { qaReqSum += (parseInt(req.count, 10) || 0); });
+          compRequiredRecords = qaReqSum;
+        }
+
+        // Days tracking
+        let compDaysValue = null;
+        let compDaysDisplay = '-';
+        if (['c', 'x', 'x+'].includes(status) && p?.date_started && p?.date_signed_off) {
+          const t1 = new Date(p.date_started).getTime();
+          const t2 = new Date(p.date_signed_off).getTime();
+          if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
+            compDaysValue = Math.round((t2 - t1) / 86400000);
+            compDaysDisplay = `${compDaysValue} days`;
+          }
+        } else if (p?.date_started) {
+          const t1 = new Date(p.date_started).getTime();
+          if (!isNaN(t1)) {
+            compDaysValue = Math.max(0, Math.round((Date.now() - t1) / 86400000));
+            compDaysDisplay = `${compDaysValue} days (in progress)`;
+          }
+        }
+
+        if (p?.date_started) {
+          const tStart = new Date(p.date_started).getTime();
+          if (!isNaN(tStart)) {
+            if (!userEarliestStart || tStart < userEarliestStart) userEarliestStart = tStart;
+          }
+        }
+        if (p?.date_signed_off) {
+          const tSign = new Date(p.date_signed_off).getTime();
+          if (!isNaN(tSign)) {
+            if (!userLatestSignOff || tSign > userLatestSignOff) userLatestSignOff = tSign;
+          }
+        }
+
+        // Durations
+        let compLogs = [];
+        let compTimings = [];
+        if (isLogbook) {
+          userLogs.forEach(l => {
+            if (l.status === 'Completed') compLogs.push(l);
+            if (l.created_at && l.reviewed_at) {
+              const start = new Date(l.created_at).getTime();
+              const end = new Date(l.reviewed_at).getTime();
+              if (!isNaN(start) && !isNaN(end) && end >= start) compDurations.push((end - start) / 60000);
+            }
+          });
+        } else {
+          (qaTimingsByUserComp[targetUserId]?.[c.id] || []).forEach(t => compTimings.push(t));
+          let pTimings = [];
+          try { pTimings = JSON.parse(p?.qatrack_timings || '[]'); } catch(e) {}
+          if (Array.isArray(pTimings)) compTimings.push(...pTimings);
+          compTimings.forEach(t => {
+            if (t.duration_minutes != null && !isNaN(t.duration_minutes)) {
+              compDurations.push(parseFloat(t.duration_minutes));
+            } else if (t.work_started && t.work_completed) {
+              const start = new Date(t.work_started).getTime();
+              const end = new Date(t.work_completed).getTime();
+              if (!isNaN(start) && !isNaN(end) && end >= start) compDurations.push((end - start) / 60000);
+            }
+          });
+        }
+
+        // Interaction dates (excluding date_started!)
+        if (p?.date_signed_off) compInteractionDates.push(new Date(p.date_signed_off).getTime());
+        if (p?.date_reviewed) compInteractionDates.push(new Date(p.date_reviewed).getTime());
+        (auditLogsByUserComp[targetUserId]?.[c.id] || []).forEach(a => {
+          if (a.timestamp) compInteractionDates.push(new Date(a.timestamp.includes('T') ? a.timestamp : a.timestamp.replace(' ', 'T')).getTime());
+        });
+        userLogs.forEach(l => {
+          if (l.reviewed_at) compInteractionDates.push(new Date(l.reviewed_at).getTime());
+          if (l.created_at) compInteractionDates.push(new Date(l.created_at).getTime());
+          if (l.log_date) compInteractionDates.push(new Date(l.log_date).getTime());
+        });
+        (selfEvalsByUserComp[targetUserId]?.[c.id] || []).forEach(e => {
+          if (e.submission_date) compInteractionDates.push(new Date(e.submission_date).getTime());
+        });
+        (assessRecordsByUserComp[targetUserId]?.[c.id] || []).forEach(a => {
+          if (a.created_at) compInteractionDates.push(new Date(a.created_at).getTime());
+        });
+        (fileUploadsByUserComp[targetUserId]?.[c.id] || []).forEach(f => {
+          if (f.upload_date) compInteractionDates.push(new Date(f.upload_date).getTime());
+        });
+        (qaTimingsByUserComp[targetUserId]?.[c.id] || []).forEach(q => {
+          if (q.work_completed) compInteractionDates.push(new Date(q.work_completed).getTime());
+          if (q.date) compInteractionDates.push(new Date(q.date).getTime());
         });
 
-        if (userRecordsMap[row.user_id] !== undefined) {
-          userRecordsMap[row.user_id] += sum;
+        // Median for this competency
+        let compMedianMins = null;
+        let compMedianDisplay = '-';
+        if (compDurations.length > 0) {
+          compDurations.sort((a, b) => a - b);
+          const mid = Math.floor(compDurations.length / 2);
+          compMedianMins = (compDurations.length % 2 !== 0) ? compDurations[mid] : (compDurations[mid - 1] + compDurations[mid]) / 2;
+          compMedianMins = Math.round(compMedianMins * 10) / 10;
+          if (compMedianMins < 60) {
+            compMedianDisplay = `${compMedianMins} mins`;
+          } else {
+            const hrs = Math.floor(compMedianMins / 60);
+            const mins = Math.round(compMedianMins % 60);
+            compMedianDisplay = mins > 0 ? `${hrs}h ${mins}m` : `${hrs} hrs`;
+          }
         }
 
-        let timings = [];
-        try { timings = JSON.parse(row.qatrack_timings || '[]'); if (!Array.isArray(timings)) timings = []; } catch(e) {}
-        if (!userTimingsMap[row.user_id]) userTimingsMap[row.user_id] = [];
-        userTimingsMap[row.user_id].push(...timings);
-      });
-    }
+        // Last interaction for this competency
+        const compValidDates = compInteractionDates.filter(d => !isNaN(d) && d > 0);
+        const compLastInteraction = compValidDates.length > 0 ? Math.max(...compValidDates) : null;
+        let compLastInteractionDisplay = '-';
+        if (compLastInteraction) {
+          const d = new Date(compLastInteraction);
+          const day = String(d.getDate()).padStart(2, '0');
+          const mon = String(d.getMonth() + 1).padStart(2, '0');
+          const yr = d.getFullYear();
+          const hr = String(d.getHours()).padStart(2, '0');
+          const min = String(d.getMinutes()).padStart(2, '0');
+          compLastInteractionDisplay = `${day}/${mon}/${yr} ${hr}:${min}`;
+        }
 
-    // Build summary list
-    const summary = applicableUsers.map(user => {
-      const qaTotalCount = userRecordsMap[user.id] || 0;
+        // Accumulate to category totals
+        catPrereqTotal += compPrereqTotal;
+        catPrereqCompleted += compPrereqCompleted;
+        catCompletedRecords += compCompletedRecords;
+        catRequiredRecords += compRequiredRecords;
+        userDurations.push(...compDurations);
+        userInteractionDates.push(...compInteractionDates);
+
+        userCompetencies.push({
+          id: c.id,
+          category: c.category,
+          task_name: c.task_name,
+          description: c.description || '',
+          status: status.toUpperCase(),
+          prereq_total: compPrereqTotal,
+          prereq_completed: compPrereqCompleted,
+          prereq_display: compPrereqTotal > 0 ? `${compPrereqCompleted} / ${compPrereqTotal}` : 'N/A',
+          completed_records: compCompletedRecords,
+          required_records: compRequiredRecords,
+          records_met: compRequiredRecords > 0 ? (compCompletedRecords >= compRequiredRecords) : null,
+          records_display: compRequiredRecords > 0 ? `${compCompletedRecords} / ${compRequiredRecords}` : `${compCompletedRecords}`,
+          days_value: compDaysValue,
+          days_display: compDaysDisplay,
+          median_mins: compMedianMins,
+          median_display: compMedianDisplay,
+          last_interaction_timestamp: compLastInteraction,
+          last_interaction_display: compLastInteractionDisplay,
+          leaderboard_basis: compLeaderboardType,
+          logs: compLogs,
+          qatrackTimings: compTimings
+        });
+      });
+
+      const overallStatus = lowestCommonStatus(userStatuses);
+
+      // Days calculation
+      let daysValue = null;
+      let daysDisplay = '-';
+      if (allCompetent && userEarliestStart && userLatestSignOff && userLatestSignOff >= userEarliestStart) {
+        daysValue = Math.round((userLatestSignOff - userEarliestStart) / 86400000);
+        daysDisplay = `${daysValue} days`;
+      } else if (userEarliestStart) {
+        daysValue = Math.max(0, Math.round((Date.now() - userEarliestStart) / 86400000));
+        daysDisplay = `${daysValue} days (in progress)`;
+      }
+
+      // Median calculation
+      let medianMins = null;
+      let medianDisplay = '-';
+      if (userDurations.length > 0) {
+        userDurations.sort((a, b) => a - b);
+        const mid = Math.floor(userDurations.length / 2);
+        medianMins = (userDurations.length % 2 !== 0) ? userDurations[mid] : (userDurations[mid - 1] + userDurations[mid]) / 2;
+        medianMins = Math.round(medianMins * 10) / 10;
+        if (medianMins < 60) {
+          medianDisplay = `${medianMins} mins`;
+        } else {
+          const hrs = Math.floor(medianMins / 60);
+          const mins = Math.round(medianMins % 60);
+          medianDisplay = mins > 0 ? `${hrs}h ${mins}m` : `${hrs} hrs`;
+        }
+      }
+
+      // Last interaction
+      const validDates = userInteractionDates.filter(d => !isNaN(d) && d > 0);
+      const lastInteraction = validDates.length > 0 ? Math.max(...validDates) : null;
+      let lastInteractionDisplay = '-';
+      if (lastInteraction) {
+        const d = new Date(lastInteraction);
+        const day = String(d.getDate()).padStart(2, '0');
+        const mon = String(d.getMonth() + 1).padStart(2, '0');
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        lastInteractionDisplay = `${day}/${mon}/${yr} ${hr}:${min}`;
+      }
+
+      // Collect user's logs and timings for timing analytics view
+      const combinedLogs = [];
+      const combinedTimings = [];
+      userCompetencies.forEach(compRow => {
+        combinedLogs.push(...(compRow.logs || []));
+        combinedTimings.push(...(compRow.qatrackTimings || []));
+      });
+
       return {
         userId: user.id,
         fullName: user.full_name,
         designation: user.designation,
-        qaTotalCount,
-        logs: caseLogsDetailMap[user.id] || [],
-        qatrackTimings: userTimingsMap[user.id] || [],
-        status: userOverallStatus[user.id] || null
+        status: overallStatus,
+        prereq_total: catPrereqTotal,
+        prereq_completed: catPrereqCompleted,
+        prereq_display: catPrereqTotal > 0 ? `${catPrereqCompleted} / ${catPrereqTotal}` : 'N/A',
+        completed_records: catCompletedRecords,
+        required_records: catRequiredRecords,
+        records_display: catRequiredRecords > 0 ? `${catCompletedRecords} / ${catRequiredRecords}` : `${catCompletedRecords}`,
+        records_met: catRequiredRecords > 0 ? (catCompletedRecords >= catRequiredRecords) : null,
+        days_value: daysValue,
+        days_display: daysDisplay,
+        median_mins: medianMins,
+        median_display: medianDisplay,
+        last_interaction_timestamp: lastInteraction,
+        last_interaction_display: lastInteractionDisplay,
+        leaderboard_basis: sectionLeaderboardType,
+        qaTotalCount: catCompletedRecords,
+        logs: combinedLogs,
+        qatrackTimings: combinedTimings,
+        competencies: userCompetencies
       };
     });
-
-    const hasCaseLogs = leaderboardType === 'logbook';
-    const hasQATrack = leaderboardType === 'qa';
 
     res.json({
       competency: {
         task_name: 'All Tasks Combined',
         category: category,
-        hasQATrack,
-        hasCaseLogs
+        hasQATrack: sectionLeaderboardType !== 'logbook',
+        hasCaseLogs: sectionLeaderboardType === 'logbook'
       },
       summary
     });
@@ -3583,16 +4174,19 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
       userOverallStatus[u.id] = lowestCommonStatus(statuses);
     });
 
-    // Separate competencies into QATrack and logbook
+    // Separate competencies into QATrack and logbook based on per-competency or section default
     const sections = await getSections();
     const currentSection = sections.find(s => s.name === dbName);
-    const leaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
-    const isQA = leaderboardType === 'qa';
-    // Follow the section's leaderboard toggle for ALL competencies in the
-    // section, rather than guessing per-competency based on which fields
-    // happen to be populated.
-    const caseComps = isQA ? [] : competencies;
-    const qaComps = isQA ? competencies : [];
+    const sectionLeaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
+
+    const caseComps = competencies.filter(c => {
+      const lb = (c.leaderboard_type && c.leaderboard_type !== 'default') ? c.leaderboard_type : sectionLeaderboardType;
+      return lb === 'logbook';
+    });
+    const qaComps = competencies.filter(c => {
+      const lb = (c.leaderboard_type && c.leaderboard_type !== 'default') ? c.leaderboard_type : sectionLeaderboardType;
+      return lb === 'qa';
+    });
 
     const userRecordsMap = {};
     applicableUsers.forEach(u => { userRecordsMap[u.id] = 0; });
@@ -3664,6 +4258,397 @@ app.get('/api/admin/section/records-summary', authenticateToken, requireAdmin, a
         hasCaseLogs
       },
       summary
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.get('/api/user/:id/analysis', authenticateToken, async (req, res) => {
+  const targetUserId = parseInt(req.params.id, 10);
+  try {
+    const targetUserRows = await query(sharedDb, 'SELECT id, username, full_name, designation, date_in_post, active_in FROM users WHERE id = ?', [targetUserId]);
+    if (targetUserRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const targetUser = targetUserRows[0];
+
+    const dbName = req.headers['x-database'] || 'QA';
+    const sections = await getSections();
+    const currentSection = sections.find(s => s.name === dbName);
+    const sectionLeaderboardType = currentSection?.leaderboardType || (dbName === 'QA' ? 'qa' : 'logbook');
+
+    // 1. Fetch competencies
+    const competencies = await query(req.db, 'SELECT * FROM competencies ORDER BY display_order ASC, id ASC');
+    const compGroups = await query(req.db, 'SELECT competency_id, group_name FROM competency_groups');
+    const compGroupsMap = {};
+    compGroups.forEach(cg => {
+      if (!compGroupsMap[cg.competency_id]) compGroupsMap[cg.competency_id] = [];
+      compGroupsMap[cg.competency_id].push(cg.group_name);
+    });
+
+    // Filter applicable competencies for targetUser
+    const applicableComps = competencies.filter(c => {
+      const targetGroups = compGroupsMap[c.id] || [];
+      let targetUsers = [];
+      try { targetUsers = JSON.parse(c.target_users || '[]'); } catch(e) {}
+      return targetGroups.includes(targetUser.designation) || targetUsers.includes(targetUser.id);
+    });
+
+    // 2. Fetch staff progress
+    const progressRows = await query(req.db, 'SELECT * FROM staff_competency_progress WHERE user_id = ?', [targetUserId]);
+    const progressMap = {};
+    progressRows.forEach(p => { progressMap[p.competency_id] = p; });
+
+    // 3. Fetch all progress to check prerequisite competencies
+    const allProgressRows = await query(req.db, 'SELECT user_id, competency_id, current_status FROM staff_competency_progress');
+    const allProgressMap = {};
+    allProgressRows.forEach(p => { allProgressMap[`${p.user_id}_${p.competency_id}`] = p.current_status; });
+
+    // 4. Fetch case logs
+    const caseLogs = await query(req.db, 'SELECT * FROM patient_plan_logs WHERE trainee_id = ?', [targetUserId]);
+    const caseLogsByComp = {};
+    caseLogs.forEach(l => {
+      if (!caseLogsByComp[l.competency_id]) caseLogsByComp[l.competency_id] = [];
+      caseLogsByComp[l.competency_id].push(l);
+    });
+
+    // 5. Fetch self evaluations
+    const selfEvals = await query(req.db, 'SELECT * FROM self_evaluations WHERE user_id = ?', [targetUserId]);
+    const selfEvalsByComp = {};
+    selfEvals.forEach(e => {
+      if (!selfEvalsByComp[e.competency_id]) selfEvalsByComp[e.competency_id] = [];
+      selfEvalsByComp[e.competency_id].push(e);
+    });
+
+    // 6. Fetch assessment records
+    const assessRecords = await query(req.db, 'SELECT a.*, c.task_name, c.category FROM assessment_records a JOIN competencies c ON a.competency_id = c.id WHERE a.trainee_id = ? ORDER BY a.created_at DESC', [targetUserId]);
+    const allUsers = await query(sharedDb, 'SELECT id, full_name FROM users');
+    const userMap = {};
+    allUsers.forEach(u => userMap[u.id] = u.full_name);
+    assessRecords.forEach(a => {
+      a.assessor_name = userMap[a.assessor_id] || 'Unknown';
+    });
+
+    const assessRecordsByComp = {};
+    assessRecords.forEach(a => {
+      if (!assessRecordsByComp[a.competency_id]) assessRecordsByComp[a.competency_id] = [];
+      assessRecordsByComp[a.competency_id].push(a);
+    });
+
+    // 7. Fetch quizzes
+    const competencyQuizzes = await query(req.db, 'SELECT competency_id, quiz_id FROM competency_quizzes');
+    const quizzesByComp = {};
+    competencyQuizzes.forEach(cq => {
+      if (!quizzesByComp[cq.competency_id]) quizzesByComp[cq.competency_id] = [];
+      quizzesByComp[cq.competency_id].push(cq.quiz_id);
+    });
+
+    // 8. Fetch audit logs, file uploads, QA timings, viva and pre-assessments for interaction calculation
+    let auditLogs = [];
+    try {
+      auditLogs = await query(req.db, 'SELECT competency_id, timestamp, action_type FROM competency_audit_log WHERE target_user_id = ? OR (competency_id IS NOT NULL AND actioned_by_id = ?)', [targetUserId, targetUserId]);
+    } catch(e) {}
+    const auditLogsByComp = {};
+    auditLogs.forEach(a => {
+      if (a.competency_id) {
+        if (!auditLogsByComp[a.competency_id]) auditLogsByComp[a.competency_id] = [];
+        auditLogsByComp[a.competency_id].push(a);
+      }
+    });
+
+    let fileUploads = [];
+    try {
+      fileUploads = await query(req.db, 'SELECT competency_id, upload_date FROM file_uploads WHERE user_id = ?', [targetUserId]);
+    } catch(e) {}
+    const fileUploadsByComp = {};
+    fileUploads.forEach(f => {
+      if (!fileUploadsByComp[f.competency_id]) fileUploadsByComp[f.competency_id] = [];
+      fileUploadsByComp[f.competency_id].push(f);
+    });
+
+    let qaTimingsRows = [];
+    try {
+      qaTimingsRows = await query(req.db, 'SELECT competency_id, work_completed, date, created_at FROM qatrack_timings WHERE user_id = ?', [targetUserId]);
+    } catch(e) {}
+    const qaTimingsByComp = {};
+    qaTimingsRows.forEach(q => {
+      if (!qaTimingsByComp[q.competency_id]) qaTimingsByComp[q.competency_id] = [];
+      qaTimingsByComp[q.competency_id].push(q);
+    });
+
+    try {
+      const preAssessRows = await query(req.db, 'SELECT competency_id, created_at, updated_at FROM pre_assessment_submissions WHERE trainee_id = ?', [targetUserId]);
+      preAssessRows.forEach(pa => {
+        if (pa.competency_id) {
+          if (!auditLogsByComp[pa.competency_id]) auditLogsByComp[pa.competency_id] = [];
+          if (pa.created_at) auditLogsByComp[pa.competency_id].push({ timestamp: pa.created_at });
+          if (pa.updated_at) auditLogsByComp[pa.competency_id].push({ timestamp: pa.updated_at });
+        }
+      });
+    } catch(e) {}
+
+    try {
+      const vivaRows = await query(req.db, 'SELECT competency_id, created_at, updated_at FROM viva_evaluations WHERE trainee_id = ?', [targetUserId]);
+      vivaRows.forEach(v => {
+        if (v.competency_id) {
+          if (!auditLogsByComp[v.competency_id]) auditLogsByComp[v.competency_id] = [];
+          if (v.created_at) auditLogsByComp[v.competency_id].push({ timestamp: v.created_at });
+          if (v.updated_at) auditLogsByComp[v.competency_id].push({ timestamp: v.updated_at });
+        }
+      });
+    } catch(e) {}
+
+    // Build competency rows
+    const compAnalysisList = applicableComps.map(c => {
+      const p = progressMap[c.id];
+      const compLeaderboardType = (c.leaderboard_type && c.leaderboard_type !== 'default') ? c.leaderboard_type : sectionLeaderboardType;
+      const isLogbook = compLeaderboardType === 'logbook';
+
+      const status = (p && p.current_status) ? p.current_status.toLowerCase() : 't';
+
+      // Prerequisites calculation
+      let prereqTotal = 0;
+      let prereqCompleted = 0;
+
+      // Reading prerequisites
+      let readingPrereqs = [];
+      try { readingPrereqs = JSON.parse(c.reading_prerequisites || '[]'); } catch(e) {}
+      if (Array.isArray(readingPrereqs) && readingPrereqs.length > 0) {
+        prereqTotal += readingPrereqs.length;
+        let completedReadings = [];
+        try { completedReadings = JSON.parse(p?.readings_completed || '[]'); } catch(e) {}
+        const completedSet = new Set((completedReadings || []).map(String));
+        readingPrereqs.forEach(r => {
+          if (completedSet.has(String(r.id))) prereqCompleted++;
+        });
+      }
+
+      // Quiz prerequisites
+      if (c.requires_quiz && quizzesByComp[c.id] && quizzesByComp[c.id].length > 0) {
+        const qList = quizzesByComp[c.id];
+        prereqTotal += qList.length;
+        let completedQuizzes = {};
+        try { completedQuizzes = JSON.parse(p?.quizzes_completed || '{}'); } catch(e) {}
+        qList.forEach(qId => {
+          const qRecord = completedQuizzes[qId] || completedQuizzes[String(qId)];
+          if (qRecord && qRecord.passed) prereqCompleted++;
+        });
+      }
+
+      // Prerequisite competencies
+      let prereqComps = [];
+      try { prereqComps = JSON.parse(c.prerequisite_competencies || '[]'); } catch(e) {}
+      if (c.requires_prerequisite_competencies && Array.isArray(prereqComps) && prereqComps.length > 0) {
+        prereqTotal += prereqComps.length;
+        prereqComps.forEach(pcId => {
+          const s = (allProgressMap[`${targetUserId}_${pcId}`] || '').toLowerCase();
+          if (s === 'c' || s === 'x' || s === 'x+') prereqCompleted++;
+        });
+      }
+
+      // Pre-evaluation
+      if (c.requires_pre_eval) {
+        prereqTotal++;
+        const evals = selfEvalsByComp[c.id] || [];
+        if (evals.some(e => e.evaluation_type === 'pre')) prereqCompleted++;
+      }
+
+      // QATrack requirements
+      let qaReqs = [];
+      try { qaReqs = JSON.parse(c.qatrack_requirements || '[]'); } catch(e) {}
+      if (Array.isArray(qaReqs) && qaReqs.length > 0) {
+        prereqTotal += qaReqs.length;
+        let qaDetails = {};
+        try { qaDetails = JSON.parse(p?.qatrack_records_detail || '{}'); } catch(e) {}
+        qaReqs.forEach(req => {
+          if ((parseInt(qaDetails[req.identifier], 10) || 0) >= req.count) prereqCompleted++;
+        });
+      }
+
+      // Case log requirement
+      const reqPlanCount = parseInt(c.required_plan_count, 10) || 0;
+      const userLogs = caseLogsByComp[c.id] || [];
+      const approvedLogs = userLogs.filter(l => l.status === 'Completed').length;
+      if (reqPlanCount > 0) {
+        prereqTotal++;
+        if (approvedLogs >= reqPlanCount) prereqCompleted++;
+      }
+
+      // Completed & required records count
+      let completedRecordsCount = 0;
+      let requiredRecordsCount = 0;
+      if (isLogbook) {
+        completedRecordsCount = approvedLogs;
+        requiredRecordsCount = reqPlanCount;
+      } else {
+        let qaDetails = {};
+        try { qaDetails = JSON.parse(p?.qatrack_records_detail || '{}'); } catch(e) {}
+        Object.values(qaDetails).forEach(cnt => { completedRecordsCount += (parseInt(cnt, 10) || 0); });
+        qaReqs.forEach(req => { requiredRecordsCount += (parseInt(req.count, 10) || 0); });
+      }
+
+      // Days to achieve / in progress
+      let daysToAchieve = null;
+      let daysDisplay = '-';
+      if (['c', 'x', 'x+'].includes(status) && p && p.date_started && p.date_signed_off) {
+        const t1 = new Date(p.date_started).getTime();
+        const t2 = new Date(p.date_signed_off).getTime();
+        if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
+          daysToAchieve = Math.round((t2 - t1) / 86400000);
+          daysDisplay = `${daysToAchieve} days`;
+        }
+      } else if (p && p.date_started) {
+        const t1 = new Date(p.date_started).getTime();
+        if (!isNaN(t1)) {
+          const days = Math.max(0, Math.round((Date.now() - t1) / 86400000));
+          daysToAchieve = days;
+          daysDisplay = `${days} days (in progress)`;
+        }
+      }
+
+      // Median time to completion for QA record / log
+      let durations = [];
+      if (isLogbook) {
+        userLogs.forEach(l => {
+          if (l.created_at && l.reviewed_at) {
+            const start = new Date(l.created_at).getTime();
+            const end = new Date(l.reviewed_at).getTime();
+            if (!isNaN(start) && !isNaN(end) && end >= start) {
+              durations.push((end - start) / 60000); // mins
+            }
+          }
+        });
+      } else {
+        let qaTimings = [];
+        try { qaTimings = JSON.parse(p?.qatrack_timings || '[]'); } catch(e) {}
+        if (Array.isArray(qaTimings)) {
+          qaTimings.forEach(t => {
+            if (t.duration_minutes != null && !isNaN(t.duration_minutes)) {
+              durations.push(parseFloat(t.duration_minutes));
+            } else if (t.work_started && t.work_completed) {
+              const start = new Date(t.work_started).getTime();
+              const end = new Date(t.work_completed).getTime();
+              if (!isNaN(start) && !isNaN(end) && end >= start) {
+                durations.push((end - start) / 60000);
+              }
+            }
+          });
+        }
+      }
+
+      let medianMins = null;
+      let medianDisplay = '-';
+      if (durations.length > 0) {
+        durations.sort((a, b) => a - b);
+        const mid = Math.floor(durations.length / 2);
+        medianMins = (durations.length % 2 !== 0) ? durations[mid] : (durations[mid - 1] + durations[mid]) / 2;
+        medianMins = Math.round(medianMins * 10) / 10;
+        
+        if (medianMins < 60) {
+          medianDisplay = `${medianMins} mins`;
+        } else {
+          const hrs = Math.floor(medianMins / 60);
+          const mins = Math.round(medianMins % 60);
+          medianDisplay = mins > 0 ? `${hrs}h ${mins}m` : `${hrs} hrs`;
+        }
+      }
+
+      // Last interaction timestamp (reflecting actual user activity: prereqs, case logs, quizzes, evals, signoffs, QA)
+      let interactionDates = [];
+      if (p?.date_signed_off) interactionDates.push(new Date(p.date_signed_off).getTime());
+      if (p?.date_reviewed) interactionDates.push(new Date(p.date_reviewed).getTime());
+
+      // Audit logs (quiz attempts, case logs, viva, pre-assessments, status changes, prerequisite toggles, admin actions)
+      (auditLogsByComp[c.id] || []).forEach(a => {
+        if (a.timestamp) {
+          const t = new Date(a.timestamp.includes('T') ? a.timestamp : a.timestamp.replace(' ', 'T')).getTime();
+          if (!isNaN(t) && t > 0) interactionDates.push(t);
+        }
+      });
+
+      // Case logs (created, reviewed, log_date)
+      userLogs.forEach(l => {
+        if (l.reviewed_at) interactionDates.push(new Date(l.reviewed_at).getTime());
+        if (l.created_at) interactionDates.push(new Date(l.created_at).getTime());
+        if (l.log_date) interactionDates.push(new Date(l.log_date).getTime());
+      });
+
+      // Self evaluations
+      (selfEvalsByComp[c.id] || []).forEach(e => {
+        if (e.submission_date) interactionDates.push(new Date(e.submission_date).getTime());
+      });
+
+      // Assessment records
+      (assessRecordsByComp[c.id] || []).forEach(a => {
+        if (a.created_at) interactionDates.push(new Date(a.created_at).getTime());
+      });
+
+      // File uploads
+      (fileUploadsByComp[c.id] || []).forEach(f => {
+        if (f.upload_date) interactionDates.push(new Date(f.upload_date).getTime());
+      });
+
+      // QA Track timings
+      (qaTimingsByComp[c.id] || []).forEach(q => {
+        if (q.work_completed) interactionDates.push(new Date(q.work_completed).getTime());
+        if (q.date) interactionDates.push(new Date(q.date).getTime());
+        if (q.created_at) interactionDates.push(new Date(q.created_at).getTime());
+      });
+
+      let qaTimingsFromProgress = [];
+      try { qaTimingsFromProgress = JSON.parse(p?.qatrack_timings || '[]'); } catch(e) {}
+      if (Array.isArray(qaTimingsFromProgress)) {
+        qaTimingsFromProgress.forEach(t => {
+          if (t.work_completed) interactionDates.push(new Date(t.work_completed).getTime());
+          else if (t.date) interactionDates.push(new Date(t.date).getTime());
+        });
+      }
+
+      const validDates = interactionDates.filter(d => !isNaN(d) && d > 0);
+      let lastInteraction = validDates.length > 0 ? Math.max(...validDates) : null;
+      let lastInteractionDisplay = '-';
+      if (lastInteraction) {
+        const d = new Date(lastInteraction);
+        const day = String(d.getDate()).padStart(2, '0');
+        const mon = String(d.getMonth() + 1).padStart(2, '0');
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        lastInteractionDisplay = `${day}/${mon}/${yr} ${hr}:${min}`;
+      }
+
+      return {
+        id: c.id,
+        category: c.category,
+        task_name: c.task_name,
+        leaderboard_basis: compLeaderboardType,
+        status: status,
+        prereq_total: prereqTotal,
+        prereq_completed: prereqCompleted,
+        prereq_display: prereqTotal > 0 ? `${prereqCompleted} / ${prereqTotal}` : 'N/A',
+        completed_records: completedRecordsCount,
+        required_records: requiredRecordsCount,
+        records_display: requiredRecordsCount > 0 ? `${completedRecordsCount} / ${requiredRecordsCount}` : `${completedRecordsCount}`,
+        records_met: requiredRecordsCount > 0 ? (completedRecordsCount >= requiredRecordsCount) : null,
+        days_value: daysToAchieve,
+        days_display: daysDisplay,
+        median_mins: medianMins,
+        median_display: medianDisplay,
+        last_interaction_timestamp: lastInteraction,
+        last_interaction_display: lastInteractionDisplay
+      };
+    });
+
+    res.json({
+      user: {
+        id: targetUser.id,
+        full_name: targetUser.full_name,
+        username: targetUser.username,
+        designation: targetUser.designation,
+        date_in_post: targetUser.date_in_post
+      },
+      competencies: compAnalysisList,
+      assessmentRecords: assessRecords
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4007,6 +4992,7 @@ const applyVersionMigrations = async (db, sourceVersion, dbName) => {
     if (!compCols.includes('allow_file_uploads')) await execute(db, "ALTER TABLE competencies ADD COLUMN allow_file_uploads INTEGER DEFAULT 0");
     if (!compCols.includes('target_users')) await execute(db, "ALTER TABLE competencies ADD COLUMN target_users TEXT DEFAULT '[]'");
     if (!compCols.includes('description')) await execute(db, "ALTER TABLE competencies ADD COLUMN description TEXT");
+    if (!compCols.includes('leaderboard_type')) await execute(db, "ALTER TABLE competencies ADD COLUMN leaderboard_type TEXT DEFAULT 'default'");
 
     // Version-specific migrations
     const isLegacy = sourceVersion === 'legacy' || !sourceVersion || String(sourceVersion).startsWith('1.') || String(sourceVersion).startsWith('2.0') || String(sourceVersion).startsWith('2.1') || String(sourceVersion).startsWith('2.2') || String(sourceVersion).startsWith('2.5') || String(sourceVersion).startsWith('2.6');
@@ -4053,7 +5039,7 @@ app.post('/api/admin/backup/:scope', authenticateToken, requireSuperuser, async 
     res.json({
       success: true,
       app_version: APP_VERSION,
-      version: '2.8',
+      version: '2.9',
       scope: scope,
       date: dateStr,
       databases: backupData,
@@ -5273,13 +6259,13 @@ async function generateOverviewMatrixCSV(targetSection = 'all') {
     const progressMap = {};
     progress.forEach(p => { progressMap[p.user_id + '_' + p.competency_id] = p; });
 
-    csv += `Section: ${secName}\r\n`;
+    csv += `Section: ${secName}\n`;
     const headers = ['Category', 'Competency Task'];
     sectionUsers.forEach(u => {
       headers.push(`"${u.full_name} (${u.designation}) Status"`);
       headers.push(`"${u.full_name} (${u.designation}) Date Achieved"`);
     });
-    csv += headers.join(',') + '\r\n';
+    csv += headers.join(',') + '\n';
 
     comps.forEach(comp => {
       const row = [`"${(comp.category || '').replace(/"/g, '""')}"`, `"${(comp.task_name || '').replace(/"/g, '""')}"`];
@@ -5290,9 +6276,9 @@ async function generateOverviewMatrixCSV(targetSection = 'all') {
         row.push(`"${status}"`);
         row.push(`"${dateAchieved}"`);
       });
-      csv += row.join(',') + '\r\n';
+      csv += row.join(',') + '\n';
     });
-    csv += '\r\n';
+    csv += '\n';
   }
   return csv;
 }
